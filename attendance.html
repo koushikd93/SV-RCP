@@ -566,7 +566,7 @@
 // ============================================================
 // CONFIGURATION - Update these values
 // ============================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbzol-TzbH36tutHDtnkFxR3VY-TjiOVYAnuyv2rQZ1bDWqyEQ8fr_0Z0tfwr8tLQTEyOw/exec'; // Your Google Apps Script deployment URL
+const API_URL = 'https://script.google.com/macros/s/AKfycbxTRM5gzoB57i0MMaCrn7AcjBIAESy0le6ibFdl1y3KHAliZvZgzLu9BoFgsfIKt4TlPg/exec';
 const MODEL_URLS = [
   'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
   'https://unpkg.com/@vladmandic/face-api@1.7.14/model',
@@ -693,17 +693,20 @@ function updateClock() {
 async function apiGet(params) {
   if (!API_URL) return getDemoData(params);
   const url = API_URL + '?' + new URLSearchParams(params).toString();
-  const res = await fetch(url);
-  return res.json();
+  const res = await fetch(url, { redirect: 'follow' });
+  const text = await res.text();
+  try { return JSON.parse(text); } catch(e) { console.error('API response not JSON:', text.substring(0, 200)); return getDemoData(params); }
 }
 
 async function apiPost(data) {
   if (!API_URL) return getDemoPostResult(data);
   const res = await fetch(API_URL, {
     method: 'POST',
+    redirect: 'follow',
     body: JSON.stringify(data)
   });
-  return res.json();
+  const text = await res.text();
+  try { return JSON.parse(text); } catch(e) { console.error('POST response not JSON:', text.substring(0, 200)); return { success: false, error: 'Invalid response from server' }; }
 }
 
 // Demo data when no API configured
