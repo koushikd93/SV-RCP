@@ -455,21 +455,27 @@
     </div>
     <div class="employee-select">
       <div class="form-group">
+        <label>Location</label>
+        <select id="locationSelect" style="border-color:var(--accent)">
+          <option value="">-- Select Location --</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>Employee</label>
         <select id="employeeSelect">
           <option value="">-- Select Employee --</option>
         </select>
       </div>
+      <div class="form-group">
+        <label>Shift</label>
+        <select id="shiftSelect">
+          <option value="A">A Shift (06:00–14:00)</option>
+          <option value="B">B Shift (14:00–22:00)</option>
+          <option value="C">C Shift (22:00–06:00)</option>
+          <option value="General" selected>General (09:00–17:00)</option>
+        </select>
+      </div>
       <div id="empInfo" class="hidden" style="padding:10px;background:var(--surface2);border-radius:10px;font-size:13px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span style="color:var(--text2)">Shift</span>
-          <select id="shiftSelect" style="width:auto;padding:6px 12px;font-size:13px;border-radius:6px;background:var(--bg);border:1px solid var(--border);color:var(--text)">
-            <option value="A">A Shift (06:00–14:00)</option>
-            <option value="B">B Shift (14:00–22:00)</option>
-            <option value="C">C Shift (22:00–06:00)</option>
-            <option value="General" selected>General (09:00–17:00)</option>
-          </select>
-        </div>
         <div style="display:flex;justify-content:space-between">
           <span style="color:var(--text2)">Department</span>
           <span id="empDept"></span>
@@ -651,13 +657,28 @@ window.addEventListener('load', async () => {
 
 function parseURLParams() {
   const params = new URLSearchParams(window.location.search);
-  const loc = params.get('location') || params.get('loc') || 'Default Location';
-  document.getElementById('locationName').textContent = loc;
+  const qrLoc = params.get('location') || params.get('loc') || '';
+  if (qrLoc) {
+    document.getElementById('locationName').textContent = qrLoc;
+  }
+  // Store QR location for pre-selection after locations load
+  window._qrLocation = qrLoc;
 }
 
 function getLocation() {
-  return new URLSearchParams(window.location.search).get('location') || 
-         new URLSearchParams(window.location.search).get('loc') || 'Default Location';
+  const sel = document.getElementById('locationSelect');
+  return sel.value || window._qrLocation || 'Default Location';
+}
+
+function updateLocationBadge() {
+  const loc = getLocation();
+  document.getElementById('locationName').textContent = loc || 'Select Location';
+}
+
+function checkStep1Ready() {
+  const locOk = document.getElementById('locationSelect').value;
+  const empOk = selectedEmployee;
+  document.getElementById('btnStep1').disabled = !(locOk && empOk);
 }
 
 function updateClock() {
@@ -687,14 +708,26 @@ async function apiPost(data) {
 
 // Demo data when no API configured
 function getDemoData(params) {
+  if (params.action === 'getLocations') {
+    return {
+      success: true,
+      locations: [
+        { LocationName: 'Head Office' },
+        { LocationName: 'Branch-A' },
+        { LocationName: 'Branch-B' },
+        { LocationName: 'Warehouse' },
+        { LocationName: 'Site-1' }
+      ]
+    };
+  }
   if (params.action === 'getEmployees') {
     return {
       success: true,
       employees: [
-        { EmployeeID: 'EMP001', Name: 'Rajesh Kumar', Department: 'Operations', Location: getLocation() },
-        { EmployeeID: 'EMP002', Name: 'Priya Sharma', Department: 'Admin', Location: getLocation() },
-        { EmployeeID: 'EMP003', Name: 'Amit Singh', Department: 'IT', Location: getLocation() },
-        { EmployeeID: 'EMP004', Name: 'Sunita Devi', Department: 'Security', Location: getLocation() },
+        { EmployeeID: 'EMP001', Name: 'Rajesh Kumar', Department: 'Operations' },
+        { EmployeeID: 'EMP002', Name: 'Priya Sharma', Department: 'Admin' },
+        { EmployeeID: 'EMP003', Name: 'Amit Singh', Department: 'IT' },
+        { EmployeeID: 'EMP004', Name: 'Sunita Devi', Department: 'Security' },
       ]
     };
   }
@@ -713,6 +746,25 @@ function getDemoPostResult(data) {
 // ============================================================
 async function loadEmployees() {
   try {
+    // Load locations
+    const locResult = await apiGet({ action: 'getLocations' });
+    const locSelect = document.getElementById('locationSelect');
+    locSelect.innerHTML = '<option value="">-- Select Location --</option>';
+    if (locResult.success && locResult.locations) {
+      locResult.locations.forEach(loc => {
+        const name = loc.LocationName || loc;
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        if (window._qrLocation && name === window._qrLocation) opt.selected = true;
+        locSelect.appendChild(opt);
+      });
+    }
+    if (window._qrLocation && locSelect.value) {
+      updateLocationBadge();
+    }
+
+    // Load employees
     const result = await apiGet({ action: 'getEmployees' });
     const select = document.getElementById('employeeSelect');
     select.innerHTML = '<option value="">-- Select Employee --</option>';
@@ -735,9 +787,15 @@ async function loadEmployees() {
       });
     }
   } catch (err) {
-    console.error('Load employees error:', err);
+    console.error('Load data error:', err);
   }
 }
+
+// Location selection handler
+document.getElementById('locationSelect').addEventListener('change', function() {
+  updateLocationBadge();
+  checkStep1Ready();
+});
 
 // Employee selection handler
 document.getElementById('employeeSelect').addEventListener('change', function() {
@@ -745,12 +803,11 @@ document.getElementById('employeeSelect').addEventListener('change', function() 
     selectedEmployee = JSON.parse(this.value);
     document.getElementById('empInfo').classList.remove('hidden');
     document.getElementById('empDept').textContent = selectedEmployee.Department || '-';
-    document.getElementById('btnStep1').disabled = false;
   } else {
     selectedEmployee = null;
     document.getElementById('empInfo').classList.add('hidden');
-    document.getElementById('btnStep1').disabled = true;
   }
+  checkStep1Ready();
 });
 
 function getSelectedShift() {
