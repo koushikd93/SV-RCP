@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AttendX Admin - Employee & Face Registration</title>
+<title>SV-RCP Admin - Employee & Face Registration</title>
 <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/dist/face-api.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap');
@@ -165,7 +165,7 @@
 </div>
 
 <script>
-const API_URL = 'https://script.google.com/macros/s/AKfycbxTRM5gzoB57i0MMaCrn7AcjBIAESy0le6ibFdl1y3KHAliZvZgzLu9BoFgsfIKt4TlPg/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzol-TzbH36tutHDtnkFxR3VY-TjiOVYAnuyv2rQZ1bDWqyEQ8fr_0Z0tfwr8tLQTEyOw/exec';
 const MODEL_URLS = [
   'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
   'https://unpkg.com/@vladmandic/face-api@1.7.14/model',
@@ -480,11 +480,34 @@ async function detectFaceReg() {
 async function captureFace() {
   const video = document.getElementById('faceVideo');
   const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 });
-  const det = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
+  const btn = document.getElementById('btnCapFace');
+  btn.disabled = true;
+  btn.textContent = '📸 Capturing 1/3...';
 
-  if (!det) { showMsg('faceMsg','error','No face detected. Try again.'); return; }
+  // Take 3 samples and average for robust descriptor
+  const descriptors = [];
+  for (let s = 0; s < 3; s++) {
+    btn.textContent = '📸 Capturing ' + (s + 1) + '/3...';
+    const det = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
+    if (!det) {
+      showMsg('faceMsg', 'error', 'Face lost on sample ' + (s + 1) + '. Keep face steady and try again.');
+      btn.textContent = '📸 Capture Face';
+      btn.disabled = false;
+      return;
+    }
+    descriptors.push(det.descriptor);
+    if (s < 2) await new Promise(r => setTimeout(r, 500)); // wait 500ms between samples
+  }
 
-  capturedDescriptor = det.descriptor;
+  // Average all descriptors for a more stable reference
+  const avg = new Float32Array(128);
+  for (let i = 0; i < 128; i++) {
+    let sum = 0;
+    for (let s = 0; s < descriptors.length; s++) sum += descriptors[s][i];
+    avg[i] = sum / descriptors.length;
+  }
+  capturedDescriptor = avg;
+
   const canvas = document.createElement('canvas');
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -492,7 +515,8 @@ async function captureFace() {
   capturedImageData = canvas.toDataURL('image/jpeg', 0.5);
 
   document.getElementById('capturedPhoto').src = capturedImageData;
-  document.getElementById('descPreview').textContent = 'Descriptor: [' + Array.from(capturedDescriptor).slice(0, 8).map(v => v.toFixed(4)).join(', ') + ' ... ] (128 values)';
+  document.getElementById('descPreview').textContent = '✅ Averaged 3 samples — Descriptor: [' + Array.from(capturedDescriptor).slice(0, 6).map(v => v.toFixed(4)).join(', ') + ' ... ] (128 values)';
+  btn.textContent = '📸 Capture Face';
 
   stopFaceCam();
   document.getElementById('faceCapArea').style.display = 'none';
