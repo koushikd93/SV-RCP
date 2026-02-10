@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Attendance Check-In</title>
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/dist/face-api.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2236;
+    --border: #2a3454;
+    --accent: #06d6a0;
+    --accent2: #118ab2;
+    --danger: #ef476f;
+    --warn: #ffd166;
+    --text: #e8edf5;
+    --text2: #8892a8;
+    --success: #06d6a0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .container {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .header {
+    text-align: center;
+    padding: 20px 0 16px;
+  }
+
+  .header .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    color: var(--accent);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .header .location-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 14px;
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--text2);
+  }
+
+  .location-badge svg { width: 14px; height: 14px; fill: var(--accent); }
+
+  .step-indicator {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin: 16px 0;
+  }
+
+  .step-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: all 0.3s;
+  }
+
+  .step-dot.active { background: var(--accent); width: 24px; border-radius: 4px; }
+  .step-dot.done { background: var(--accent2); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 12px;
+    flex: 1;
+  }
+
+  .card-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title .icon {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+
+  /* STEP 1 - Employee Selection */
+  .employee-select {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 12px;
+    color: var(--text2);
+    margin-bottom: 6px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  select, input {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 15px;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  select:focus, input:focus { border-color: var(--accent); }
+
+  /* STEP 2 - Camera & Face */
+  .camera-container {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 3/4;
+    max-height: 380px;
+    margin-bottom: 12px;
+  }
+
+  #video, #overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+
+  #overlay { z-index: 2; }
+
+  .face-guide {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 180px; height: 220px;
+    border: 2px dashed var(--accent);
+    border-radius: 50%;
+    z-index: 3;
+    opacity: 0.6;
+    transition: all 0.3s;
+  }
+
+  .face-guide.detected {
+    border-color: var(--success);
+    border-style: solid;
+    opacity: 1;
+    box-shadow: 0 0 30px rgba(6,214,160,0.2);
+  }
+
+  .face-guide.error {
+    border-color: var(--danger);
+    border-style: solid;
+    opacity: 1;
+  }
+
+  .camera-status {
+    position: absolute;
+    bottom: 12px; left: 12px; right: 12px;
+    z-index: 4;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(8px);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-dot.green { background: var(--success); box-shadow: 0 0 8px var(--success); }
+  .status-dot.yellow { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+  .status-dot.red { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
+  .liveness-checks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text2);
+    background: var(--surface2);
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .check-item.pass { border-color: var(--success); color: var(--success); }
+  .check-item.fail { border-color: var(--danger); color: var(--danger); }
+
+  .check-icon { font-size: 14px; }
+
+  /* STEP 3 - GPS */
+  .gps-info {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .gps-coord {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  .gps-coord span:first-child { color: var(--text2); }
+  .gps-coord span:last-child { font-family: 'Space Mono', monospace; font-size: 12px; }
+
+  /* Buttons */
+  .btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: var(--bg);
+  }
+
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(6,214,160,0.3); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-danger {
+    background: rgba(239,71,111,0.15);
+    color: var(--danger);
+    border: 1px solid rgba(239,71,111,0.3);
+  }
+
+  .btn-group { display: flex; gap: 10px; margin-top: 12px; }
+  .btn-group .btn { flex: 1; }
+
+  /* Result */
+  .result-card {
+    text-align: center;
+    padding: 40px 20px;
+  }
+
+  .result-icon {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    font-size: 36px;
+  }
+
+  .result-icon.success { background: rgba(6,214,160,0.15); }
+  .result-icon.error { background: rgba(239,71,111,0.15); }
+
+  .result-card h2 { font-size: 22px; margin-bottom: 8px; }
+  .result-card p { color: var(--text2); font-size: 14px; }
+
+  .result-details {
+    margin-top: 20px;
+    text-align: left;
+  }
+
+  .result-details .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+
+  .result-details .row span:first-child { color: var(--text2); }
+
+  /* Loading */
+  .loading-spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,14,26,0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    gap: 16px;
+    font-size: 14px;
+    color: var(--text2);
+  }
+
+  .loading-overlay .loading-spinner {
+    width: 40px; height: 40px;
+    border-width: 3px;
+  }
+
+  .hidden { display: none !important; }
+
+  .timestamp-bar {
+    text-align: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 24px;
+    color: var(--accent);
+    padding: 8px;
+    letter-spacing: 2px;
+  }
+
+  .timestamp-bar .date {
+    font-size: 12px;
+    color: var(--text2);
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+
+  .shift-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .shift-A { background: rgba(6,214,160,0.15); color: var(--accent); }
+  .shift-B { background: rgba(17,138,178,0.15); color: var(--accent2); }
+  .shift-C { background: rgba(255,209,102,0.15); color: var(--warn); }
+  .shift-General { background: rgba(139,92,246,0.15); color: #8b5cf6; }
+
+  .instruction-text {
+    font-size: 13px;
+    color: var(--text2);
+    text-align: center;
+    line-height: 1.6;
+    padding: 8px 0;
+  }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .pulse { animation: pulse 1.5s infinite; }
+</style>
+</head>
+<body>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div>Loading Face Recognition Models...</div>
+  <div style="font-size:12px;color:var(--border)">First load may take 15-30 seconds</div>
+</div>
+
+<div class="container">
+  <div class="header">
+    <div class="logo">● AttendX</div>
+    <h1>Attendance Check-In</h1>
+    <div class="location-badge" id="locationBadge">
+      <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+      <span id="locationName">Loading...</span>
+    </div>
+  </div>
+
+  <div class="timestamp-bar">
+    <div id="liveTime">--:--:--</div>
+    <div class="date" id="liveDate">Loading...</div>
+  </div>
+
+  <div class="step-indicator">
+    <div class="step-dot active" id="dot1"></div>
+    <div class="step-dot" id="dot2"></div>
+    <div class="step-dot" id="dot3"></div>
+    <div class="step-dot" id="dot4"></div>
+  </div>
+
+  <!-- STEP 1: Employee Selection -->
+  <div class="card" id="step1">
+    <div class="card-title">
+      <div class="icon" style="background:rgba(6,214,160,0.15)">👤</div>
+      Select Your Identity
+    </div>
+    <div class="employee-select">
+      <div class="form-group">
+        <label>Employee</label>
+        <select id="employeeSelect">
+          <option value="">-- Select Employee --</option>
+        </select>
+      </div>
+      <div id="empInfo" class="hidden" style="padding:10px;background:var(--surface2);border-radius:10px;font-size:13px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="color:var(--text2)">Shift</span>
+          <select id="shiftSelect" style="width:auto;padding:6px 12px;font-size:13px;border-radius:6px;background:var(--bg);border:1px solid var(--border);color:var(--text)">
+            <option value="A">A Shift (06:00–14:00)</option>
+            <option value="B">B Shift (14:00–22:00)</option>
+            <option value="C">C Shift (22:00–06:00)</option>
+            <option value="General" selected>General (09:00–17:00)</option>
+          </select>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text2)">Department</span>
+          <span id="empDept"></span>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btnStep1" disabled onclick="goToStep(2)">
+        Continue to Face Scan →
+      </button>
+    </div>
+  </div>
+
+  <!-- STEP 2: Face Recognition & Liveness -->
+  <div class="card hidden" id="step2">
+    <div class="card-title">
+      <div class="icon" style="background:rgba(17,138,178,0.15)">📸</div>
+      Face Verification
+    </div>
+    <p class="instruction-text">Position your face within the oval. Blink naturally and turn your head slightly for liveness verification.</p>
+    <div class="camera-container">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div class="face-guide" id="faceGuide"></div>
+      <div class="camera-status">
+        <div class="status-dot yellow" id="statusDot"></div>
+        <span id="statusText">Initializing camera...</span>
+      </div>
+    </div>
+    <div class="liveness-checks">
+      <div class="check-item" id="chkFace"><span class="check-icon">○</span> Face Detected</div>
+      <div class="check-item" id="chkMatch"><span class="check-icon">○</span> Identity Match</div>
+      <div class="check-item" id="chkBlink"><span class="check-icon">○</span> Blink Detected</div>
+      <div class="check-item" id="chkMove"><span class="check-icon">○</span> Head Movement</div>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-secondary" onclick="goToStep(1)">← Back</button>
+      <button class="btn btn-primary" id="btnCapture" disabled onclick="captureAndVerify()">
+        Capture & Verify
+      </button>
+    </div>
+  </div>
+
+  <!-- STEP 3: GPS & Confirmation -->
+  <div class="card hidden" id="step3">
+    <div class="card-title">
+      <div class="icon" style="background:rgba(255,209,102,0.15)">📍</div>
+      Location & Confirmation
+    </div>
+    <div class="gps-info">
+      <div class="gps-coord">
+        <span>Latitude</span>
+        <span id="gpsLat">Fetching...</span>
+      </div>
+      <div class="gps-coord">
+        <span>Longitude</span>
+        <span id="gpsLng">Fetching...</span>
+      </div>
+      <div class="gps-coord">
+        <span>Accuracy</span>
+        <span id="gpsAcc">--</span>
+      </div>
+      <div class="gps-coord">
+        <span>Face Match</span>
+        <span id="matchScore" style="color:var(--accent)">--</span>
+      </div>
+      <div class="gps-coord">
+        <span>Liveness</span>
+        <span id="livenessDisplay" style="color:var(--accent)">--</span>
+      </div>
+    </div>
+    <div class="btn-group" style="margin-top:16px">
+      <button class="btn btn-secondary" onclick="goToStep(2)">← Retake</button>
+      <button class="btn btn-primary" id="btnSubmit" onclick="submitAttendance()">
+        ✓ Confirm Check-In
+      </button>
+      <button class="btn btn-danger hidden" id="btnCheckout" onclick="submitAttendance('checkout')">
+        ✕ Check Out
+      </button>
+    </div>
+  </div>
+
+  <!-- STEP 4: Result -->
+  <div class="card hidden" id="step4">
+    <div class="result-card" id="resultContent"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIGURATION - Update these values
+// ============================================================
+const API_URL = 'https://script.google.com/macros/s/AKfycbyhLeo-JkXAssp8bBoigfJ6pB40hWACJYiLLp38WHnJYwf0sRJkae-3a9XOOLEet4N9Tg/exec'; // Your Google Apps Script deployment URL
+const MODEL_URLS = [
+  'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
+  'https://unpkg.com/@vladmandic/face-api@1.7.14/model',
+  '/models' // local fallback
+];
+let MODEL_URL = MODEL_URLS[0];
+
+// ============================================================
+// STATE
+// ============================================================
+let currentStep = 1;
+let selectedEmployee = null;
+let stream = null;
+let faceDescriptors = {};
+let gpsPosition = null;
+let capturedFaceDescriptor = null;
+let capturedImage = null;
+let livenessState = { blink: false, headMove: false, faceDetected: false, matched: false };
+let blinkHistory = [];
+let headPosHistory = [];
+let detectionInterval = null;
+let faceMatchScore = 0;
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+window.addEventListener('load', async () => {
+  updateClock();
+  setInterval(updateClock, 1000);
+  parseURLParams();
+
+  // Check if face-api.js loaded
+  if (typeof faceapi === 'undefined') {
+    document.getElementById('loadingOverlay').innerHTML = `
+      <div style="color:var(--danger);text-align:center;padding:20px">
+        <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+        <h3>Library Load Failed</h3>
+        <p style="margin-top:8px;font-size:13px;color:var(--text2)">face-api.js could not be loaded. Check your internet connection.</p>
+        <button class="btn btn-primary" style="margin-top:16px;width:auto;padding:12px 24px" onclick="location.reload()">Retry</button>
+      </div>`;
+    return;
+  }
+
+  // Try loading models from multiple CDN sources
+  let modelsLoaded = false;
+  for (let i = 0; i < MODEL_URLS.length && !modelsLoaded; i++) {
+    MODEL_URL = MODEL_URLS[i];
+    try {
+      document.querySelector('#loadingOverlay div:last-child').textContent = 'Loading models (source ' + (i+1) + '/' + MODEL_URLS.length + ')...';
+      console.log('Trying models from:', MODEL_URL);
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+      ]);
+      modelsLoaded = true;
+      console.log('Face-api models loaded from:', MODEL_URL);
+    } catch (err) {
+      console.warn('Model load failed from ' + MODEL_URL + ':', err.message);
+    }
+  }
+
+  if (!modelsLoaded) {
+    document.getElementById('loadingOverlay').innerHTML = `
+      <div style="color:var(--danger);text-align:center;padding:20px">
+        <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+        <h3>Model Load Failed</h3>
+        <p style="margin-top:8px;font-size:13px;color:var(--text2)">Could not load face recognition models.<br>Please check your internet connection and try again.</p>
+        <button class="btn btn-primary" style="margin-top:16px;width:auto;padding:12px 24px" onclick="location.reload()">Retry</button>
+      </div>`;
+    return;
+  }
+
+  try {
+    await loadEmployees();
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  } catch (err) {
+    console.error('Employee load error:', err);
+    document.getElementById('loadingOverlay').innerHTML = `
+      <div style="color:var(--danger);text-align:center;padding:20px">
+        <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+        <h3>Data Load Error</h3>
+        <p style="margin-top:8px;font-size:13px;color:var(--text2)">${err.message}</p>
+        <button class="btn btn-primary" style="margin-top:16px;width:auto;padding:12px 24px" onclick="location.reload()">Retry</button>
+      </div>`;
+  }
+});
+
+function parseURLParams() {
+  const params = new URLSearchParams(window.location.search);
+  const loc = params.get('location') || params.get('loc') || 'Default Location';
+  document.getElementById('locationName').textContent = loc;
+}
+
+function getLocation() {
+  return new URLSearchParams(window.location.search).get('location') || 
+         new URLSearchParams(window.location.search).get('loc') || 'Default Location';
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('liveTime').textContent = now.toLocaleTimeString('en-US', { hour12: false });
+  document.getElementById('liveDate').textContent = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// ============================================================
+// API HELPERS
+// ============================================================
+async function apiGet(params) {
+  if (!API_URL) return getDemoData(params);
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url);
+  return res.json();
+}
+
+async function apiPost(data) {
+  if (!API_URL) return getDemoPostResult(data);
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  return res.json();
+}
+
+// Demo data when no API configured
+function getDemoData(params) {
+  if (params.action === 'getEmployees') {
+    return {
+      success: true,
+      employees: [
+        { EmployeeID: 'EMP001', Name: 'Rajesh Kumar', Department: 'Operations', Location: getLocation() },
+        { EmployeeID: 'EMP002', Name: 'Priya Sharma', Department: 'Admin', Location: getLocation() },
+        { EmployeeID: 'EMP003', Name: 'Amit Singh', Department: 'IT', Location: getLocation() },
+        { EmployeeID: 'EMP004', Name: 'Sunita Devi', Department: 'Security', Location: getLocation() },
+      ]
+    };
+  }
+  if (params.action === 'getAllFaceData') {
+    return { success: true, faceData: [] };
+  }
+  return { success: true };
+}
+
+function getDemoPostResult(data) {
+  return { success: true, type: 'checkin', status: 'On Time', message: 'Demo: Checked in successfully at ' + new Date().toLocaleTimeString() };
+}
+
+// ============================================================
+// EMPLOYEE LOADING
+// ============================================================
+async function loadEmployees() {
+  try {
+    const result = await apiGet({ action: 'getEmployees' });
+    const select = document.getElementById('employeeSelect');
+    select.innerHTML = '<option value="">-- Select Employee --</option>';
+    if (result.success && result.employees) {
+      result.employees.forEach(emp => {
+        const opt = document.createElement('option');
+        opt.value = JSON.stringify(emp);
+        opt.textContent = `${emp.Name} (${emp.EmployeeID})`;
+        select.appendChild(opt);
+      });
+    }
+
+    // Load face descriptors for all employees
+    const faceResult = await apiGet({ action: 'getAllFaceData' });
+    if (faceResult.success && faceResult.faceData) {
+      faceResult.faceData.forEach(fd => {
+        try {
+          faceDescriptors[fd.employeeId] = new Float32Array(JSON.parse(fd.faceDescriptor));
+        } catch (e) { console.warn('Bad face data for', fd.employeeId); }
+      });
+    }
+  } catch (err) {
+    console.error('Load employees error:', err);
+  }
+}
+
+// Employee selection handler
+document.getElementById('employeeSelect').addEventListener('change', function() {
+  if (this.value) {
+    selectedEmployee = JSON.parse(this.value);
+    document.getElementById('empInfo').classList.remove('hidden');
+    document.getElementById('empDept').textContent = selectedEmployee.Department || '-';
+    document.getElementById('btnStep1').disabled = false;
+  } else {
+    selectedEmployee = null;
+    document.getElementById('empInfo').classList.add('hidden');
+    document.getElementById('btnStep1').disabled = true;
+  }
+});
+
+function getSelectedShift() {
+  return document.getElementById('shiftSelect').value;
+}
+
+// ============================================================
+// STEP NAVIGATION
+// ============================================================
+function goToStep(step) {
+  document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
+  document.getElementById('step' + step).classList.remove('hidden');
+
+  document.querySelectorAll('.step-dot').forEach((d, i) => {
+    d.className = 'step-dot';
+    if (i + 1 < step) d.classList.add('done');
+    if (i + 1 === step) d.classList.add('active');
+  });
+
+  if (step === 2) startCamera();
+  else stopCamera();
+
+  if (step === 3) fetchGPS();
+
+  currentStep = step;
+}
+
+// ============================================================
+// CAMERA & FACE DETECTION
+// ============================================================
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+    });
+    const video = document.getElementById('video');
+    video.srcObject = stream;
+    await video.play();
+
+    // Reset liveness
+    livenessState = { blink: false, headMove: false, faceDetected: false, matched: false };
+    blinkHistory = [];
+    headPosHistory = [];
+    updateChecks();
+
+    updateStatus('yellow', 'Camera active — detecting face...');
+
+    // Start face detection loop
+    detectionInterval = setInterval(detectFace, 300);
+  } catch (err) {
+    console.error('Camera error:', err);
+    updateStatus('red', 'Camera access denied. Please allow camera.');
+  }
+}
+
+function stopCamera() {
+  if (detectionInterval) { clearInterval(detectionInterval); detectionInterval = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+}
+
+async function detectFace() {
+  const video = document.getElementById('video');
+  if (!video.videoWidth) return;
+
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+
+  try {
+    const detection = await faceapi
+      .detectSingleFace(video, options)
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    const guide = document.getElementById('faceGuide');
+
+    if (detection) {
+      guide.classList.add('detected');
+      guide.classList.remove('error');
+      livenessState.faceDetected = true;
+
+      // Check face match
+      if (selectedEmployee && faceDescriptors[selectedEmployee.EmployeeID]) {
+        const dist = faceapi.euclideanDistance(
+          detection.descriptor,
+          faceDescriptors[selectedEmployee.EmployeeID]
+        );
+        faceMatchScore = Math.max(0, Math.round((1 - dist / 1.0) * 100));
+        livenessState.matched = faceMatchScore > 55;
+      } else {
+        // No stored face data — allow first-time registration
+        faceMatchScore = -1; // Indicates no reference
+        livenessState.matched = true;
+      }
+
+      // Blink detection via Eye Aspect Ratio
+      const landmarks = detection.landmarks;
+      const leftEye = landmarks.getLeftEye();
+      const rightEye = landmarks.getRightEye();
+      const leftEAR = getEAR(leftEye);
+      const rightEAR = getEAR(rightEye);
+      const avgEAR = (leftEAR + rightEAR) / 2;
+
+      blinkHistory.push(avgEAR);
+      if (blinkHistory.length > 30) blinkHistory.shift();
+
+      if (blinkHistory.length >= 5) {
+        const maxEAR = Math.max(...blinkHistory);
+        const minEAR = Math.min(...blinkHistory);
+        if (maxEAR - minEAR > 0.045) {
+          livenessState.blink = true;
+        }
+      }
+
+      // Head movement detection
+      const nose = landmarks.getNose();
+      const noseX = nose[0].x;
+      headPosHistory.push(noseX);
+      if (headPosHistory.length > 20) headPosHistory.shift();
+
+      if (headPosHistory.length >= 8) {
+        const maxX = Math.max(...headPosHistory);
+        const minX = Math.min(...headPosHistory);
+        if (maxX - minX > 15) {
+          livenessState.headMove = true;
+        }
+      }
+
+      // Draw detection on overlay
+      const overlay = document.getElementById('overlay');
+      const dims = faceapi.matchDimensions(overlay, video, true);
+      const resized = faceapi.resizeResults(detection, dims);
+      const ctx = overlay.getContext('2d');
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      faceapi.draw.drawFaceLandmarks(overlay, resized);
+
+      // Update status
+      const allChecks = livenessState.faceDetected && livenessState.blink && livenessState.headMove;
+      if (allChecks && livenessState.matched) {
+        updateStatus('green', 'All checks passed! Ready to capture.');
+        document.getElementById('btnCapture').disabled = false;
+      } else if (livenessState.matched) {
+        const pending = [];
+        if (!livenessState.blink) pending.push('blink');
+        if (!livenessState.headMove) pending.push('move head');
+        updateStatus('yellow', 'Please ' + pending.join(' & ') + '...');
+      } else if (faceMatchScore >= 0) {
+        updateStatus('red', `Face mismatch (${faceMatchScore}%). Verify identity.`);
+        guide.classList.remove('detected');
+        guide.classList.add('error');
+      }
+    } else {
+      guide.classList.remove('detected', 'error');
+      livenessState.faceDetected = false;
+      updateStatus('yellow', 'No face detected — look at camera');
+      const overlay = document.getElementById('overlay');
+      const ctx = overlay.getContext('2d');
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+    }
+
+    updateChecks();
+  } catch (err) {
+    console.warn('Detection error:', err);
+  }
+}
+
+function getEAR(eye) {
+  // Eye Aspect Ratio for blink detection
+  const v1 = Math.sqrt(Math.pow(eye[1].x - eye[5].x, 2) + Math.pow(eye[1].y - eye[5].y, 2));
+  const v2 = Math.sqrt(Math.pow(eye[2].x - eye[4].x, 2) + Math.pow(eye[2].y - eye[4].y, 2));
+  const h = Math.sqrt(Math.pow(eye[0].x - eye[3].x, 2) + Math.pow(eye[0].y - eye[3].y, 2));
+  return (v1 + v2) / (2.0 * h);
+}
+
+function updateStatus(color, text) {
+  document.getElementById('statusDot').className = 'status-dot ' + color;
+  document.getElementById('statusText').textContent = text;
+}
+
+function updateChecks() {
+  setCheck('chkFace', livenessState.faceDetected);
+  setCheck('chkMatch', livenessState.matched);
+  setCheck('chkBlink', livenessState.blink);
+  setCheck('chkMove', livenessState.headMove);
+}
+
+function setCheck(id, pass) {
+  const el = document.getElementById(id);
+  el.className = 'check-item ' + (pass ? 'pass' : '');
+  el.querySelector('.check-icon').textContent = pass ? '✓' : '○';
+}
+
+// ============================================================
+// CAPTURE & VERIFY
+// ============================================================
+async function captureAndVerify() {
+  const video = document.getElementById('video');
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  capturedImage = canvas.toDataURL('image/jpeg', 0.7);
+
+  // Get final face descriptor
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 });
+  const detection = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
+
+  if (detection) {
+    capturedFaceDescriptor = detection.descriptor;
+
+    // If no stored face data, save this as reference
+    if (faceMatchScore === -1) {
+      try {
+        await apiPost({
+          action: 'saveFaceData',
+          employeeId: selectedEmployee.EmployeeID,
+          faceDescriptor: JSON.stringify(Array.from(detection.descriptor)),
+          photoBase64: canvas.toDataURL('image/jpeg', 0.4)
+        });
+        faceMatchScore = 100;
+      } catch (e) { console.warn('Could not save face data:', e); }
+    }
+  }
+
+  stopCamera();
+  goToStep(3);
+}
+
+// ============================================================
+// GPS
+// ============================================================
+function fetchGPS() {
+  document.getElementById('gpsLat').textContent = 'Fetching...';
+  document.getElementById('gpsLng').textContent = 'Fetching...';
+  document.getElementById('matchScore').textContent = faceMatchScore === -1 ? 'New (Registered)' : faceMatchScore + '%';
+
+  const livenessScore = [livenessState.blink, livenessState.headMove, livenessState.faceDetected, livenessState.matched].filter(Boolean).length;
+  document.getElementById('livenessDisplay').textContent = livenessScore + '/4 checks passed';
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        gpsPosition = pos.coords;
+        document.getElementById('gpsLat').textContent = pos.coords.latitude.toFixed(6);
+        document.getElementById('gpsLng').textContent = pos.coords.longitude.toFixed(6);
+        document.getElementById('gpsAcc').textContent = '±' + Math.round(pos.coords.accuracy) + 'm';
+      },
+      err => {
+        document.getElementById('gpsLat').textContent = 'Unavailable';
+        document.getElementById('gpsLng').textContent = 'Unavailable';
+        document.getElementById('gpsAcc').textContent = 'Denied';
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+}
+
+// ============================================================
+// SUBMIT ATTENDANCE
+// ============================================================
+async function submitAttendance(type = 'checkin') {
+  const btn = type === 'checkout' ? document.getElementById('btnCheckout') : document.getElementById('btnSubmit');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="loading-spinner"></div> Submitting...';
+
+  try {
+    const livenessScore = [livenessState.blink, livenessState.headMove, livenessState.faceDetected, livenessState.matched].filter(Boolean).length;
+
+    const payload = {
+      action: 'markAttendance',
+      type: type,
+      employeeId: selectedEmployee.EmployeeID,
+      employeeName: selectedEmployee.Name,
+      location: getLocation(),
+      shift: getSelectedShift(),
+      gpsLat: gpsPosition ? gpsPosition.latitude : null,
+      gpsLng: gpsPosition ? gpsPosition.longitude : null,
+      faceMatchScore: faceMatchScore,
+      livenessScore: livenessScore,
+      deviceInfo: navigator.userAgent.substring(0, 100)
+    };
+
+    const result = await apiPost(payload);
+
+    if (result.success) {
+      showResult(true, type === 'checkout' ? 'Checked Out!' : 'Checked In!', result.message, {
+        Employee: selectedEmployee.Name,
+        Shift: getSelectedShift(),
+        Time: new Date().toLocaleTimeString(),
+        Location: getLocation(),
+        'Face Match': faceMatchScore === -1 ? 'New Registration' : faceMatchScore + '%',
+        GPS: gpsPosition ? `${gpsPosition.latitude.toFixed(4)}, ${gpsPosition.longitude.toFixed(4)}` : 'N/A'
+      });
+    } else if (result.alreadyCheckedIn) {
+      document.getElementById('btnCheckout').classList.remove('hidden');
+      btn.disabled = false;
+      btn.innerHTML = '✓ Confirm Check-In';
+      alert('You are already checked in. Use Check Out to mark departure.');
+    } else {
+      showResult(false, 'Submission Failed', result.message || 'Please try again.');
+    }
+  } catch (err) {
+    showResult(false, 'Error', err.message || 'Network error. Please try again.');
+  }
+}
+
+function showResult(success, title, message, details = null) {
+  goToStep(4);
+  let html = `
+    <div class="result-icon ${success ? 'success' : 'error'}">
+      ${success ? '✓' : '✕'}
+    </div>
+    <h2 style="color:${success ? 'var(--accent)' : 'var(--danger)'}">${title}</h2>
+    <p>${message}</p>`;
+
+  if (details) {
+    html += '<div class="result-details">';
+    for (const [key, val] of Object.entries(details)) {
+      html += `<div class="row"><span>${key}</span><span>${val}</span></div>`;
+    }
+    html += '</div>';
+  }
+
+  html += `<button class="btn btn-secondary" style="margin-top:20px" onclick="location.reload()">Done</button>`;
+  document.getElementById('resultContent').innerHTML = html;
+}
+</script>
+</body>
+</html>

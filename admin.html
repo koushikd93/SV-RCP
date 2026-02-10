@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AttendX Admin - Employee & Face Registration</title>
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/dist/face-api.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap');
+  :root { --bg:#060a13;--surface:#111a2e;--surface2:#162040;--border:#1e2d4a;--accent:#00e5a0;--blue:#3b82f6;--red:#ef4444;--text:#e2e8f0;--text2:#64748b;--text3:#475569; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:20px}
+  .container{max-width:900px;margin:0 auto}
+  .header{text-align:center;padding:24px 0;border-bottom:1px solid var(--border);margin-bottom:24px}
+  .header h1{font-size:26px;font-weight:700;margin-bottom:4px}
+  .header p{color:var(--text2);font-size:14px}
+  .tabs{display:flex;gap:4px;background:var(--surface);border-radius:12px;padding:4px;margin-bottom:24px}
+  .tab{flex:1;padding:10px;text-align:center;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;color:var(--text2);transition:all 0.2s}
+  .tab.active{background:var(--accent);color:var(--bg);font-weight:600}
+  .tab:hover:not(.active){background:var(--surface2)}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px}
+  .panel-title{font-size:18px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .form-group{margin-bottom:0}
+  .form-group.full{grid-column:1/-1}
+  label{display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-weight:500}
+  input,select{width:100%;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Outfit',sans-serif;font-size:14px;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  .btn{padding:12px 24px;border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:8px}
+  .btn-primary{background:var(--accent);color:var(--bg)}
+  .btn-primary:hover{box-shadow:0 4px 16px rgba(0,229,160,0.3)}
+  .btn-primary:disabled{opacity:0.4;cursor:not-allowed}
+  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .btn-danger{background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.3)}
+  .camera-box{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3;max-height:350px;margin:12px 0}
+  .camera-box video,.camera-box canvas{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
+  .camera-box canvas{z-index:2}
+  .face-oval{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:160px;height:200px;border:2px dashed var(--accent);border-radius:50%;z-index:3;opacity:0.5}
+  .face-oval.ok{border-style:solid;border-color:var(--accent);opacity:1;box-shadow:0 0 20px rgba(0,229,160,0.2)}
+  .status-bar{position:absolute;bottom:8px;left:8px;right:8px;z-index:4;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);border-radius:8px;padding:8px 12px;font-size:12px;display:flex;align-items:center;gap:6px}
+  .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .dot.g{background:#00e5a0}.dot.y{background:#f59e0b}.dot.r{background:#ef4444}
+  .photo-preview{width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid var(--accent);display:block;margin:10px auto}
+  .msg{padding:12px 16px;border-radius:8px;font-size:13px;margin:12px 0;display:none}
+  .msg.success{display:block;background:rgba(0,229,160,0.1);color:var(--accent);border:1px solid rgba(0,229,160,0.2)}
+  .msg.error{display:block;background:rgba(239,68,68,0.1);color:var(--red);border:1px solid rgba(239,68,68,0.2)}
+  .emp-list{max-height:400px;overflow-y:auto}
+  .emp-row{display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid rgba(30,45,74,0.4);font-size:13px}
+  .emp-row:hover{background:var(--surface2)}
+  .emp-avatar{width:36px;height:36px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+  .emp-info{flex:1}
+  .emp-name{font-weight:500;color:var(--text)}
+  .emp-meta{font-size:11px;color:var(--text3);margin-top:2px}
+  .badge{font-size:10px;padding:2px 8px;border-radius:4px;font-weight:500}
+  .badge-face{background:rgba(0,229,160,0.12);color:#00e5a0}
+  .badge-noface{background:rgba(239,68,68,0.12);color:#ef4444}
+  .btn-remove{background:none;border:1px solid rgba(239,68,68,0.3);color:var(--red);padding:4px 10px;border-radius:6px;font-size:11px;font-family:'Outfit',sans-serif;cursor:pointer;font-weight:500;transition:all 0.2s;white-space:nowrap}
+  .btn-remove:hover{background:rgba(239,68,68,0.15);border-color:var(--red)}
+  .confirm-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:100;display:flex;align-items:center;justify-content:center}
+  .confirm-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:360px;width:90%;text-align:center}
+  .confirm-box h3{margin-bottom:8px;font-size:16px}
+  .confirm-box p{color:var(--text2);font-size:13px;margin-bottom:18px}
+  .confirm-btns{display:flex;gap:10px;justify-content:center}
+  .section{display:none}.section.active{display:block}
+  .desc-display{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);word-break:break-all;max-height:60px;overflow:hidden;background:var(--surface2);padding:8px;border-radius:6px;margin-top:8px}
+  @media(max-width:600px){.form-grid{grid-template-columns:1fr}.container{padding:0}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>🔧 AttendX Admin Panel</h1>
+    <p>Register employees, capture face data, and manage system</p>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showSection('add',this)">➕ Add Employee</div>
+    <div class="tab" onclick="showSection('face',this)">📸 Face Registration</div>
+    <div class="tab" onclick="showSection('list',this)">👥 Employee List</div>
+    <div class="tab" onclick="showSection('loc',this)">📍 Locations</div>
+  </div>
+
+  <!-- ADD EMPLOYEE -->
+  <div class="section active" id="sec-add">
+    <div class="panel">
+      <div class="panel-title">➕ Register New Employee</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Full Name</label><input type="text" id="empName" placeholder="Enter full name"></div>
+        <div class="form-group"><label>Employee ID (auto)</label><input type="text" id="empId" placeholder="Auto-generated" disabled></div>
+        <div class="form-group"><label>Email</label><input type="email" id="empEmail" placeholder="email@company.com"></div>
+        <div class="form-group"><label>Phone</label><input type="tel" id="empPhone" placeholder="+91 XXXXX XXXXX"></div>
+        <div class="form-group"><label>Department</label><input type="text" id="empDept" placeholder="e.g. Operations"></div>
+        <div class="form-group"><label>Designation</label><input type="text" id="empDesig" placeholder="e.g. Technician"></div>
+      </div>
+      <div id="addMsg" class="msg"></div>
+      <div style="margin-top:16px;display:flex;gap:10px">
+        <button class="btn btn-primary" onclick="addEmployee()">✓ Register Employee</button>
+        <button class="btn btn-secondary" onclick="clearForm()">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FACE REGISTRATION -->
+  <div class="section" id="sec-face">
+    <div class="panel">
+      <div class="panel-title">📸 Face Data Registration</div>
+      <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Select an employee and capture their face for biometric verification. The face descriptor will be stored for future attendance matching.</p>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Select Employee</label>
+        <select id="faceEmpSelect"><option value="">-- Choose Employee --</option></select>
+      </div>
+      <div id="faceCapArea" style="display:none">
+        <div class="camera-box">
+          <video id="faceVideo" autoplay playsinline muted></video>
+          <canvas id="faceOverlay"></canvas>
+          <div class="face-oval" id="faceOval"></div>
+          <div class="status-bar">
+            <div class="dot y" id="faceDot"></div>
+            <span id="faceStatus">Starting camera...</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <button class="btn btn-primary" id="btnCapFace" disabled onclick="captureFace()">📸 Capture Face</button>
+          <button class="btn btn-secondary" onclick="stopFaceCam()">Stop Camera</button>
+        </div>
+      </div>
+      <div id="capturedPreview" style="display:none;text-align:center;margin-top:16px">
+        <img id="capturedPhoto" class="photo-preview">
+        <p style="color:var(--accent);font-size:13px;margin:8px 0">Face captured successfully!</p>
+        <div id="descPreview" class="desc-display"></div>
+        <div style="display:flex;gap:10px;margin-top:12px;justify-content:center">
+          <button class="btn btn-primary" onclick="saveFaceData()">💾 Save Face Data</button>
+          <button class="btn btn-secondary" onclick="retakeFace()">↻ Retake</button>
+        </div>
+      </div>
+      <div id="faceMsg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- EMPLOYEE LIST -->
+  <div class="section" id="sec-list">
+    <div class="panel">
+      <div class="panel-title" style="justify-content:space-between">
+        <span>👥 All Employees</span>
+        <span id="empCount" style="font-size:12px;color:var(--text2);font-weight:400">0 employees</span>
+      </div>
+      <div class="emp-list" id="empList"></div>
+    </div>
+  </div>
+
+  <!-- LOCATIONS -->
+  <div class="section" id="sec-loc">
+    <div class="panel">
+      <div class="panel-title">📍 Add Location</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Location Name</label><input id="locName" placeholder="e.g. Head Office"></div>
+        <div class="form-group"><label>Address</label><input id="locAddr" placeholder="Full address"></div>
+        <div class="form-group"><label>Latitude (optional)</label><input id="locLat" placeholder="17.3850"></div>
+        <div class="form-group"><label>Longitude (optional)</label><input id="locLng" placeholder="78.4867"></div>
+      </div>
+      <div id="locMsg" class="msg"></div>
+      <button class="btn btn-primary" style="margin-top:14px" onclick="addLocation()">➕ Add Location</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbyhLeo-JkXAssp8bBoigfJ6pB40hWACJYiLLp38WHnJYwf0sRJkae-3a9XOOLEet4N9Tg/exec'; // Your Google Apps Script URL
+const MODEL_URLS = [
+  'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
+  'https://unpkg.com/@vladmandic/face-api@1.7.14/model',
+  '/models'
+];
+let MODEL_URL = MODEL_URLS[0];
+let faceStream = null;
+let faceInterval = null;
+let capturedDescriptor = null;
+let capturedImageData = null;
+let allEmployees = [];
+let allLocations = [];
+
+// INIT
+window.addEventListener('load', async () => {
+  await loadModels();
+  await loadData();
+});
+
+async function loadModels() {
+  if (typeof faceapi === 'undefined') {
+    console.error('face-api.js not loaded');
+    return;
+  }
+  for (let i = 0; i < MODEL_URLS.length; i++) {
+    MODEL_URL = MODEL_URLS[i];
+    try {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+      ]);
+      console.log('Models loaded from:', MODEL_URL);
+      return;
+    } catch(e) { console.warn('Model load failed from ' + MODEL_URL + ':', e.message); }
+  }
+  console.error('All model CDNs failed');
+}
+
+async function loadData() {
+  // Load employees and locations
+  try {
+    if (API_URL) {
+      const [empRes, locRes] = await Promise.all([
+        fetch(API_URL + '?action=getEmployees').then(r => r.json()),
+        fetch(API_URL + '?action=getLocations').then(r => r.json())
+      ]);
+      allEmployees = empRes.employees || [];
+      allLocations = locRes.locations || [];
+    } else {
+      // Demo
+      const locs = ['Head Office','Branch-A','Branch-B','Warehouse','Site-1','Site-2','Site-3','Regional-N','Regional-S','Regional-E'];
+      allLocations = locs.map((l,i) => ({ LocationID: 'LOC'+i, LocationName: l, Status: 'Active' }));
+      allEmployees = [
+        {EmployeeID:'EMP100',Name:'Rajesh Kumar',Phone:'+91 98001 12345',Department:'Operations',Status:'Active',hasFace:true},
+        {EmployeeID:'EMP101',Name:'Priya Sharma',Phone:'+91 98002 23456',Department:'Admin',Status:'Active',hasFace:false},
+        {EmployeeID:'EMP102',Name:'Amit Singh',Phone:'+91 98003 34567',Department:'IT',Status:'Active',hasFace:true},
+      ];
+    }
+  } catch(e) { console.error(e); }
+
+  populateDropdowns();
+  renderEmpList();
+}
+
+function populateDropdowns() {
+  const faceSel = document.getElementById('faceEmpSelect');
+  faceSel.innerHTML = '<option value="">-- Choose Employee --</option>';
+  allEmployees.filter(e => e.Status !== 'Inactive').forEach(e => {
+    faceSel.innerHTML += `<option value="${e.EmployeeID}">${e.Name} (${e.EmployeeID})</option>`;
+  });
+}
+
+function renderEmpList() {
+  const list = document.getElementById('empList');
+  const active = allEmployees.filter(e => e.Status !== 'Inactive');
+  const inactive = allEmployees.filter(e => e.Status === 'Inactive');
+  if (!allEmployees.length) {
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3)">No employees registered</div>';
+    return;
+  }
+  document.getElementById('empCount').textContent = active.length + ' active' + (inactive.length ? ', ' + inactive.length + ' quit' : '');
+
+  let html = active.map(e => {
+    return `<div class="emp-row">
+      <div class="emp-avatar">👤</div>
+      <div class="emp-info">
+        <div class="emp-name">${e.Name}</div>
+        <div class="emp-meta">${e.EmployeeID} • ${e.Department || '-'} • ${e.Phone || '-'}</div>
+      </div>
+      <span class="badge ${e.hasFace ? 'badge-face' : 'badge-noface'}">${e.hasFace ? '✓ Face' : '✕ No Face'}</span>
+      <button class="btn-remove" onclick="confirmRemove('${e.EmployeeID}','${e.Name.replace(/'/g, "\\'")}')">🚪 Remove</button>
+    </div>`;
+  }).join('');
+
+  if (inactive.length) {
+    html += `<div style="padding:12px 0 8px;margin-top:8px;border-top:1px solid var(--border)">
+      <span style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">Quit / Removed (${inactive.length})</span>
+    </div>`;
+    html += inactive.map(e => {
+      return `<div class="emp-row" style="opacity:0.5">
+        <div class="emp-avatar" style="background:rgba(239,68,68,0.1)">✕</div>
+        <div class="emp-info">
+          <div class="emp-name" style="text-decoration:line-through">${e.Name}</div>
+          <div class="emp-meta">${e.EmployeeID} • ${e.Department || '-'}${e.QuitDate ? ' • Quit: ' + e.QuitDate : ''}</div>
+        </div>
+        <span class="badge badge-noface">Inactive</span>
+      </div>`;
+    }).join('');
+  }
+
+  list.innerHTML = html;
+}
+
+// SECTIONS
+function showSection(id, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-' + id).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  if (id !== 'face') stopFaceCam();
+}
+
+// ADD EMPLOYEE
+async function addEmployee() {
+  const name = document.getElementById('empName').value.trim();
+  const email = document.getElementById('empEmail').value.trim();
+  const phone = document.getElementById('empPhone').value.trim();
+  const dept = document.getElementById('empDept').value.trim();
+  const desig = document.getElementById('empDesig').value.trim();
+
+  if (!name) { showMsg('addMsg','error','Name is required'); return; }
+
+  try {
+    if (API_URL) {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action:'addEmployee', name, email, phone, department:dept, designation:desig })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showMsg('addMsg','success',`Employee registered! ID: ${data.employeeId}`);
+        allEmployees.push({ EmployeeID: data.employeeId, Name: name, Phone: phone, Department: dept, Status: 'Active', hasFace: false });
+        populateDropdowns();
+        renderEmpList();
+        clearForm();
+      } else { showMsg('addMsg','error', data.message || 'Registration failed'); }
+    } else {
+      const id = 'EMP' + String(Date.now()).slice(-6);
+      showMsg('addMsg','success',`Demo: Employee registered! ID: ${id}`);
+      allEmployees.push({ EmployeeID: id, Name: name, Phone: phone, Department: dept, Status: 'Active', hasFace: false });
+      populateDropdowns();
+      renderEmpList();
+      clearForm();
+    }
+  } catch(e) { showMsg('addMsg','error','Error: ' + e.message); }
+}
+
+function clearForm() {
+  ['empName','empEmail','empPhone','empDept','empDesig'].forEach(id => document.getElementById(id).value = '');
+}
+
+// REMOVE EMPLOYEE
+function confirmRemove(empId, empName) {
+  const today = new Date().toISOString().split('T')[0];
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.id = 'confirmOverlay';
+  overlay.innerHTML = `
+    <div class="confirm-box">
+      <h3>🚪 Mark Employee as Quit</h3>
+      <p>Remove <strong>${empName}</strong> (${empId}) from active roster?</p>
+      <div style="text-align:left;margin-bottom:14px">
+        <label style="display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Last Working Date</label>
+        <input type="date" id="quitDate" value="${today}" style="width:100%;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Outfit',sans-serif;font-size:14px">
+      </div>
+      <p style="font-size:11px;color:var(--text3);margin-bottom:14px">Employee will be marked inactive. Past attendance records will be preserved.</p>
+      <div class="confirm-btns">
+        <button class="btn btn-danger" onclick="removeEmployee('${empId}')">Yes, Remove</button>
+        <button class="btn btn-secondary" onclick="closeConfirm()">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function closeConfirm() {
+  const overlay = document.getElementById('confirmOverlay');
+  if (overlay) overlay.remove();
+}
+
+async function removeEmployee(empId) {
+  const quitDate = document.getElementById('quitDate')?.value || new Date().toISOString().split('T')[0];
+  closeConfirm();
+  try {
+    if (API_URL) {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action:'deleteEmployee', employeeId: empId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const emp = allEmployees.find(e => e.EmployeeID === empId);
+        if (emp) { emp.Status = 'Inactive'; emp.QuitDate = quitDate; }
+        populateDropdowns();
+        renderEmpList();
+        showMsg('addMsg','success','Employee ' + empId + ' marked as quit');
+        showSection('list', document.querySelectorAll('.tab')[2]);
+      } else { showMsg('addMsg','error','Remove failed: ' + (data.message || '')); }
+    } else {
+      const emp = allEmployees.find(e => e.EmployeeID === empId);
+      if (emp) { emp.Status = 'Inactive'; emp.QuitDate = quitDate; }
+      populateDropdowns();
+      renderEmpList();
+      showMsg('addMsg','success','Demo: Employee ' + empId + ' marked as quit (' + quitDate + ')');
+      showSection('list', document.querySelectorAll('.tab')[2]);
+    }
+  } catch(e) { showMsg('addMsg','error','Error: ' + e.message); }
+}
+
+// ADD LOCATION
+async function addLocation() {
+  const name = document.getElementById('locName').value.trim();
+  const addr = document.getElementById('locAddr').value.trim();
+  const lat = document.getElementById('locLat').value.trim();
+  const lng = document.getElementById('locLng').value.trim();
+
+  if (!name) { showMsg('locMsg','error','Location name required'); return; }
+
+  try {
+    if (API_URL) {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action:'addLocation', name, address:addr, latitude:lat, longitude:lng })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showMsg('locMsg','success','Location added: ' + name);
+        allLocations.push({ LocationID: data.locationId, LocationName: name, Address: addr, Status: 'Active' });
+        populateDropdowns();
+      }
+    } else {
+      showMsg('locMsg','success','Demo: Location added: ' + name);
+      allLocations.push({ LocationID: 'LOC' + Date.now(), LocationName: name, Address: addr, Status: 'Active' });
+      populateDropdowns();
+    }
+    ['locName','locAddr','locLat','locLng'].forEach(id => document.getElementById(id).value = '');
+  } catch(e) { showMsg('locMsg','error','Error: ' + e.message); }
+}
+
+// FACE REGISTRATION
+document.getElementById('faceEmpSelect').addEventListener('change', function() {
+  if (this.value) {
+    document.getElementById('faceCapArea').style.display = 'block';
+    document.getElementById('capturedPreview').style.display = 'none';
+    startFaceCam();
+  } else {
+    document.getElementById('faceCapArea').style.display = 'none';
+    stopFaceCam();
+  }
+});
+
+async function startFaceCam() {
+  try {
+    faceStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'user', width:{ideal:640}, height:{ideal:480} } });
+    const video = document.getElementById('faceVideo');
+    video.srcObject = faceStream;
+    await video.play();
+    capturedDescriptor = null;
+    faceInterval = setInterval(detectFaceReg, 350);
+  } catch(e) {
+    document.getElementById('faceStatus').textContent = 'Camera denied: ' + e.message;
+    document.getElementById('faceDot').className = 'dot r';
+  }
+}
+
+function stopFaceCam() {
+  if (faceInterval) { clearInterval(faceInterval); faceInterval = null; }
+  if (faceStream) { faceStream.getTracks().forEach(t => t.stop()); faceStream = null; }
+}
+
+async function detectFaceReg() {
+  const video = document.getElementById('faceVideo');
+  if (!video.videoWidth) return;
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+  const det = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
+  const oval = document.getElementById('faceOval');
+  if (det) {
+    oval.classList.add('ok');
+    document.getElementById('faceDot').className = 'dot g';
+    document.getElementById('faceStatus').textContent = 'Face detected — ready to capture';
+    document.getElementById('btnCapFace').disabled = false;
+    const overlay = document.getElementById('faceOverlay');
+    const dims = faceapi.matchDimensions(overlay, video, true);
+    const resized = faceapi.resizeResults(det, dims);
+    const ctx = overlay.getContext('2d');
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    faceapi.draw.drawFaceLandmarks(overlay, resized);
+  } else {
+    oval.classList.remove('ok');
+    document.getElementById('faceDot').className = 'dot y';
+    document.getElementById('faceStatus').textContent = 'No face — look at camera';
+    document.getElementById('btnCapFace').disabled = true;
+  }
+}
+
+async function captureFace() {
+  const video = document.getElementById('faceVideo');
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 });
+  const det = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
+
+  if (!det) { showMsg('faceMsg','error','No face detected. Try again.'); return; }
+
+  capturedDescriptor = det.descriptor;
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  capturedImageData = canvas.toDataURL('image/jpeg', 0.5);
+
+  document.getElementById('capturedPhoto').src = capturedImageData;
+  document.getElementById('descPreview').textContent = 'Descriptor: [' + Array.from(capturedDescriptor).slice(0, 8).map(v => v.toFixed(4)).join(', ') + ' ... ] (128 values)';
+
+  stopFaceCam();
+  document.getElementById('faceCapArea').style.display = 'none';
+  document.getElementById('capturedPreview').style.display = 'block';
+}
+
+function retakeFace() {
+  document.getElementById('capturedPreview').style.display = 'none';
+  document.getElementById('faceCapArea').style.display = 'block';
+  capturedDescriptor = null;
+  capturedImageData = null;
+  startFaceCam();
+}
+
+async function saveFaceData() {
+  const empId = document.getElementById('faceEmpSelect').value;
+  if (!empId || !capturedDescriptor) { showMsg('faceMsg','error','No data to save'); return; }
+
+  try {
+    if (API_URL) {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          action: 'saveFaceData',
+          employeeId: empId,
+          faceDescriptor: JSON.stringify(Array.from(capturedDescriptor)),
+          photoBase64: capturedImageData
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showMsg('faceMsg','success','Face data saved for ' + empId);
+        const emp = allEmployees.find(e => e.EmployeeID === empId);
+        if (emp) emp.hasFace = true;
+        renderEmpList();
+      } else { showMsg('faceMsg','error','Save failed: ' + (data.message || '')); }
+    } else {
+      showMsg('faceMsg','success','Demo: Face data saved for ' + empId);
+      const emp = allEmployees.find(e => e.EmployeeID === empId);
+      if (emp) emp.hasFace = true;
+      renderEmpList();
+    }
+  } catch(e) { showMsg('faceMsg','error','Error: ' + e.message); }
+
+  document.getElementById('capturedPreview').style.display = 'none';
+  document.getElementById('faceEmpSelect').value = '';
+}
+
+function showMsg(id, type, text) {
+  const el = document.getElementById(id);
+  el.className = 'msg ' + type;
+  el.textContent = text;
+  setTimeout(() => el.className = 'msg', 5000);
+}
+</script>
+</body>
+</html>
