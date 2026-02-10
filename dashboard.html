@@ -695,7 +695,7 @@
         <p style="color:var(--text2);font-size:14px;margin-bottom:16px">Generate printable QR codes for each office location. Employees scan these to open the attendance check-in page.</p>
         <div style="margin-bottom:16px">
           <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px">Attendance Page Base URL</label>
-          <input type="text" id="baseUrl" value="" placeholder="https://yourdomain.github.io/attendance.html" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;width:100%;font-family:'Outfit',sans-serif;font-size:14px;outline:none">
+          <input type="text" id="baseUrl" value="" placeholder="e.g. https://koushikd93.github.io/SV-RCP/attendance.html" oninput="if(window._qrLocs) renderQRCodes(window._qrLocs)" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;width:100%;font-family:'Outfit',sans-serif;font-size:14px;outline:none">
         </div>
         <div id="qrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px"></div>
       </div>
@@ -1028,9 +1028,15 @@ function renderLocations(locs) {
 }
 
 function renderQRCodes(locs) {
+  window._qrLocs = locs;
   const grid = document.getElementById('qrGrid');
-  const baseUrl = document.getElementById('baseUrl').value || 'https://yourdomain.github.io/attendance.html';
+  const baseUrl = document.getElementById('baseUrl').value.trim();
   grid.innerHTML = '';
+
+  if (!baseUrl) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--red);background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:10px">⚠️ Enter your attendance page URL above first (e.g. https://koushikd93.github.io/SV-RCP/attendance.html)</div>';
+    return;
+  }
 
   locs.forEach(l => {
     const name = l.LocationName || l;
@@ -1052,8 +1058,6 @@ function renderQRCodes(locs) {
       }
     }, 100);
   });
-
-  document.getElementById('baseUrl').addEventListener('change', () => renderQRCodes(locs));
 }
 
 function downloadQR(canvasId, name) {
