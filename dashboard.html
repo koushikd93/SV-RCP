@@ -708,7 +708,7 @@
 // ============================================================
 // CONFIG
 // ============================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbzol-TzbH36tutHDtnkFxR3VY-TjiOVYAnuyv2rQZ1bDWqyEQ8fr_0Z0tfwr8tLQTEyOw/exec'; // Your Google Apps Script deployment URL
+const API_URL = 'https://script.google.com/macros/s/AKfycbxTRM5gzoB57i0MMaCrn7AcjBIAESy0le6ibFdl1y3KHAliZvZgzLu9BoFgsfIKt4TlPg/exec';
 let dashboardData = null;
 let allRecords = [];
 let weeklyChartInstance = null;
@@ -808,8 +808,14 @@ window.addEventListener('load', () => {
 async function refreshData() {
   try {
     if (API_URL) {
-      const res = await fetch(API_URL + '?action=getDashboardData');
-      dashboardData = await res.json();
+      const res = await fetch(API_URL + '?action=getDashboardData', { redirect: 'follow' });
+      const text = await res.text();
+      try {
+        dashboardData = JSON.parse(text);
+      } catch(pe) {
+        console.error('JSON parse error:', text.substring(0, 200));
+        dashboardData = getDemoData();
+      }
     } else {
       dashboardData = getDemoData();
     }
@@ -823,14 +829,13 @@ async function refreshData() {
 }
 
 async function refreshOccupancy() {
-  // Auto-refresh just occupancy
   try {
     if (API_URL) {
-      const res = await fetch(API_URL + '?action=getLiveOccupancy');
+      const res = await fetch(API_URL + '?action=getLiveOccupancy', { redirect: 'follow' });
       const data = await res.json();
       if (data.success) renderOccupancyGrid(data.occupancy);
     }
-  } catch (e) {}
+  } catch (e) { console.warn('Occupancy refresh error:', e); }
 }
 
 // ============================================================
