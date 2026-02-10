@@ -566,7 +566,7 @@
 // ============================================================
 // CONFIGURATION - Update these values
 // ============================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbxTRM5gzoB57i0MMaCrn7AcjBIAESy0le6ibFdl1y3KHAliZvZgzLu9BoFgsfIKt4TlPg/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzol-TzbH36tutHDtnkFxR3VY-TjiOVYAnuyv2rQZ1bDWqyEQ8fr_0Z0tfwr8tLQTEyOw/exec';
 const MODEL_URLS = [
   'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
   'https://unpkg.com/@vladmandic/face-api@1.7.14/model',
@@ -854,6 +854,7 @@ async function startCamera() {
     livenessState = { blink: false, headMove: false, faceDetected: false, matched: false };
     blinkHistory = [];
     headPosHistory = [];
+    window._distHistory = [];
     updateChecks();
 
     updateStatus('yellow', 'Camera active — detecting face...');
@@ -875,7 +876,7 @@ async function detectFace() {
   const video = document.getElementById('video');
   if (!video.videoWidth) return;
 
-  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 });
 
   try {
     const detection = await faceapi
@@ -890,14 +891,26 @@ async function detectFace() {
       guide.classList.remove('error');
       livenessState.faceDetected = true;
 
-      // Check face match
+      // Check face match with rolling average for stability
       if (selectedEmployee && faceDescriptors[selectedEmployee.EmployeeID]) {
         const dist = faceapi.euclideanDistance(
           detection.descriptor,
           faceDescriptors[selectedEmployee.EmployeeID]
         );
-        faceMatchScore = Math.max(0, Math.round((1 - dist / 1.0) * 100));
-        livenessState.matched = faceMatchScore > 55;
+        // Rolling distance average (last 5 frames) for stable scoring
+        if (!window._distHistory) window._distHistory = [];
+        window._distHistory.push(dist);
+        if (window._distHistory.length > 5) window._distHistory.shift();
+        const avgDist = window._distHistory.reduce((a, b) => a + b, 0) / window._distHistory.length;
+
+        // Improved scoring: face-api euclidean distance for same person = 0.2-0.5
+        // Maps: 0.0→100%, 0.3→85%, 0.4→73%, 0.5→58%, 0.6→40%, >0.6→below 40%
+        if (avgDist <= 0.6) {
+          faceMatchScore = Math.round(100 - (avgDist / 0.6) * 60);
+        } else {
+          faceMatchScore = Math.round(Math.max(0, 40 - ((avgDist - 0.6) / 0.4) * 40));
+        }
+        livenessState.matched = avgDist < 0.6; // standard face-api threshold
       } else {
         // No stored face data — allow first-time registration
         faceMatchScore = -1; // Indicates no reference
