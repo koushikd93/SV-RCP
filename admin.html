@@ -165,7 +165,7 @@
 </div>
 
 <script>
-const API_URL = 'https://script.google.com/macros/s/AKfycbyhLeo-JkXAssp8bBoigfJ6pB40hWACJYiLLp38WHnJYwf0sRJkae-3a9XOOLEet4N9Tg/exec'; // Your Google Apps Script URL
+const API_URL = 'https://script.google.com/macros/s/AKfycbzol-TzbH36tutHDtnkFxR3VY-TjiOVYAnuyv2rQZ1bDWqyEQ8fr_0Z0tfwr8tLQTEyOw/exec'; // Your Google Apps Script URL
 const MODEL_URLS = [
   'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
   'https://unpkg.com/@vladmandic/face-api@1.7.14/model',
@@ -205,13 +205,28 @@ async function loadModels() {
   console.error('All model CDNs failed');
 }
 
+// API HELPERS — no Content-Type header to avoid CORS preflight with Google Apps Script
+async function apiPost(data) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+  return res.json();
+}
+
+async function apiGet(params) {
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url);
+  return res.json();
+}
+
 async function loadData() {
   // Load employees and locations
   try {
     if (API_URL) {
       const [empRes, locRes] = await Promise.all([
-        fetch(API_URL + '?action=getEmployees').then(r => r.json()),
-        fetch(API_URL + '?action=getLocations').then(r => r.json())
+        apiGet({ action: 'getEmployees' }),
+        apiGet({ action: 'getLocations' })
       ]);
       allEmployees = empRes.employees || [];
       allLocations = locRes.locations || [];
@@ -301,12 +316,7 @@ async function addEmployee() {
 
   try {
     if (API_URL) {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ action:'addEmployee', name, email, phone, department:dept, designation:desig })
-      });
-      const data = await res.json();
+      const data = await apiPost({ action:'addEmployee', name, email, phone, location:'All', shift:'All', department:dept, designation:desig });
       if (data.success) {
         showMsg('addMsg','success',`Employee registered! ID: ${data.employeeId}`);
         allEmployees.push({ EmployeeID: data.employeeId, Name: name, Phone: phone, Department: dept, Status: 'Active', hasFace: false });
@@ -362,12 +372,7 @@ async function removeEmployee(empId) {
   closeConfirm();
   try {
     if (API_URL) {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ action:'deleteEmployee', employeeId: empId })
-      });
-      const data = await res.json();
+      const data = await apiPost({ action:'deleteEmployee', employeeId: empId });
       if (data.success) {
         const emp = allEmployees.find(e => e.EmployeeID === empId);
         if (emp) { emp.Status = 'Inactive'; emp.QuitDate = quitDate; }
@@ -398,12 +403,7 @@ async function addLocation() {
 
   try {
     if (API_URL) {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ action:'addLocation', name, address:addr, latitude:lat, longitude:lng })
-      });
-      const data = await res.json();
+      const data = await apiPost({ action:'addLocation', name, address:addr, latitude:lat, longitude:lng });
       if (data.success) {
         showMsg('locMsg','success','Location added: ' + name);
         allLocations.push({ LocationID: data.locationId, LocationName: name, Address: addr, Status: 'Active' });
@@ -510,17 +510,12 @@ async function saveFaceData() {
 
   try {
     if (API_URL) {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          action: 'saveFaceData',
-          employeeId: empId,
-          faceDescriptor: JSON.stringify(Array.from(capturedDescriptor)),
-          photoBase64: capturedImageData
-        })
+      const data = await apiPost({
+        action: 'saveFaceData',
+        employeeId: empId,
+        faceDescriptor: JSON.stringify(Array.from(capturedDescriptor)),
+        photoBase64: capturedImageData
       });
-      const data = await res.json();
       if (data.success) {
         showMsg('faceMsg','success','Face data saved for ' + empId);
         const emp = allEmployees.find(e => e.EmployeeID === empId);
