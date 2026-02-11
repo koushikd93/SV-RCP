@@ -531,7 +531,7 @@
   <aside class="sidebar">
     <div class="sidebar-brand">
       <div class="dot"></div>
-      Attendance
+      AttendX
     </div>
 
     <div class="nav-section">Dashboard</div>
@@ -600,8 +600,8 @@
             <div class="shift-card shift-g"><div class="shift-name">General</div><div class="shift-count" id="shiftG">0</div><div class="shift-time">09:00-17:00</div></div>
           </div>
           <div style="margin-top:16px">
-            <div class="panel-title" style="margin-bottom:12px">🏢 Quick Occupancy</div>
-            <div id="quickOccupancy"></div>
+            <div class="panel-title" style="margin-bottom:12px"><span class="live-dot"></span> Live Status</div>
+            <div id="quickOccupancy"><div style="color:var(--text3);font-size:13px">Loading...</div></div>
           </div>
         </div>
       </div>
@@ -831,9 +831,15 @@ async function refreshData() {
 async function refreshOccupancy() {
   try {
     if (API_URL) {
-      const res = await fetch(API_URL + '?action=getLiveOccupancy', { redirect: 'follow' });
-      const data = await res.json();
-      if (data.success) renderOccupancyGrid(data.occupancy);
+      const res = await fetch(API_URL + '?action=getDashboardData', { redirect: 'follow' });
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        if (data.success && data.todayRecords) {
+          renderOccupancyGrid(data.todayRecords);
+          renderQuickOccupancy(data.todayRecords);
+        }
+      } catch(e) {}
     }
   } catch (e) { console.warn('Occupancy refresh error:', e); }
 }
@@ -862,14 +868,14 @@ function renderDashboard() {
   // Weekly chart
   renderWeeklyChart(d.weeklyTrend);
 
-  // Quick occupancy
-  renderQuickOccupancy(d.locationOccupancy);
+  // Quick occupancy — built from actual attendance records
+  renderQuickOccupancy(d.todayRecords);
 
   // Today's table
   renderTodayTable(d.todayRecords);
 
-  // Full occupancy page
-  renderOccupancyGrid(d.locationOccupancy);
+  // Full occupancy page — built from actual records
+  renderOccupancyGrid(d.todayRecords);
 
   // Employees
   renderEmployees(d.employees);
@@ -937,55 +943,93 @@ function renderWeeklyChart(trend) {
   });
 }
 
-function renderQuickOccupancy(occ) {
+function renderQuickOccupancy(todayRecords) {
   const el = document.getElementById('quickOccupancy');
-  let html = '';
-  for (const [name, data] of Object.entries(occ)) {
-    const present = data.present ?? data.currentlyPresent ?? 0;
-    const total = data.total || 0;
-    const pct = total > 0 ? Math.round((present / total) * 100) : 0;
-    const color = pct >= 80 ? 'green' : pct >= 50 ? 'yellow' : 'red';
-    html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px">
-      <span style="width:100px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${name}">${name}</span>
-      <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
-        <div style="width:${pct}%;height:100%;border-radius:2px" class="occ-bar-fill ${color}"></div>
-      </div>
-      <span style="font-family:'JetBrains Mono';font-size:11px;color:var(--text3);width:40px;text-align:right">${present}/${total}</span>
-    </div>`;
+  if (!todayRecords || !todayRecords.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No check-ins today</div>';
+    return;
   }
+
+  // Group by location — count currently present (checked in, NOT checked out)
+  const locMap = {};
+  todayRecords.forEach(r => {
+    const loc = r.Location || 'Unknown';
+    if (!locMap[loc]) locMap[loc] = { present: 0, checkedOut: 0, employees: [] };
+    if (!r.CheckOutTime) {
+      locMap[loc].present++;
+      locMap[loc].employees.push(r.EmployeeName + ' (' + (r.Shift || '?') + ')');
+    } else {
+      locMap[loc].checkedOut++;
+    }
+  });
+
+  let html = '';
+  // Sort: locations with people first
+  const sorted = Object.entries(locMap).sort((a, b) => b[1].present - a[1].present);
+  sorted.forEach(([name, data]) => {
+    const color = data.present > 0 ? 'green' : 'yellow';
+    const barWidth = data.present > 0 ? Math.max(15, data.present * 25) : 0;
+    html += `<div style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px;font-size:13px">
+        <span style="width:110px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500" title="${name}">${name}</span>
+        <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="width:${barWidth}%;height:100%;border-radius:3px;transition:width 0.3s" class="occ-bar-fill ${color}"></div>
+        </div>
+        <span style="font-family:'JetBrains Mono';font-size:12px;color:${data.present > 0 ? 'var(--accent)' : 'var(--text3)'};min-width:20px;text-align:right;font-weight:600">${data.present}</span>
+      </div>
+      ${data.employees.length ? `<div style="font-size:11px;color:var(--text3);margin-left:120px;margin-top:2px">${data.employees.join(', ')}</div>` : ''}
+    </div>`;
+  });
+
   el.innerHTML = html;
 }
 
-function renderOccupancyGrid(occ) {
+function renderOccupancyGrid(todayRecords) {
   const grid = document.getElementById('occGrid');
+  if (!todayRecords || !todayRecords.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="icon">🏢</div><p>No check-ins today</p></div>';
+    return;
+  }
+
+  // Group by location
+  const locMap = {};
+  todayRecords.forEach(r => {
+    const loc = r.Location || 'Unknown';
+    if (!locMap[loc]) locMap[loc] = { present: 0, checkedOut: 0, employees: [] };
+    if (!r.CheckOutTime) {
+      locMap[loc].present++;
+      locMap[loc].employees.push({ name: r.EmployeeName, shift: r.Shift || '?', checkIn: r.CheckInTime || '' });
+    } else {
+      locMap[loc].checkedOut++;
+    }
+  });
+
   let html = '';
-  for (const [name, data] of Object.entries(occ)) {
-    const present = data.present ?? data.currentlyPresent ?? 0;
-    const total = data.total || 0;
-    const absent = data.absent ?? (total - present);
-    const pct = total > 0 ? Math.round((present / total) * 100) : (present > 0 ? 100 : 0);
-    const color = present > 0 ? 'green' : 'red';
-    const statusText = present > 0 ? 'Active' : 'Empty';
-    const statusClass = present > 0 ? 'full' : 'empty';
+  const sorted = Object.entries(locMap).sort((a, b) => b[1].present - a[1].present);
+  sorted.forEach(([name, data]) => {
+    const color = data.present > 0 ? 'green' : 'yellow';
+    const statusText = data.present > 0 ? 'Active' : 'All Left';
+    const statusClass = data.present > 0 ? 'full' : 'empty';
 
     let empChips = '';
-    if (data.employees && data.employees.length) {
-      data.employees.forEach(e => { empChips += `<span class="emp-chip">${e.name} • ${e.shift} • ${e.checkIn || ''}</span>`; });
-    }
+    data.employees.forEach(e => {
+      empChips += `<span class="emp-chip">${e.name} • ${e.shift} • ${e.checkIn}</span>`;
+    });
 
     html += `<div class="occ-card">
       <div class="occ-header">
         <div class="occ-name" title="${name}">${name}</div>
         <div class="occ-status ${statusClass}">${statusText}</div>
       </div>
-      <div class="occ-bar"><div class="occ-bar-fill ${color}" style="width:${present > 0 ? Math.max(pct, 10) : 0}%"></div></div>
+      <div class="occ-bar"><div class="occ-bar-fill ${color}" style="width:${data.present > 0 ? 100 : 0}%"></div></div>
       <div style="display:flex;justify-content:space-between;align-items:flex-end">
-        <div class="occ-count">${present}<span style="font-size:14px;color:var(--text3);font-weight:400"> checked in</span></div>
+        <div class="occ-count">${data.present}<span style="font-size:14px;color:var(--text3);font-weight:400"> present now</span></div>
+        ${data.checkedOut > 0 ? `<div style="font-size:12px;color:var(--text3)">${data.checkedOut} checked out</div>` : ''}
       </div>
       ${empChips ? `<div class="occ-employees">${empChips}</div>` : ''}
     </div>`;
-  }
-  grid.innerHTML = html || '<div class="empty-state"><div class="icon">🏢</div><p>No location data available</p></div>';
+  });
+  grid.innerHTML = html;
 }
 
 function renderTodayTable(records) {
