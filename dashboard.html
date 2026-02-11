@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SV-RCP Dashboard</title>
+<title>SV-RCP Attendace Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -708,7 +708,7 @@
 // ============================================================
 // CONFIG
 // ============================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbx-yF8wAFcX-bP-hFtnBZlBJDWmT3AmFyyZmS3vfePEpQf2vktIkbcXBa18FYkwTzIwxA/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzol-TzbH36tutHDtnkFxR3VY-TjiOVYAnuyv2rQZ1bDWqyEQ8fr_0Z0tfwr8tLQTEyOw/exec';
 let dashboardData = null;
 let allRecords = [];
 let weeklyChartInstance = null;
@@ -941,14 +941,16 @@ function renderQuickOccupancy(occ) {
   const el = document.getElementById('quickOccupancy');
   let html = '';
   for (const [name, data] of Object.entries(occ)) {
-    const pct = data.total > 0 ? Math.round((data.present / data.total) * 100) : 0;
+    const present = data.present ?? data.currentlyPresent ?? 0;
+    const total = data.total || 0;
+    const pct = total > 0 ? Math.round((present / total) * 100) : 0;
     const color = pct >= 80 ? 'green' : pct >= 50 ? 'yellow' : 'red';
     html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px">
       <span style="width:100px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${name}">${name}</span>
       <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
         <div style="width:${pct}%;height:100%;border-radius:2px" class="occ-bar-fill ${color}"></div>
       </div>
-      <span style="font-family:'JetBrains Mono';font-size:11px;color:var(--text3);width:40px;text-align:right">${data.present}/${data.total}</span>
+      <span style="font-family:'JetBrains Mono';font-size:11px;color:var(--text3);width:40px;text-align:right">${present}/${total}</span>
     </div>`;
   }
   el.innerHTML = html;
@@ -958,14 +960,17 @@ function renderOccupancyGrid(occ) {
   const grid = document.getElementById('occGrid');
   let html = '';
   for (const [name, data] of Object.entries(occ)) {
-    const pct = data.total > 0 ? Math.round((data.present / data.total) * 100) : 0;
-    const color = pct >= 80 ? 'green' : pct >= 50 ? 'yellow' : 'red';
-    const statusClass = pct >= 80 ? 'full' : pct >= 40 ? 'partial' : 'empty';
-    const statusText = pct >= 80 ? 'Active' : pct >= 40 ? 'Partial' : 'Low';
+    const present = data.present ?? data.currentlyPresent ?? 0;
+    const total = data.total || 0;
+    const absent = data.absent ?? (total - present);
+    const pct = total > 0 ? Math.round((present / total) * 100) : (present > 0 ? 100 : 0);
+    const color = present > 0 ? 'green' : 'red';
+    const statusText = present > 0 ? 'Active' : 'Empty';
+    const statusClass = present > 0 ? 'full' : 'empty';
 
     let empChips = '';
-    if (data.employees) {
-      data.employees.forEach(e => { empChips += `<span class="emp-chip">${e.name} • ${e.shift}</span>`; });
+    if (data.employees && data.employees.length) {
+      data.employees.forEach(e => { empChips += `<span class="emp-chip">${e.name} • ${e.shift} • ${e.checkIn || ''}</span>`; });
     }
 
     html += `<div class="occ-card">
@@ -973,10 +978,9 @@ function renderOccupancyGrid(occ) {
         <div class="occ-name" title="${name}">${name}</div>
         <div class="occ-status ${statusClass}">${statusText}</div>
       </div>
-      <div class="occ-bar"><div class="occ-bar-fill ${color}" style="width:${pct}%"></div></div>
+      <div class="occ-bar"><div class="occ-bar-fill ${color}" style="width:${present > 0 ? Math.max(pct, 10) : 0}%"></div></div>
       <div style="display:flex;justify-content:space-between;align-items:flex-end">
-        <div class="occ-count">${data.present}<span style="font-size:14px;color:var(--text3);font-weight:400">/${data.total}</span></div>
-        <div class="occ-stats"><span>${data.absent || 0} absent</span></div>
+        <div class="occ-count">${present}<span style="font-size:14px;color:var(--text3);font-weight:400"> checked in</span></div>
       </div>
       ${empChips ? `<div class="occ-employees">${empChips}</div>` : ''}
     </div>`;
