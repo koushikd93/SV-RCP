@@ -990,18 +990,14 @@ async function detectFace() {
         if (window._distHistory.length > 5) window._distHistory.shift();
         const avgDist = window._distHistory.reduce((a, b) => a + b, 0) / window._distHistory.length;
 
-        // Improved scoring: face-api euclidean distance for same person = 0.2-0.5
-        // Maps: 0.0→100%, 0.3→85%, 0.4→73%, 0.5→58%, 0.6→40%, >0.6→below 40%
-        if (avgDist <= 0.6) {
-          faceMatchScore = Math.round(100 - (avgDist / 0.6) * 60);
-        } else {
-          faceMatchScore = Math.round(Math.max(0, 40 - ((avgDist - 0.6) / 0.4) * 40));
-        }
-        livenessState.matched = avgDist < 0.6; // standard face-api threshold
+        // Simple scoring: dist 0→100%, 0.2→80%, 0.3→70%, 0.4→60%, 0.5→50%
+        faceMatchScore = Math.round(Math.max(0, 100 - avgDist * 100));
+        // STRICT threshold: dist < 0.5 (score ≥ 50%)
+        livenessState.matched = avgDist < 0.5;
       } else {
-        // No stored face data — allow first-time registration
-        faceMatchScore = -1; // Indicates no reference
-        livenessState.matched = true;
+        // No stored face data — BLOCK, must register via admin panel first
+        faceMatchScore = -1;
+        livenessState.matched = false;
       }
 
       // Blink detection via Eye Aspect Ratio
@@ -1048,17 +1044,26 @@ async function detectFace() {
       // Update status
       const allChecks = livenessState.faceDetected && livenessState.blink && livenessState.headMove;
       if (allChecks && livenessState.matched) {
-        updateStatus('green', 'All checks passed! Ready to capture.');
+        updateStatus('green', `Face matched (${faceMatchScore}%)! Ready to capture.`);
         document.getElementById('btnCapture').disabled = false;
+      } else if (faceMatchScore === -1) {
+        // No face data registered
+        updateStatus('red', '⚠ Face not registered! Register face via Admin Panel first.');
+        document.getElementById('btnCapture').disabled = true;
+        guide.classList.remove('detected');
+        guide.classList.add('error');
+      } else if (!livenessState.matched && faceMatchScore >= 0) {
+        // Face mismatch — different person
+        updateStatus('red', `✕ Face mismatch (${faceMatchScore}%). This is not ${selectedEmployee.Name}.`);
+        document.getElementById('btnCapture').disabled = true;
+        guide.classList.remove('detected');
+        guide.classList.add('error');
       } else if (livenessState.matched) {
         const pending = [];
         if (!livenessState.blink) pending.push('blink');
         if (!livenessState.headMove) pending.push('move head');
-        updateStatus('yellow', 'Please ' + pending.join(' & ') + '...');
-      } else if (faceMatchScore >= 0) {
-        updateStatus('red', `Face mismatch (${faceMatchScore}%). Verify identity.`);
-        guide.classList.remove('detected');
-        guide.classList.add('error');
+        updateStatus('yellow', `Face OK (${faceMatchScore}%) — Please ${pending.join(' & ')}...`);
+        document.getElementById('btnCapture').disabled = true;
       }
     } else {
       guide.classList.remove('detected', 'error');
@@ -1118,19 +1123,6 @@ async function captureAndVerify() {
 
   if (detection) {
     capturedFaceDescriptor = detection.descriptor;
-
-    // If no stored face data, save this as reference
-    if (faceMatchScore === -1) {
-      try {
-        await apiPost({
-          action: 'saveFaceData',
-          employeeId: selectedEmployee.EmployeeID,
-          faceDescriptor: JSON.stringify(Array.from(detection.descriptor)),
-          photoBase64: canvas.toDataURL('image/jpeg', 0.4)
-        });
-        faceMatchScore = 100;
-      } catch (e) { console.warn('Could not save face data:', e); }
-    }
   }
 
   stopCamera();
@@ -1143,10 +1135,38 @@ async function captureAndVerify() {
 function fetchGPS() {
   document.getElementById('gpsLat').textContent = 'Fetching...';
   document.getElementById('gpsLng').textContent = 'Fetching...';
-  document.getElementById('matchScore').textContent = faceMatchScore === -1 ? 'New (Registered)' : faceMatchScore + '%';
+  
+  // Show face match score with color coding
+  const matchEl = document.getElementById('matchScore');
+  if (faceMatchScore === -1) {
+    matchEl.textContent = '✕ Not Registered';
+    matchEl.style.color = '#ef4444';
+  } else if (faceMatchScore >= 50) {
+    matchEl.textContent = faceMatchScore + '% ✓';
+    matchEl.style.color = 'var(--accent)';
+  } else {
+    matchEl.textContent = faceMatchScore + '% ✕ FAIL';
+    matchEl.style.color = '#ef4444';
+  }
 
   const livenessScore = [livenessState.blink, livenessState.headMove, livenessState.faceDetected, livenessState.matched].filter(Boolean).length;
   document.getElementById('livenessDisplay').textContent = livenessScore + '/4 checks passed';
+
+  // ENFORCE: Block submit if face match fails
+  const submitBtn = document.getElementById('btnSubmit');
+  if (faceMatchScore === -1) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '⚠ Face Not Registered';
+    submitBtn.style.opacity = '0.5';
+  } else if (faceMatchScore < 50) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '✕ Face Mismatch — Cannot Check In';
+    submitBtn.style.opacity = '0.5';
+  } else {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '✓ Confirm Check-In';
+    submitBtn.style.opacity = '1';
+  }
 
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
@@ -1170,6 +1190,16 @@ function fetchGPS() {
 // SUBMIT ATTENDANCE
 // ============================================================
 async function submitAttendance(type = 'checkin') {
+  // SECURITY: Final check — block if face match failed
+  if (type === 'checkin' && faceMatchScore !== -1 && faceMatchScore < 50) {
+    alert('Face verification failed (' + faceMatchScore + '%). Cannot check in.');
+    return;
+  }
+  if (type === 'checkin' && faceMatchScore === -1) {
+    alert('Face not registered. Contact admin to register your face first.');
+    return;
+  }
+
   const btn = type === 'checkout' ? document.getElementById('btnCheckout') : document.getElementById('btnSubmit');
   btn.disabled = true;
   btn.innerHTML = '<div class="loading-spinner"></div> Submitting...';
@@ -1199,7 +1229,7 @@ async function submitAttendance(type = 'checkin') {
         Shift: getSelectedShift(),
         Time: new Date().toLocaleTimeString(),
         Location: getLocation(),
-        'Face Match': faceMatchScore === -1 ? 'New Registration' : faceMatchScore + '%',
+        'Face Match': faceMatchScore + '%',
         GPS: gpsPosition ? `${gpsPosition.latitude.toFixed(4)}, ${gpsPosition.longitude.toFixed(4)}` : 'N/A'
       });
     } else if (result.alreadyCheckedIn) {
