@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Visitor Check-In | AttendX</title>
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/dist/face-api.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2236;
+    --border: #2a3454;
+    --accent: #06d6a0;
+    --accent2: #118ab2;
+    --danger: #ef476f;
+    --warn: #ffd166;
+    --text: #e8edf5;
+    --text2: #8892a8;
+    --success: #06d6a0;
+    --visitor: #a78bfa;
+    --visitor-dim: rgba(167,139,250,0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .container {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .header {
+    text-align: center;
+    padding: 20px 0 16px;
+  }
+
+  .header .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    color: var(--visitor);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--visitor), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .header .location-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 14px;
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--text2);
+  }
+
+  .location-badge svg { width: 14px; height: 14px; fill: var(--visitor); }
+
+  .step-indicator {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin: 16px 0;
+  }
+
+  .step-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: all 0.3s;
+  }
+
+  .step-dot.active { background: var(--visitor); width: 24px; border-radius: 4px; }
+  .step-dot.done { background: var(--accent2); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 12px;
+    flex: 1;
+  }
+
+  .card-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title .icon {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+
+  /* MODE TOGGLE */
+  .mode-toggle {
+    display: flex;
+    gap: 4px;
+    background: var(--surface2);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 16px;
+  }
+
+  .mode-btn {
+    flex: 1;
+    padding: 10px 12px;
+    text-align: center;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text2);
+    background: transparent;
+    transition: all 0.2s;
+  }
+
+  .mode-btn.active {
+    background: var(--visitor);
+    color: var(--bg);
+  }
+
+  .mode-btn.active.checkout-mode {
+    background: var(--danger);
+    color: #fff;
+  }
+
+  .mode-btn:hover:not(.active) { background: var(--border); }
+
+  /* FORM */
+  .visitor-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 12px;
+    color: var(--text2);
+    margin-bottom: 6px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  select, input, textarea {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 15px;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  select:focus, input:focus, textarea:focus { border-color: var(--visitor); }
+
+  textarea { resize: vertical; min-height: 60px; }
+
+  /* CAMERA */
+  .camera-container {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 3/4;
+    max-height: 380px;
+    margin-bottom: 12px;
+  }
+
+  #video, #overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+
+  #overlay { z-index: 2; }
+
+  .face-guide {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 180px; height: 220px;
+    border: 2px dashed var(--visitor);
+    border-radius: 50%;
+    z-index: 3;
+    opacity: 0.6;
+    transition: all 0.3s;
+  }
+
+  .face-guide.detected {
+    border-color: var(--success);
+    border-style: solid;
+    opacity: 1;
+    box-shadow: 0 0 30px rgba(6,214,160,0.2);
+  }
+
+  .face-guide.error {
+    border-color: var(--danger);
+    border-style: solid;
+    opacity: 1;
+  }
+
+  .camera-status {
+    position: absolute;
+    bottom: 12px; left: 12px; right: 12px;
+    z-index: 4;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(8px);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-dot.green { background: var(--success); box-shadow: 0 0 8px var(--success); }
+  .status-dot.yellow { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+  .status-dot.red { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
+  .liveness-checks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text2);
+    background: var(--surface2);
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .check-item.pass { border-color: var(--success); color: var(--success); }
+  .check-item.fail { border-color: var(--danger); color: var(--danger); }
+  .check-icon { font-size: 14px; }
+
+  /* AUTHORIZER INFO */
+  .auth-info {
+    background: var(--visitor-dim);
+    border: 1px solid rgba(167,139,250,0.3);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+
+  .auth-info .auth-label {
+    font-size: 11px;
+    color: var(--visitor);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .auth-info .auth-name {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  /* GPS */
+  .gps-info {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .gps-coord {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  .gps-coord span:first-child { color: var(--text2); }
+  .gps-coord span:last-child { font-family: 'Space Mono', monospace; font-size: 12px; }
+
+  /* VISITOR SUMMARY */
+  .visitor-summary {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+
+  .visitor-summary .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .visitor-summary .row:last-child { border-bottom: none; }
+  .visitor-summary .row span:first-child { color: var(--text2); }
+  .visitor-summary .row span:last-child { color: var(--text); font-weight: 500; }
+
+  /* CHECKOUT LIST */
+  .visitor-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  .visitor-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .visitor-item:hover { border-color: var(--visitor); transform: translateY(-1px); }
+  .visitor-item.selected { border-color: var(--visitor); background: var(--visitor-dim); }
+
+  .visitor-avatar {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: var(--visitor-dim);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    color: var(--visitor);
+    font-weight: 700;
+  }
+
+  .visitor-detail { flex: 1; }
+  .visitor-name { font-weight: 600; font-size: 14px; }
+  .visitor-meta { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .visitor-time { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--accent2); }
+
+  /* Buttons */
+  .btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--visitor), var(--accent2));
+    color: #fff;
+  }
+
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(167,139,250,0.3); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-danger {
+    background: rgba(239,71,111,0.15);
+    color: var(--danger);
+    border: 1px solid rgba(239,71,111,0.3);
+  }
+
+  .btn-danger:hover { background: rgba(239,71,111,0.25); }
+
+  .btn-group { display: flex; gap: 10px; margin-top: 12px; }
+  .btn-group .btn { flex: 1; }
+
+  /* Result */
+  .result-card {
+    text-align: center;
+    padding: 40px 20px;
+  }
+
+  .result-icon {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    font-size: 36px;
+  }
+
+  .result-icon.success { background: rgba(6,214,160,0.15); }
+  .result-icon.error { background: rgba(239,71,111,0.15); }
+
+  .result-card h2 { font-size: 22px; margin-bottom: 8px; }
+  .result-card p { color: var(--text2); font-size: 14px; }
+
+  .result-details {
+    margin-top: 20px;
+    text-align: left;
+  }
+
+  .result-details .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+
+  .result-details .row span:first-child { color: var(--text2); }
+
+  /* Loading */
+  .loading-spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--visitor);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,14,26,0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    gap: 16px;
+    font-size: 14px;
+    color: var(--text2);
+  }
+
+  .loading-overlay .loading-spinner {
+    width: 40px; height: 40px;
+    border-width: 3px;
+  }
+
+  .hidden { display: none !important; }
+
+  .timestamp-bar {
+    text-align: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 24px;
+    color: var(--visitor);
+    padding: 8px;
+    letter-spacing: 2px;
+  }
+
+  .timestamp-bar .date {
+    font-size: 12px;
+    color: var(--text2);
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+
+  .instruction-text {
+    font-size: 13px;
+    color: var(--text2);
+    text-align: center;
+    line-height: 1.6;
+    padding: 8px 0;
+  }
+
+  .badge-visitor {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: var(--visitor-dim);
+    color: var(--visitor);
+    font-weight: 600;
+  }
+
+  .no-visitors {
+    text-align: center;
+    padding: 30px;
+    color: var(--text2);
+  }
+
+  .no-visitors .icon { font-size: 40px; margin-bottom: 10px; opacity: 0.5; }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .pulse { animation: pulse 1.5s infinite; }
+
+  @media (max-width: 380px) {
+    .form-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div>Loading Face Recognition Models...</div>
+  <div style="font-size:12px;color:var(--border)">First load may take 15-30 seconds</div>
+</div>
+
+<div class="container">
+  <div class="header">
+    <div class="logo">● AttendX</div>
+    <h1>Visitor Check-In</h1>
+    <div class="location-badge" id="locationBadge">
+      <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+      <span id="locationName">Loading...</span>
+    </div>
+  </div>
+
+  <div class="timestamp-bar">
+    <div id="liveTime">--:--:--</div>
+    <div class="date" id="liveDate">Loading...</div>
+  </div>
+
+  <!-- MODE TOGGLE: Check-In / Check-Out -->
+  <div class="mode-toggle" id="modeToggle">
+    <button class="mode-btn active" onclick="setMode('checkin')">🪪 Visitor Check-In</button>
+    <button class="mode-btn" onclick="setMode('checkout')">🚪 Visitor Check-Out</button>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- CHECK-IN FLOW -->
+  <!-- ============================================================ -->
+  <div id="checkinFlow">
+    <div class="step-indicator" id="stepIndicator">
+      <div class="step-dot active" id="dot1"></div>
+      <div class="step-dot" id="dot2"></div>
+      <div class="step-dot" id="dot3"></div>
+      <div class="step-dot" id="dot4"></div>
+      <div class="step-dot" id="dot5"></div>
+    </div>
+
+    <!-- STEP 1: Visitor Details -->
+    <div class="card" id="step1">
+      <div class="card-title">
+        <div class="icon" style="background:var(--visitor-dim)">🪪</div>
+        Visitor Details
+      </div>
+      <div class="visitor-form">
+        <div class="form-group">
+          <label>Location</label>
+          <select id="locationSelect" style="border-color:var(--visitor)">
+            <option value="">-- Select Location --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Full Name *</label>
+          <input type="text" id="visitorName" placeholder="Enter visitor's full name">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Phone *</label>
+            <input type="tel" id="visitorPhone" placeholder="+91 XXXXX XXXXX">
+          </div>
+          <div class="form-group">
+            <label>ID Type</label>
+            <select id="visitorIdType">
+              <option value="Aadhaar">Aadhaar</option>
+              <option value="PAN">PAN Card</option>
+              <option value="DL">Driving License</option>
+              <option value="Passport">Passport</option>
+              <option value="VoterID">Voter ID</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>ID Number</label>
+          <input type="text" id="visitorIdNumber" placeholder="Enter ID number">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Company / Organization</label>
+            <input type="text" id="visitorCompany" placeholder="Visitor's company">
+          </div>
+          <div class="form-group">
+            <label>Whom to Meet</label>
+            <input type="text" id="visitorHost" placeholder="Person to meet">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Purpose of Visit *</label>
+          <select id="visitorPurpose">
+            <option value="">-- Select Purpose --</option>
+            <option value="Meeting">Meeting</option>
+            <option value="Delivery">Delivery</option>
+            <option value="Interview">Interview</option>
+            <option value="Maintenance">Maintenance / Repair</option>
+            <option value="Inspection">Inspection / Audit</option>
+            <option value="Vendor">Vendor Visit</option>
+            <option value="Client">Client Visit</option>
+            <option value="Personal">Personal</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Remarks (optional)</label>
+          <textarea id="visitorRemarks" rows="2" placeholder="Additional notes..."></textarea>
+        </div>
+        <button class="btn btn-primary" id="btnStep1" disabled onclick="goToStep(2)">
+          Continue to Authorization →
+        </button>
+      </div>
+    </div>
+
+    <!-- STEP 2: Select Authorizing Employee -->
+    <div class="card hidden" id="step2">
+      <div class="card-title">
+        <div class="icon" style="background:rgba(17,138,178,0.15)">🔐</div>
+        Employee Authorization
+      </div>
+      <p class="instruction-text">Select the on-site employee who authorizes this visitor's entry. The employee's face must be verified to proceed.</p>
+      <div class="visitor-form" style="margin-top:12px">
+        <div class="form-group">
+          <label>Authorizing Employee</label>
+          <select id="employeeSelect">
+            <option value="">-- Select Employee --</option>
+          </select>
+        </div>
+        <div id="empInfo" class="hidden" style="padding:10px;background:var(--surface2);border-radius:10px;font-size:13px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="color:var(--text2)">Department</span>
+            <span id="empDept"></span>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <span style="color:var(--text2)">Employee ID</span>
+            <span id="empId"></span>
+          </div>
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="goToStep(1)">← Back</button>
+        <button class="btn btn-primary" id="btnStep2" disabled onclick="goToStep(3)">
+          Scan Employee Face →
+        </button>
+      </div>
+    </div>
+
+    <!-- STEP 3: Face Scan of Employee (Authorization) -->
+    <div class="card hidden" id="step3">
+      <div class="card-title">
+        <div class="icon" style="background:rgba(167,139,250,0.15)">📸</div>
+        Employee Face Verification
+      </div>
+      <p class="instruction-text">The authorizing employee must verify their identity. Position face in the oval, blink and turn head slightly.</p>
+      <div class="camera-container">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div class="face-guide" id="faceGuide"></div>
+        <div class="camera-status">
+          <div class="status-dot yellow" id="statusDot"></div>
+          <span id="statusText">Initializing camera...</span>
+        </div>
+      </div>
+      <div class="liveness-checks">
+        <div class="check-item" id="chkFace"><span class="check-icon">○</span> Face Detected</div>
+        <div class="check-item" id="chkMatch"><span class="check-icon">○</span> Identity Match</div>
+        <div class="check-item" id="chkBlink"><span class="check-icon">○</span> Blink Detected</div>
+        <div class="check-item" id="chkMove"><span class="check-icon">○</span> Head Movement</div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="goToStep(2)">← Back</button>
+        <button class="btn btn-primary" id="btnCapture" disabled onclick="captureAndVerify()">
+          Verify & Authorize ✓
+        </button>
+      </div>
+    </div>
+
+    <!-- STEP 4: GPS & Confirmation -->
+    <div class="card hidden" id="step4">
+      <div class="card-title">
+        <div class="icon" style="background:rgba(255,209,102,0.15)">📍</div>
+        Review & Confirm
+      </div>
+      <div class="visitor-summary" id="visitorSummary"></div>
+      <div class="auth-info" id="authInfoDisplay">
+        <div class="auth-label">🔐 Authorized By</div>
+        <div class="auth-name" id="authName">--</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px">
+          Face Match: <span id="authMatchScore">--</span> | Liveness: <span id="authLiveness">--</span>
+        </div>
+      </div>
+      <div class="gps-info">
+        <div class="gps-coord">
+          <span>Latitude</span>
+          <span id="gpsLat">Fetching...</span>
+        </div>
+        <div class="gps-coord">
+          <span>Longitude</span>
+          <span id="gpsLng">Fetching...</span>
+        </div>
+        <div class="gps-coord">
+          <span>Accuracy</span>
+          <span id="gpsAcc">--</span>
+        </div>
+      </div>
+      <div class="btn-group" style="margin-top:16px">
+        <button class="btn btn-secondary" onclick="goToStep(1)">← Start Over</button>
+        <button class="btn btn-primary" id="btnSubmit" onclick="submitVisitorCheckIn()">
+          ✓ Confirm Check-In
+        </button>
+      </div>
+    </div>
+
+    <!-- STEP 5: Result -->
+    <div class="card hidden" id="step5">
+      <div class="result-card" id="resultContent"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- CHECKOUT FLOW -->
+  <!-- ============================================================ -->
+  <div id="checkoutFlow" class="hidden">
+    <div class="card">
+      <div class="card-title">
+        <div class="icon" style="background:rgba(239,71,111,0.15)">🚪</div>
+        Visitor Check-Out
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Location</label>
+        <select id="checkoutLocationSelect" style="border-color:var(--danger)" onchange="loadActiveVisitors()">
+          <option value="">-- Select Location --</option>
+        </select>
+      </div>
+      <p class="instruction-text" style="margin-bottom:12px">Select the visitor who is checking out:</p>
+      <div class="visitor-list" id="activeVisitorList">
+        <div class="no-visitors">
+          <div class="icon">👋</div>
+          <p>Select a location to see active visitors</p>
+        </div>
+      </div>
+      <button class="btn btn-danger" id="btnCheckout" disabled onclick="submitVisitorCheckOut()" style="margin-top:14px">
+        ✕ Confirm Check-Out
+      </button>
+    </div>
+
+    <!-- Checkout Result -->
+    <div class="card hidden" id="checkoutResult">
+      <div class="result-card" id="checkoutResultContent"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIGURATION
+// ============================================================
+const API_URL = 'https://script.google.com/macros/s/AKfycbzol-TzbH36tutHDtnkFxR3VY-TjiOVYAnuyv2rQZ1bDWqyEQ8fr_0Z0tfwr8tLQTEyOw/exec';
+const MODEL_URLS = [
+  'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
+  'https://unpkg.com/@vladmandic/face-api@1.7.14/model',
+  '/models'
+];
+let MODEL_URL = MODEL_URLS[0];
+
+// Face recognition thresholds (same as attendance)
+const FACE_MATCH_THRESHOLD = 0.5;
+const FACE_MATCH_SCORE_MIN = 50;
+
+// ============================================================
+// STATE
+// ============================================================
+let currentStep = 1;
+let currentMode = 'checkin';
+let selectedEmployee = null;
+let selectedVisitorForCheckout = null;
+let stream = null;
+let faceDescriptors = {};
+let gpsPosition = null;
+let capturedFaceDescriptor = null;
+let livenessState = { blink: false, headMove: false, faceDetected: false, matched: false };
+let blinkHistory = [];
+let headPosHistory = [];
+let detectionInterval = null;
+let faceMatchScore = 0;
+let activeVisitors = [];
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+window.addEventListener('load', async () => {
+  updateClock();
+  setInterval(updateClock, 1000);
+  parseURLParams();
+
+  if (typeof faceapi === 'undefined') {
+    document.getElementById('loadingOverlay').innerHTML = `
+      <div style="color:var(--danger);text-align:center;padding:20px">
+        <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+        <h3>Library Load Failed</h3>
+        <p style="margin-top:8px;font-size:13px;color:var(--text2)">face-api.js could not be loaded. Check your internet connection.</p>
+        <button class="btn btn-primary" style="margin-top:16px;width:auto;padding:12px 24px" onclick="location.reload()">Retry</button>
+      </div>`;
+    return;
+  }
+
+  let modelsLoaded = false;
+  for (let i = 0; i < MODEL_URLS.length && !modelsLoaded; i++) {
+    MODEL_URL = MODEL_URLS[i];
+    try {
+      document.querySelector('#loadingOverlay div:last-child').textContent = 'Loading models (source ' + (i+1) + '/' + MODEL_URLS.length + ')...';
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+      ]);
+      modelsLoaded = true;
+    } catch (err) {
+      console.warn('Model load failed from ' + MODEL_URL + ':', err.message);
+    }
+  }
+
+  if (!modelsLoaded) {
+    document.getElementById('loadingOverlay').innerHTML = `
+      <div style="color:var(--danger);text-align:center;padding:20px">
+        <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+        <h3>Model Load Failed</h3>
+        <p style="margin-top:8px;font-size:13px;color:var(--text2)">Could not load face recognition models.</p>
+        <button class="btn btn-primary" style="margin-top:16px;width:auto;padding:12px 24px" onclick="location.reload()">Retry</button>
+      </div>`;
+    return;
+  }
+
+  try {
+    await loadData();
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  } catch (err) {
+    console.error('Data load error:', err);
+    document.getElementById('loadingOverlay').innerHTML = `
+      <div style="color:var(--danger);text-align:center;padding:20px">
+        <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+        <h3>Data Load Error</h3>
+        <p style="margin-top:8px;font-size:13px;color:var(--text2)">${err.message}</p>
+        <button class="btn btn-primary" style="margin-top:16px;width:auto;padding:12px 24px" onclick="location.reload()">Retry</button>
+      </div>`;
+  }
+});
+
+function parseURLParams() {
+  const params = new URLSearchParams(window.location.search);
+  const qrLoc = params.get('location') || params.get('loc') || '';
+  if (qrLoc) {
+    document.getElementById('locationName').textContent = qrLoc;
+  }
+  window._qrLocation = qrLoc;
+}
+
+function getLocation() {
+  const sel = document.getElementById('locationSelect');
+  return sel.value || window._qrLocation || 'Default Location';
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('liveTime').textContent = now.toLocaleTimeString('en-US', { hour12: false });
+  document.getElementById('liveDate').textContent = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// ============================================================
+// MODE TOGGLE
+// ============================================================
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-btn').forEach((btn, i) => {
+    btn.classList.remove('active', 'checkout-mode');
+    if ((mode === 'checkin' && i === 0) || (mode === 'checkout' && i === 1)) {
+      btn.classList.add('active');
+      if (mode === 'checkout') btn.classList.add('checkout-mode');
+    }
+  });
+
+  if (mode === 'checkin') {
+    document.getElementById('checkinFlow').classList.remove('hidden');
+    document.getElementById('checkoutFlow').classList.add('hidden');
+    stopCamera();
+    goToStep(1);
+  } else {
+    document.getElementById('checkinFlow').classList.add('hidden');
+    document.getElementById('checkoutFlow').classList.remove('hidden');
+    stopCamera();
+  }
+}
+
+// ============================================================
+// API HELPERS
+// ============================================================
+async function apiGet(params) {
+  if (!API_URL) return getDemoData(params);
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url, { redirect: 'follow' });
+  const text = await res.text();
+  try { return JSON.parse(text); } catch(e) { return getDemoData(params); }
+}
+
+async function apiPost(data) {
+  if (!API_URL) return getDemoPostResult(data);
+  const res = await fetch(API_URL, { method: 'POST', redirect: 'follow', body: JSON.stringify(data) });
+  const text = await res.text();
+  try { return JSON.parse(text); } catch(e) { return { success: false, error: 'Invalid response from server' }; }
+}
+
+function getDemoData(params) {
+  if (params.action === 'getLocations') {
+    return { success: true, locations: [
+      { LocationName: 'Head Office' }, { LocationName: 'Branch-A' },
+      { LocationName: 'Branch-B' }, { LocationName: 'Warehouse' }, { LocationName: 'Site-1' }
+    ]};
+  }
+  if (params.action === 'getEmployees') {
+    return { success: true, employees: [
+      { EmployeeID: 'EMP001', Name: 'Rajesh Kumar', Department: 'Operations' },
+      { EmployeeID: 'EMP002', Name: 'Priya Sharma', Department: 'Admin' },
+      { EmployeeID: 'EMP003', Name: 'Amit Singh', Department: 'IT' },
+      { EmployeeID: 'EMP004', Name: 'Sunita Devi', Department: 'Security' },
+    ]};
+  }
+  if (params.action === 'getAllFaceData') {
+    return { success: true, faceData: [] };
+  }
+  if (params.action === 'getActiveVisitors') {
+    return { success: true, visitors: [
+      { VisitorID: 'VIS001', Name: 'Arun Mehta', Phone: '+91 98765 43210', Company: 'TechCorp', Purpose: 'Meeting', CheckInTime: '09:15:00', Host: 'Rajesh Kumar', Location: params.location || 'Head Office' },
+      { VisitorID: 'VIS002', Name: 'Sonia Patel', Phone: '+91 87654 32109', Company: 'BuildWell', Purpose: 'Delivery', CheckInTime: '10:30:00', Host: 'Priya Sharma', Location: params.location || 'Head Office' },
+    ]};
+  }
+  return { success: true };
+}
+
+function getDemoPostResult(data) {
+  if (data.action === 'visitorCheckout') {
+    return { success: true, message: 'Demo: Visitor checked out at ' + new Date().toLocaleTimeString() };
+  }
+  return { success: true, visitorId: 'VIS' + Date.now().toString().slice(-6), message: 'Demo: Visitor checked in at ' + new Date().toLocaleTimeString() };
+}
+
+// ============================================================
+// DATA LOADING
+// ============================================================
+async function loadData() {
+  // Load locations
+  const locResult = await apiGet({ action: 'getLocations' });
+  const locSelect = document.getElementById('locationSelect');
+  const locSelectCO = document.getElementById('checkoutLocationSelect');
+  locSelect.innerHTML = '<option value="">-- Select Location --</option>';
+  locSelectCO.innerHTML = '<option value="">-- Select Location --</option>';
+
+  if (locResult.success && locResult.locations) {
+    locResult.locations.forEach(loc => {
+      const name = loc.LocationName || loc;
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      if (window._qrLocation && name === window._qrLocation) opt.selected = true;
+      locSelect.appendChild(opt);
+
+      const opt2 = opt.cloneNode(true);
+      locSelectCO.appendChild(opt2);
+    });
+  }
+
+  if (window._qrLocation) {
+    document.getElementById('locationName').textContent = window._qrLocation;
+  }
+
+  // Load employees
+  const result = await apiGet({ action: 'getEmployees' });
+  const select = document.getElementById('employeeSelect');
+  select.innerHTML = '<option value="">-- Select Employee --</option>';
+  if (result.success && result.employees) {
+    result.employees.forEach(emp => {
+      const opt = document.createElement('option');
+      opt.value = JSON.stringify(emp);
+      opt.textContent = `${emp.Name} (${emp.EmployeeID})`;
+      select.appendChild(opt);
+    });
+  }
+
+  // Load face descriptors
+  const faceResult = await apiGet({ action: 'getAllFaceData' });
+  if (faceResult.success && faceResult.faceData) {
+    faceResult.faceData.forEach(fd => {
+      try {
+        faceDescriptors[fd.employeeId] = new Float32Array(JSON.parse(fd.faceDescriptor));
+      } catch (e) { console.warn('Bad face data for', fd.employeeId); }
+    });
+  }
+}
+
+// ============================================================
+// EVENT HANDLERS
+// ============================================================
+document.getElementById('locationSelect').addEventListener('change', function() {
+  document.getElementById('locationName').textContent = this.value || 'Select Location';
+  checkStep1Ready();
+});
+
+['visitorName', 'visitorPhone', 'visitorPurpose'].forEach(id => {
+  document.getElementById(id).addEventListener('input', checkStep1Ready);
+  document.getElementById(id).addEventListener('change', checkStep1Ready);
+});
+
+document.getElementById('employeeSelect').addEventListener('change', function() {
+  if (this.value) {
+    selectedEmployee = JSON.parse(this.value);
+    document.getElementById('empInfo').classList.remove('hidden');
+    document.getElementById('empDept').textContent = selectedEmployee.Department || '-';
+    document.getElementById('empId').textContent = selectedEmployee.EmployeeID;
+    document.getElementById('btnStep2').disabled = false;
+  } else {
+    selectedEmployee = null;
+    document.getElementById('empInfo').classList.add('hidden');
+    document.getElementById('btnStep2').disabled = true;
+  }
+});
+
+function checkStep1Ready() {
+  const locOk = document.getElementById('locationSelect').value;
+  const nameOk = document.getElementById('visitorName').value.trim();
+  const phoneOk = document.getElementById('visitorPhone').value.trim();
+  const purposeOk = document.getElementById('visitorPurpose').value;
+  document.getElementById('btnStep1').disabled = !(locOk && nameOk && phoneOk && purposeOk);
+}
+
+// ============================================================
+// STEP NAVIGATION
+// ============================================================
+function goToStep(step) {
+  for (let i = 1; i <= 5; i++) {
+    document.getElementById('step' + i).classList.add('hidden');
+  }
+  document.getElementById('step' + step).classList.remove('hidden');
+
+  document.querySelectorAll('#stepIndicator .step-dot').forEach((d, i) => {
+    d.className = 'step-dot';
+    if (i + 1 < step) d.classList.add('done');
+    if (i + 1 === step) d.classList.add('active');
+  });
+
+  if (step === 3) startCamera();
+  else stopCamera();
+
+  if (step === 4) prepareConfirmation();
+
+  currentStep = step;
+}
+
+// ============================================================
+// CAMERA & FACE DETECTION (Employee Authorization)
+// ============================================================
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+    });
+    const video = document.getElementById('video');
+    video.srcObject = stream;
+    await video.play();
+
+    livenessState = { blink: false, headMove: false, faceDetected: false, matched: false };
+    blinkHistory = [];
+    headPosHistory = [];
+    window._distHistory = [];
+    faceMatchScore = 0;
+    updateChecks();
+
+    updateStatus('yellow', 'Camera active — detecting employee face...');
+    detectionInterval = setInterval(detectFace, 300);
+  } catch (err) {
+    console.error('Camera error:', err);
+    updateStatus('red', 'Camera access denied. Please allow camera.');
+  }
+}
+
+function stopCamera() {
+  if (detectionInterval) { clearInterval(detectionInterval); detectionInterval = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+}
+
+async function detectFace() {
+  const video = document.getElementById('video');
+  if (!video.videoWidth) return;
+
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 });
+
+  try {
+    const detection = await faceapi
+      .detectSingleFace(video, options)
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    const guide = document.getElementById('faceGuide');
+
+    if (detection) {
+      guide.classList.add('detected');
+      guide.classList.remove('error');
+      livenessState.faceDetected = true;
+
+      // Check face match against selected employee
+      if (selectedEmployee && faceDescriptors[selectedEmployee.EmployeeID]) {
+        const dist = faceapi.euclideanDistance(
+          detection.descriptor,
+          faceDescriptors[selectedEmployee.EmployeeID]
+        );
+        if (!window._distHistory) window._distHistory = [];
+        window._distHistory.push(dist);
+        if (window._distHistory.length > 5) window._distHistory.shift();
+        const avgDist = window._distHistory.reduce((a, b) => a + b, 0) / window._distHistory.length;
+
+        faceMatchScore = Math.round(Math.max(0, 100 - avgDist * 100));
+        livenessState.matched = avgDist < FACE_MATCH_THRESHOLD && faceMatchScore >= FACE_MATCH_SCORE_MIN;
+      } else {
+        faceMatchScore = -1;
+        livenessState.matched = false;
+      }
+
+      // Blink detection
+      const landmarks = detection.landmarks;
+      const leftEye = landmarks.getLeftEye();
+      const rightEye = landmarks.getRightEye();
+      const leftEAR = getEAR(leftEye);
+      const rightEAR = getEAR(rightEye);
+      const avgEAR = (leftEAR + rightEAR) / 2;
+
+      blinkHistory.push(avgEAR);
+      if (blinkHistory.length > 30) blinkHistory.shift();
+
+      if (blinkHistory.length >= 5) {
+        const maxEAR = Math.max(...blinkHistory);
+        const minEAR = Math.min(...blinkHistory);
+        if (maxEAR - minEAR > 0.045) livenessState.blink = true;
+      }
+
+      // Head movement
+      const nose = landmarks.getNose();
+      const noseX = nose[0].x;
+      headPosHistory.push(noseX);
+      if (headPosHistory.length > 20) headPosHistory.shift();
+
+      if (headPosHistory.length >= 8) {
+        const maxX = Math.max(...headPosHistory);
+        const minX = Math.min(...headPosHistory);
+        if (maxX - minX > 15) livenessState.headMove = true;
+      }
+
+      // Draw
+      const overlay = document.getElementById('overlay');
+      const dims = faceapi.matchDimensions(overlay, video, true);
+      const resized = faceapi.resizeResults(detection, dims);
+      const ctx = overlay.getContext('2d');
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      faceapi.draw.drawFaceLandmarks(overlay, resized);
+
+      // Status updates
+      const allChecks = livenessState.faceDetected && livenessState.blink && livenessState.headMove;
+      if (allChecks && livenessState.matched) {
+        updateStatus('green', `Employee verified (${faceMatchScore}%)! Ready to authorize.`);
+        document.getElementById('btnCapture').disabled = false;
+      } else if (faceMatchScore === -1) {
+        updateStatus('red', '⚠ FACE NOT REGISTERED! Employee must register face via Admin Panel.');
+        document.getElementById('btnCapture').disabled = true;
+        guide.classList.remove('detected');
+        guide.classList.add('error');
+      } else if (!livenessState.matched && faceMatchScore >= 0) {
+        if (faceMatchScore < FACE_MATCH_SCORE_MIN) {
+          updateStatus('red', `✕ FACE MISMATCH — Score ${faceMatchScore}% below threshold ${FACE_MATCH_SCORE_MIN}%.`);
+        } else {
+          updateStatus('red', `✕ FACE MISMATCH (${faceMatchScore}%). Not ${selectedEmployee.Name}.`);
+        }
+        document.getElementById('btnCapture').disabled = true;
+        guide.classList.remove('detected');
+        guide.classList.add('error');
+      } else if (livenessState.matched) {
+        const pending = [];
+        if (!livenessState.blink) pending.push('blink');
+        if (!livenessState.headMove) pending.push('move head');
+        updateStatus('yellow', `Face OK (${faceMatchScore}%) — Please ${pending.join(' & ')}...`);
+        document.getElementById('btnCapture').disabled = true;
+      }
+    } else {
+      guide.classList.remove('detected', 'error');
+      livenessState.faceDetected = false;
+      updateStatus('yellow', 'No face detected — employee must look at camera');
+      const overlay = document.getElementById('overlay');
+      const ctx = overlay.getContext('2d');
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+    }
+
+    updateChecks();
+  } catch (err) {
+    console.warn('Detection error:', err);
+  }
+}
+
+function getEAR(eye) {
+  const v1 = Math.sqrt(Math.pow(eye[1].x - eye[5].x, 2) + Math.pow(eye[1].y - eye[5].y, 2));
+  const v2 = Math.sqrt(Math.pow(eye[2].x - eye[4].x, 2) + Math.pow(eye[2].y - eye[4].y, 2));
+  const h = Math.sqrt(Math.pow(eye[0].x - eye[3].x, 2) + Math.pow(eye[0].y - eye[3].y, 2));
+  return (v1 + v2) / (2.0 * h);
+}
+
+function updateStatus(color, text) {
+  document.getElementById('statusDot').className = 'status-dot ' + color;
+  document.getElementById('statusText').textContent = text;
+}
+
+function updateChecks() {
+  setCheck('chkFace', livenessState.faceDetected);
+  setCheck('chkMatch', livenessState.matched);
+  setCheck('chkBlink', livenessState.blink);
+  setCheck('chkMove', livenessState.headMove);
+}
+
+function setCheck(id, pass) {
+  const el = document.getElementById(id);
+  el.className = 'check-item ' + (pass ? 'pass' : '');
+  el.querySelector('.check-icon').textContent = pass ? '✓' : '○';
+}
+
+// ============================================================
+// CAPTURE & VERIFY (Employee)
+// ============================================================
+async function captureAndVerify() {
+  const video = document.getElementById('video');
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 });
+  const detection = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
+  if (detection) capturedFaceDescriptor = detection.descriptor;
+
+  stopCamera();
+  goToStep(4);
+}
+
+// ============================================================
+// PREPARE CONFIRMATION
+// ============================================================
+function prepareConfirmation() {
+  const name = document.getElementById('visitorName').value.trim();
+  const phone = document.getElementById('visitorPhone').value.trim();
+  const company = document.getElementById('visitorCompany').value.trim();
+  const host = document.getElementById('visitorHost').value.trim();
+  const purpose = document.getElementById('visitorPurpose').value;
+  const idType = document.getElementById('visitorIdType').value;
+  const idNumber = document.getElementById('visitorIdNumber').value.trim();
+
+  let summaryHTML = '';
+  const fields = [
+    ['Visitor Name', name],
+    ['Phone', phone],
+    ['Company', company || '-'],
+    ['Purpose', purpose],
+    ['Whom to Meet', host || '-'],
+    ['ID Type', idType],
+    ['ID Number', idNumber || '-'],
+    ['Location', getLocation()]
+  ];
+  fields.forEach(([label, val]) => {
+    summaryHTML += `<div class="row"><span>${label}</span><span>${val}</span></div>`;
+  });
+  document.getElementById('visitorSummary').innerHTML = summaryHTML;
+
+  // Authorizer info
+  document.getElementById('authName').textContent = selectedEmployee ? selectedEmployee.Name + ' (' + selectedEmployee.EmployeeID + ')' : '--';
+  document.getElementById('authMatchScore').textContent = faceMatchScore >= 0 ? faceMatchScore + '%' : 'N/A';
+  const livenessScore = [livenessState.blink, livenessState.headMove, livenessState.faceDetected, livenessState.matched].filter(Boolean).length;
+  document.getElementById('authLiveness').textContent = livenessScore + '/4';
+
+  // Block if face check failed
+  const submitBtn = document.getElementById('btnSubmit');
+  if (faceMatchScore === -1 || faceMatchScore < FACE_MATCH_SCORE_MIN) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '⚠ Employee Not Verified — Cannot Check In';
+    submitBtn.style.opacity = '0.5';
+  } else {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '✓ Confirm Check-In';
+    submitBtn.style.opacity = '1';
+  }
+
+  // GPS
+  document.getElementById('gpsLat').textContent = 'Fetching...';
+  document.getElementById('gpsLng').textContent = 'Fetching...';
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        gpsPosition = pos.coords;
+        document.getElementById('gpsLat').textContent = pos.coords.latitude.toFixed(6);
+        document.getElementById('gpsLng').textContent = pos.coords.longitude.toFixed(6);
+        document.getElementById('gpsAcc').textContent = '±' + Math.round(pos.coords.accuracy) + 'm';
+      },
+      () => {
+        document.getElementById('gpsLat').textContent = 'Unavailable';
+        document.getElementById('gpsLng').textContent = 'Unavailable';
+        document.getElementById('gpsAcc').textContent = 'Denied';
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+}
+
+// ============================================================
+// SUBMIT VISITOR CHECK-IN
+// ============================================================
+async function submitVisitorCheckIn() {
+  // Validate employee authorization
+  if (faceMatchScore === -1) {
+    alert('❌ EMPLOYEE FACE NOT REGISTERED\n\nThe authorizing employee must have a registered face.');
+    return;
+  }
+  if (faceMatchScore < FACE_MATCH_SCORE_MIN) {
+    alert(`❌ EMPLOYEE FACE VERIFICATION FAILED\n\nFace match: ${faceMatchScore}% (min ${FACE_MATCH_SCORE_MIN}%)`);
+    return;
+  }
+  const livenessScore = [livenessState.blink, livenessState.headMove, livenessState.faceDetected, livenessState.matched].filter(Boolean).length;
+  if (livenessScore < 4) {
+    alert(`❌ LIVENESS INCOMPLETE\n\nPassed ${livenessScore}/4 checks. Re-scan employee face.`);
+    return;
+  }
+
+  const btn = document.getElementById('btnSubmit');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="loading-spinner"></div> Submitting...';
+
+  try {
+    const payload = {
+      action: 'visitorCheckin',
+      visitorName: document.getElementById('visitorName').value.trim(),
+      visitorPhone: document.getElementById('visitorPhone').value.trim(),
+      visitorCompany: document.getElementById('visitorCompany').value.trim(),
+      visitorHost: document.getElementById('visitorHost').value.trim(),
+      visitorPurpose: document.getElementById('visitorPurpose').value,
+      visitorIdType: document.getElementById('visitorIdType').value,
+      visitorIdNumber: document.getElementById('visitorIdNumber').value.trim(),
+      visitorRemarks: document.getElementById('visitorRemarks').value.trim(),
+      location: getLocation(),
+      authorizedBy: selectedEmployee.EmployeeID,
+      authorizedByName: selectedEmployee.Name,
+      authFaceMatchScore: faceMatchScore,
+      authLivenessScore: livenessScore,
+      gpsLat: gpsPosition ? gpsPosition.latitude : null,
+      gpsLng: gpsPosition ? gpsPosition.longitude : null,
+      deviceInfo: navigator.userAgent.substring(0, 100)
+    };
+
+    const result = await apiPost(payload);
+
+    if (result.success) {
+      showResult(true, 'Visitor Checked In!', result.message, {
+        'Visitor': payload.visitorName,
+        'Visitor ID': result.visitorId || 'Generated',
+        'Purpose': payload.visitorPurpose,
+        'Location': payload.location,
+        'Authorized By': payload.authorizedByName,
+        'Auth Face Match': faceMatchScore + '%',
+        'Time': new Date().toLocaleTimeString(),
+        'GPS': gpsPosition ? `${gpsPosition.latitude.toFixed(4)}, ${gpsPosition.longitude.toFixed(4)}` : 'N/A'
+      });
+    } else {
+      showResult(false, 'Check-In Failed', result.message || 'Please try again.');
+    }
+  } catch (err) {
+    showResult(false, 'Error', err.message || 'Network error. Please try again.');
+  }
+}
+
+// ============================================================
+// VISITOR CHECKOUT
+// ============================================================
+async function loadActiveVisitors() {
+  const location = document.getElementById('checkoutLocationSelect').value;
+  const list = document.getElementById('activeVisitorList');
+
+  if (!location) {
+    list.innerHTML = '<div class="no-visitors"><div class="icon">👋</div><p>Select a location to see active visitors</p></div>';
+    document.getElementById('btnCheckout').disabled = true;
+    return;
+  }
+
+  list.innerHTML = '<div style="text-align:center;padding:20px"><div class="loading-spinner"></div><div style="margin-top:8px;font-size:13px;color:var(--text2)">Loading visitors...</div></div>';
+
+  try {
+    const result = await apiGet({ action: 'getActiveVisitors', location: location });
+    activeVisitors = result.visitors || [];
+    selectedVisitorForCheckout = null;
+    document.getElementById('btnCheckout').disabled = true;
+
+    if (activeVisitors.length === 0) {
+      list.innerHTML = '<div class="no-visitors"><div class="icon">✅</div><p>No active visitors at this location</p></div>';
+      return;
+    }
+
+    list.innerHTML = activeVisitors.map((v, i) => `
+      <div class="visitor-item" onclick="selectVisitorForCheckout(${i})" id="vItem${i}">
+        <div class="visitor-avatar">${v.Name.charAt(0)}</div>
+        <div class="visitor-detail">
+          <div class="visitor-name">${v.Name}</div>
+          <div class="visitor-meta">${v.Company || '-'} • ${v.Purpose}</div>
+          <div class="visitor-meta">Host: ${v.Host || '-'}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="visitor-time">IN: ${v.CheckInTime}</div>
+          <div class="badge-visitor" style="margin-top:4px">Active</div>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    list.innerHTML = '<div class="no-visitors"><div class="icon">⚠️</div><p>Error loading visitors</p></div>';
+  }
+}
+
+function selectVisitorForCheckout(index) {
+  selectedVisitorForCheckout = activeVisitors[index];
+  document.querySelectorAll('.visitor-item').forEach(el => el.classList.remove('selected'));
+  document.getElementById('vItem' + index).classList.add('selected');
+  document.getElementById('btnCheckout').disabled = false;
+}
+
+async function submitVisitorCheckOut() {
+  if (!selectedVisitorForCheckout) return;
+
+  const btn = document.getElementById('btnCheckout');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="loading-spinner"></div> Checking out...';
+
+  try {
+    let lat = null, lng = null;
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+      });
+      lat = pos.coords.latitude;
+      lng = pos.coords.longitude;
+    } catch(e) { /* GPS optional for checkout */ }
+
+    const result = await apiPost({
+      action: 'visitorCheckout',
+      visitorId: selectedVisitorForCheckout.VisitorID,
+      location: document.getElementById('checkoutLocationSelect').value,
+      gpsLat: lat,
+      gpsLng: lng,
+      deviceInfo: navigator.userAgent.substring(0, 100)
+    });
+
+    if (result.success) {
+      document.getElementById('checkoutResult').classList.remove('hidden');
+      let html = `
+        <div class="result-icon success">✓</div>
+        <h2 style="color:var(--accent)">Visitor Checked Out!</h2>
+        <p>${result.message || 'Visit completed successfully.'}</p>
+        <div class="result-details">
+          <div class="row"><span>Visitor</span><span>${selectedVisitorForCheckout.Name}</span></div>
+          <div class="row"><span>Check-In</span><span>${selectedVisitorForCheckout.CheckInTime}</span></div>
+          <div class="row"><span>Check-Out</span><span>${new Date().toLocaleTimeString()}</span></div>
+          <div class="row"><span>Location</span><span>${document.getElementById('checkoutLocationSelect').value}</span></div>
+        </div>
+        <button class="btn btn-secondary" style="margin-top:20px" onclick="location.reload()">Done</button>`;
+      document.getElementById('checkoutResultContent').innerHTML = html;
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '✕ Confirm Check-Out';
+      alert(result.message || 'Checkout failed. Please try again.');
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '✕ Confirm Check-Out';
+    alert('Error: ' + e.message);
+  }
+}
+
+// ============================================================
+// RESULT DISPLAY
+// ============================================================
+function showResult(success, title, message, details = null) {
+  goToStep(5);
+  let html = `
+    <div class="result-icon ${success ? 'success' : 'error'}">
+      ${success ? '✓' : '✕'}
+    </div>
+    <h2 style="color:${success ? 'var(--accent)' : 'var(--danger)'}">${title}</h2>
+    <p>${message}</p>`;
+
+  if (details) {
+    html += '<div class="result-details">';
+    for (const [key, val] of Object.entries(details)) {
+      html += `<div class="row"><span>${key}</span><span>${val}</span></div>`;
+    }
+    html += '</div>';
+  }
+
+  html += `<button class="btn btn-secondary" style="margin-top:20px" onclick="location.reload()">Done</button>`;
+  document.getElementById('resultContent').innerHTML = html;
+}
+</script>
+</body>
+</html>
