@@ -687,7 +687,9 @@ function updateLocationBadge() {
 function checkStep1Ready() {
   const locOk = document.getElementById('locationSelect').value;
   const empOk = selectedEmployee;
-  document.getElementById('btnStep1').disabled = !(locOk && empOk);
+  const btn = document.getElementById('btnStep1');
+  btn.disabled = !(locOk && empOk);
+  btn.textContent = 'Continue to Face Scan →'; // Reset text (checkAlreadyCheckedIn may override)
 }
 
 function updateClock() {
@@ -834,16 +836,21 @@ async function checkAlreadyCheckedIn() {
   if (!selectedEmployee || !API_URL) return;
 
   try {
-    const today = new Date().toISOString().split('T')[0];
+    // Use local date, not UTC — must match backend's IST timezone
+    const now = new Date();
+    const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
     const result = await apiGet({ action: 'getAttendance', employeeId: selectedEmployee.EmployeeID, date: today });
     if (result.success && result.records && result.records.length > 0) {
       const lastRecord = result.records[result.records.length - 1];
       if (!lastRecord.CheckOutTime) {
-        // Already checked in, not checked out
+        // Already checked in, not checked out — show checkout option
         banner.classList.remove('hidden');
         checkoutBtn.classList.remove('hidden');
         document.getElementById('checkedInInfo').textContent = 
           `Checked in at ${lastRecord.CheckInTime} at ${lastRecord.Location} (${lastRecord.Shift} shift)`;
+        // Also disable check-in button since already checked in
+        document.getElementById('btnStep1').textContent = 'Already Checked In';
+        document.getElementById('btnStep1').disabled = true;
       }
     }
   } catch(e) { console.warn('Status check error:', e); }
@@ -887,7 +894,6 @@ async function doQuickCheckout() {
         Location: getLocation(),
         GPS: lat ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'N/A'
       });
-      goToStep(4);
     } else {
       btn.disabled = false;
       btn.innerHTML = '🚪 Check Out Now';
