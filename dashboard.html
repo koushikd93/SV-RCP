@@ -1202,3 +1202,333 @@ function exportCSV() {
 </script>
 </body>
 </html>
+<!-- ============================================================ -->
+<!-- DASHBOARD VISITOR TAB ADDITIONS                              -->
+<!-- ============================================================ -->
+<!-- INSTRUCTIONS: Add these changes to your existing dashboard.html -->
+
+
+<!-- ============================================================ -->
+<!-- CHANGE 1: Add new nav item in sidebar                        -->
+<!-- Find the "Management" nav-section in sidebar and add after   -->
+<!-- the QR Codes nav-item:                                       -->
+<!-- ============================================================ -->
+
+    <div class="nav-section">Visitors</div>
+    <div class="nav-item" onclick="showPage('visitors', this)">
+      <span class="icon">🪪</span> Visitor Log
+    </div>
+    <div class="nav-item" onclick="showPage('activevisitors', this)">
+      <span class="icon">🟢</span> Active Visitors
+    </div>
+
+
+<!-- ============================================================ -->
+<!-- CHANGE 2: Add visitor stat card                              -->
+<!-- In the stats-grid div, add a 6th stat card OR replace one:   -->
+<!-- ============================================================ -->
+
+<!-- Option A: Add to existing stats-grid (change grid to 6 cols) -->
+<!-- Update CSS: .stats-grid { grid-template-columns: repeat(6, 1fr); } -->
+<!-- Or keep 5 cols and it will just wrap. -->
+
+<!-- Add this stat card inside .stats-grid: -->
+    <div class="stat-card">
+      <div class="stat-label">Visitors Today</div>
+      <div class="stat-value" id="statVisitors" style="color:var(--purple)">--</div>
+      <div class="stat-sub" id="statVisitorActive">-- active now</div>
+    </div>
+
+
+<!-- ============================================================ -->
+<!-- CHANGE 3: Add "Visitor Log" page section                     -->
+<!-- Add this BEFORE the closing </main> tag:                     -->
+<!-- ============================================================ -->
+
+    <!-- ===== VISITOR LOG PAGE ===== -->
+    <div class="page" id="page-visitors">
+      <div class="filter-bar">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:12px;color:var(--text2);white-space:nowrap">Date Range:</label>
+          <input type="date" id="visFilterDateFrom" onchange="filterVisitors()" style="flex:1">
+          <span style="color:var(--text2)">to</span>
+          <input type="date" id="visFilterDateTo" onchange="filterVisitors()" style="flex:1">
+        </div>
+        <select id="visFilterLocation" onchange="filterVisitors()"><option value="">All Locations</option></select>
+        <select id="visFilterPurpose" onchange="filterVisitors()">
+          <option value="">All Purposes</option>
+          <option value="Meeting">Meeting</option>
+          <option value="Delivery">Delivery</option>
+          <option value="Interview">Interview</option>
+          <option value="Maintenance">Maintenance</option>
+          <option value="Inspection">Inspection</option>
+          <option value="Vendor">Vendor</option>
+          <option value="Client">Client</option>
+          <option value="Personal">Personal</option>
+          <option value="Other">Other</option>
+        </select>
+        <button class="refresh-btn" onclick="exportVisitorCSV()">↓ Export CSV</button>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">🪪 Visitor Records</div>
+          <span class="panel-badge" style="background:rgba(168,85,247,0.12);color:var(--purple)" id="visitorRecordCount">0 records</span>
+        </div>
+        <div class="table-scroll" style="max-height:600px">
+          <table class="att-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Visitor Name</th>
+                <th>Phone</th>
+                <th>Company</th>
+                <th>Purpose</th>
+                <th>Host</th>
+                <th>Location</th>
+                <th>In</th>
+                <th>Out</th>
+                <th>Authorized By</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="visitorRecordsTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== ACTIVE VISITORS PAGE ===== -->
+    <div class="page" id="page-activevisitors">
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-header">
+          <div class="panel-title"><span class="live-dot"></span> Currently On-Site Visitors</div>
+          <span class="panel-badge" style="background:rgba(168,85,247,0.12);color:var(--purple)" id="activeVisitorCount">0 visitors</span>
+        </div>
+        <div class="occupancy-grid" id="activeVisitorGrid"></div>
+      </div>
+    </div>
+
+
+<!-- ============================================================ -->
+<!-- CHANGE 4: Add JavaScript functions                           -->
+<!-- Add these inside your existing <script> block:               -->
+<!-- ============================================================ -->
+
+<script>
+// ============================================================
+// VISITOR DATA — Add these variables at top of script
+// ============================================================
+let allVisitorRecords = [];
+let activeVisitorData = [];
+
+
+// ============================================================
+// Update showPage() — Add visitor page titles
+// In the `titles` object inside showPage(), add:
+//   visitors: 'Visitor Log',
+//   activevisitors: 'Active Visitors'
+//
+// Also add at end of showPage():
+//   if (page === 'visitors') filterVisitors();
+//   if (page === 'activevisitors') refreshActiveVisitors();
+// ============================================================
+
+
+// ============================================================
+// Update renderDashboard() — Add visitor rendering
+// At the end of renderDashboard(), add these calls:
+// ============================================================
+function renderVisitorDashboard(d) {
+  // Called from renderDashboard() if visitor data present
+  if (d.visitorSummary) {
+    document.getElementById('statVisitors').textContent = d.visitorSummary.totalToday || 0;
+    document.getElementById('statVisitorActive').textContent = (d.visitorSummary.activeNow || 0) + ' active now';
+  }
+
+  if (d.visitorRecords) {
+    allVisitorRecords = d.visitorRecords;
+  }
+
+  // Populate visitor location filter
+  if (d.locations) {
+    const vfl = document.getElementById('visFilterLocation');
+    if (vfl) {
+      vfl.innerHTML = '<option value="">All Locations</option>';
+      d.locations.forEach(l => {
+        const n = l.LocationName || l;
+        vfl.innerHTML += `<option value="${n}">${n}</option>`;
+      });
+    }
+  }
+}
+
+
+// ============================================================
+// VISITOR TABLE RENDERING
+// ============================================================
+function filterVisitors() {
+  const dateFrom = document.getElementById('visFilterDateFrom').value;
+  const dateTo = document.getElementById('visFilterDateTo').value;
+  const loc = document.getElementById('visFilterLocation').value;
+  const purpose = document.getElementById('visFilterPurpose').value;
+
+  let filtered = allVisitorRecords;
+
+  if (dateFrom || dateTo) {
+    filtered = filtered.filter(r => {
+      if (dateFrom && r.Date < dateFrom) return false;
+      if (dateTo && r.Date > dateTo) return false;
+      return true;
+    });
+  }
+  if (loc) filtered = filtered.filter(r => r.Location === loc);
+  if (purpose) filtered = filtered.filter(r => r.Purpose === purpose);
+
+  document.getElementById('visitorRecordCount').textContent = filtered.length + ' records';
+
+  const tbody = document.getElementById('visitorRecordsTable');
+  tbody.innerHTML = filtered.map(r => {
+    const statusClass = r.Status === 'Active' ? 'late' : 'completed';
+    return `<tr>
+      <td style="font-family:'JetBrains Mono';font-size:12px">${r.Date}</td>
+      <td style="color:var(--text);font-weight:500">${r.Name}</td>
+      <td style="font-family:'JetBrains Mono';font-size:12px">${r.Phone || '-'}</td>
+      <td>${r.Company || '-'}</td>
+      <td><span class="status-pill" style="background:rgba(168,85,247,0.12);color:var(--purple)">${r.Purpose}</span></td>
+      <td>${r.Host || '-'}</td>
+      <td>${r.Location}</td>
+      <td style="font-family:'JetBrains Mono';font-size:12px">${r.CheckInTime || '-'}</td>
+      <td style="font-family:'JetBrains Mono';font-size:12px">${r.CheckOutTime || '-'}</td>
+      <td>${r.AuthorizedByName || '-'}</td>
+      <td><span class="status-pill ${statusClass}">${r.Status}</span></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text3)">No visitor records found</td></tr>';
+}
+
+
+// ============================================================
+// ACTIVE VISITORS GRID
+// ============================================================
+async function refreshActiveVisitors() {
+  const grid = document.getElementById('activeVisitorGrid');
+  grid.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3)">Loading...</div>';
+
+  try {
+    let result;
+    if (API_URL) {
+      const res = await fetch(API_URL + '?action=getActiveVisitors', { redirect: 'follow' });
+      const text = await res.text();
+      result = JSON.parse(text);
+    } else {
+      // Demo data
+      result = { success: true, visitors: [
+        { VisitorID: 'VIS001', Name: 'Demo Visitor 1', Company: 'TechCorp', Purpose: 'Meeting', CheckInTime: '09:15:00', Host: 'Rajesh Kumar', Location: 'Head Office', AuthorizedByName: 'Priya Sharma' },
+        { VisitorID: 'VIS002', Name: 'Demo Visitor 2', Company: 'BuildWell', Purpose: 'Delivery', CheckInTime: '10:30:00', Host: 'Amit Singh', Location: 'Branch-A', AuthorizedByName: 'Sunita Devi' },
+      ]};
+    }
+
+    activeVisitorData = result.visitors || [];
+    document.getElementById('activeVisitorCount').textContent = activeVisitorData.length + ' visitors';
+
+    if (activeVisitorData.length === 0) {
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">✅</div><p>No active visitors currently on-site</p></div>';
+      return;
+    }
+
+    // Group by location
+    const locMap = {};
+    activeVisitorData.forEach(v => {
+      const loc = v.Location || 'Unknown';
+      if (!locMap[loc]) locMap[loc] = [];
+      locMap[loc].push(v);
+    });
+
+    let html = '';
+    Object.entries(locMap).sort((a, b) => b[1].length - a[1].length).forEach(([loc, visitors]) => {
+      let chips = visitors.map(v => `
+        <span class="emp-chip" style="background:rgba(168,85,247,0.08);border-color:rgba(168,85,247,0.2)">
+          🪪 ${v.Name} • ${v.Purpose} • IN ${v.CheckInTime}
+          ${v.Host ? '<br>↳ Host: ' + v.Host : ''}
+        </span>`).join('');
+
+      html += `<div class="occ-card" style="border-left:3px solid var(--purple)">
+        <div class="occ-header">
+          <div class="occ-name" title="${loc}">${loc}</div>
+          <div class="occ-status full" style="background:rgba(168,85,247,0.12);color:var(--purple)">${visitors.length} visitor${visitors.length > 1 ? 's' : ''}</div>
+        </div>
+        <div class="occ-bar"><div class="occ-bar-fill" style="width:100%;background:linear-gradient(90deg,#a855f7,#7c3aed)"></div></div>
+        <div class="occ-employees">${chips}</div>
+      </div>`;
+    });
+
+    grid.innerHTML = html;
+  } catch (err) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">⚠️</div><p>Error loading visitors</p></div>';
+  }
+}
+
+
+// ============================================================
+// VISITOR CSV EXPORT
+// ============================================================
+function exportVisitorCSV() {
+  const headers = ['Date','Visitor Name','Phone','Company','Purpose','Host','Location','Check-In','Check-Out','Authorized By','Status'];
+  const rows = allVisitorRecords.map(r => [
+    r.Date, r.Name, r.Phone, r.Company, r.Purpose, r.Host,
+    r.Location, r.CheckInTime, r.CheckOutTime, r.AuthorizedByName, r.Status
+  ]);
+  const csv = [headers.join(','), ...rows.map(r => r.map(v => '"' + String(v || '').replace(/"/g, '""') + '"').join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'visitors_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+}
+
+
+// ============================================================
+// OVERVIEW PAGE: Visitor summary widget (optional)
+// Add this inside the Overview page, after today's activity:
+// ============================================================
+/*
+  <div class="panel" style="margin-top:24px">
+    <div class="panel-header">
+      <div class="panel-title">🪪 Today's Visitors</div>
+      <span class="panel-badge" style="background:rgba(168,85,247,0.12);color:var(--purple)" id="todayVisitorCount">0 visitors</span>
+    </div>
+    <div class="table-scroll" style="max-height:300px">
+      <table class="att-table">
+        <thead><tr><th>Visitor</th><th>Company</th><th>Purpose</th><th>Host</th><th>In</th><th>Out</th><th>Auth By</th><th>Status</th></tr></thead>
+        <tbody id="todayVisitorTable"></tbody>
+      </table>
+    </div>
+  </div>
+*/
+
+function renderTodayVisitors(records) {
+  const countEl = document.getElementById('todayVisitorCount');
+  const tbody = document.getElementById('todayVisitorTable');
+  if (!countEl || !tbody) return;
+
+  countEl.textContent = (records ? records.length : 0) + ' visitors';
+
+  if (!records || !records.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text3)">No visitors today</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = records.map(r => {
+    const statusClass = r.Status === 'Active' ? 'late' : 'completed';
+    return `<tr>
+      <td style="color:var(--text);font-weight:500">${r.Name}</td>
+      <td>${r.Company || '-'}</td>
+      <td><span class="status-pill" style="background:rgba(168,85,247,0.12);color:var(--purple)">${r.Purpose}</span></td>
+      <td>${r.Host || '-'}</td>
+      <td style="font-family:'JetBrains Mono';font-size:12px">${r.CheckInTime || '-'}</td>
+      <td style="font-family:'JetBrains Mono';font-size:12px">${r.CheckOutTime || '-'}</td>
+      <td>${r.AuthorizedByName || '-'}</td>
+      <td><span class="status-pill ${statusClass}">${r.Status}</span></td>
+    </tr>`;
+  }).join('');
+}
+</script>
