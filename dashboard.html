@@ -531,7 +531,7 @@
   <aside class="sidebar">
     <div class="sidebar-brand">
       <div class="dot"></div>
-      AttendX
+      SV-RCP Attendance
     </div>
 
     <div class="nav-section">Dashboard</div>
@@ -805,7 +805,10 @@ function getDemoData() {
 // ============================================================
 window.addEventListener('load', () => {
   document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-  document.getElementById('filterDate').value = new Date().toISOString().split('T')[0];
+  // Set default date range to today for both from and to dates
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('filterDateFrom').value = today;
+  document.getElementById('filterDateTo').value = today;
   refreshData();
   setInterval(refreshOccupancy, 30000);
 });
