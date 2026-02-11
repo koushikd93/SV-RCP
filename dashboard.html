@@ -545,17 +545,6 @@
       <span class="icon">📋</span> Attendance Log
     </div>
 
-    <div class="nav-section">Visitors</div>
-    <div class="nav-item" onclick="showPage('visitors', this)">
-      <span class="icon">👁️</span> Visitor Overview
-    </div>
-    <div class="nav-item" onclick="showPage('livevisitors', this)">
-      <span class="icon">🔴</span> Live Visitors
-    </div>
-    <div class="nav-item" onclick="showPage('visitorlog', this)">
-      <span class="icon">📝</span> Visitor Log
-    </div>
-
     <div class="nav-section">Management</div>
     <div class="nav-item" onclick="showPage('employees', this)">
       <span class="icon">👥</span> Employees
@@ -589,7 +578,7 @@
         <div class="stat-card"><div class="stat-label">Present Today</div><div class="stat-value" id="statPresent">--</div><div class="stat-sub" id="statRate">--% attendance</div></div>
         <div class="stat-card"><div class="stat-label">Absent Today</div><div class="stat-value" id="statAbsent">--</div><div class="stat-sub">not checked in</div></div>
         <div class="stat-card"><div class="stat-label">Late Arrivals</div><div class="stat-value" id="statLate">--</div><div class="stat-sub">after grace period</div></div>
-        <div class="stat-card"><div class="stat-label">Visitors Today</div><div class="stat-value" id="statVisitors">--</div><div class="stat-sub">checked in</div></div>
+        <div class="stat-card"><div class="stat-label">Attendance %</div><div class="stat-value" id="statPercent">--%</div><div class="stat-sub">today's rate</div></div>
       </div>
 
       <div class="grid-2">
@@ -702,69 +691,6 @@
       </div>
     </div>
 
-    <!-- ===== VISITOR OVERVIEW PAGE ===== -->
-    <div class="page" id="page-visitors">
-      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
-        <div class="stat-card"><div class="stat-label">Visitors Today</div><div class="stat-value" id="visitorStatTotal">--</div><div class="stat-sub">total checked in</div></div>
-        <div class="stat-card"><div class="stat-label">Currently Present</div><div class="stat-value" id="visitorStatPresent">--</div><div class="stat-sub"><span class="live-dot"></span>checked in</div></div>
-        <div class="stat-card"><div class="stat-label">Checked Out</div><div class="stat-value" id="visitorStatOut">--</div><div class="stat-sub">departed</div></div>
-        <div class="stat-card"><div class="stat-label">Top Location</div><div class="stat-value" id="visitorStatLocation" style="font-size:20px">--</div><div class="stat-sub" id="visitorStatLocationCount">visitors</div></div>
-      </div>
-      
-      <div class="grid-2">
-        <div class="panel">
-          <div class="panel-header">
-            <div class="panel-title">🏢 Visitors by Location</div>
-          </div>
-          <div id="visitorsByLocation" style="display:flex;flex-direction:column;gap:12px"></div>
-        </div>
-        <div class="panel">
-          <div class="panel-header">
-            <div class="panel-title">🏢 Visitors by Company</div>
-          </div>
-          <div id="visitorsByCompany" style="display:flex;flex-direction:column;gap:12px"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ===== LIVE VISITORS PAGE ===== -->
-    <div class="page" id="page-livevisitors">
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><span class="live-dot"></span> Visitors Currently On-Site</div>
-          <span class="panel-badge" style="background:var(--accent-dim);color:var(--accent)" id="liveVisitorCount">0 present</span>
-        </div>
-        <div class="table-scroll" style="max-height:600px">
-          <table class="att-table">
-            <thead><tr><th>Visitor ID</th><th>Name</th><th>Company</th><th>Purpose</th><th>Location</th><th>Check-In</th><th>Approver</th><th>Time On-Site</th></tr></thead>
-            <tbody id="liveVisitorsTable"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ===== VISITOR LOG PAGE ===== -->
-    <div class="page" id="page-visitorlog">
-      <div class="filter-bar">
-        <div style="display:flex;gap:8px;align-items:center">
-          <label style="font-size:12px;color:var(--text2);white-space:nowrap">Date Range:</label>
-          <input type="date" id="visitorDateFrom" onchange="filterVisitorRecords()" title="From Date" style="flex:1">
-          <span style="color:var(--text2)">to</span>
-          <input type="date" id="visitorDateTo" onchange="filterVisitorRecords()" title="To Date" style="flex:1">
-        </div>
-        <select id="visitorLocationFilter" onchange="filterVisitorRecords()"><option value="">All Locations</option></select>
-        <button class="refresh-btn" onclick="exportVisitorCSV()">↓ Export CSV</button>
-      </div>
-      <div class="panel">
-        <div class="table-scroll" style="max-height:600px">
-          <table class="att-table">
-            <thead><tr><th>Visitor ID</th><th>Name</th><th>Company</th><th>Purpose</th><th>Location</th><th>Contact</th><th>Check-In</th><th>Check-Out</th><th>Approver</th><th>Status</th></tr></thead>
-            <tbody id="visitorLogTable"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
     <!-- ===== QR CODES PAGE ===== -->
     <div class="page" id="page-qrcodes">
       <div class="panel">
@@ -778,50 +704,9 @@
         </div>
         <div id="qrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px"></div>
       </div>
-
-    <!-- ===== DEBUG PAGE ===== -->
-    <div class="page" id="page-debug" style="display:none">
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title">🔧 Debug Console</div>
-          <button class="refresh-btn" onclick="logs.length=0; document.getElementById('debugLog').innerHTML='Logs cleared'; setTimeout(() => debugLog('Debug log cleared'), 100)">Clear Logs</button>
-        </div>
-        <div id="debugLog" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);max-height:500px;overflow-y:auto;white-space:pre-wrap;word-break:break-all"></div>
-      </div>
     </div>
   </main>
 </div>
-
-<!-- Debug trigger - hold these keys for 3 seconds to show debug page -->
-<script>
-let keyPressLog = '';
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'p' && e.ctrlKey && e.shiftKey) {
-    e.preventDefault();
-    const debugPage = document.getElementById('page-debug');
-    if (debugPage.style.display === 'none') {
-      showPage('debug', null);
-      updateDebugLog();
-      debugLog('Debug page opened');
-    } else {
-      showPage('overview', null);
-    }
-  }
-});
-
-function updateDebugLog() {
-  const el = document.getElementById('debugLog');
-  el.textContent = logs.join('\n');
-  el.scrollTop = el.scrollHeight;
-}
-
-// Show logs periodically
-setInterval(() => {
-  if (document.getElementById('page-debug').classList.contains('active')) {
-    updateDebugLog();
-  }
-}, 500);
-</script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
@@ -831,15 +716,7 @@ setInterval(() => {
 const API_URL = 'https://script.google.com/macros/s/AKfycbzol-TzbH36tutHDtnkFxR3VY-TjiOVYAnuyv2rQZ1bDWqyEQ8fr_0Z0tfwr8tLQTEyOw/exec';
 let dashboardData = null;
 let allRecords = [];
-let visitorRecords = [];
 let weeklyChartInstance = null;
-
-// Debug logging
-const logs = [];
-function debugLog(msg) {
-  logs.push('[' + new Date().toLocaleTimeString() + '] ' + msg);
-  console.log(msg);
-}
 
 // ============================================================
 // DEMO DATA
@@ -849,9 +726,6 @@ function getDemoData() {
   const names = ['Rajesh Kumar','Priya Sharma','Amit Singh','Sunita Devi','Vikram Patel','Neha Gupta','Ravi Verma','Deepa Nair','Suresh Reddy','Anjali Mishra','Mohan Das','Kavita Rao','Arjun Mehta','Pooja Joshi','Sanjay Tiwari','Meera Chopra','Rahul Saxena','Divya Pillai','Kiran Bhat','Lakshmi Iyer','Nitin Jain','Shreya Agarwal','Prakash Soni','Anita Desai','Manish Kapoor','Ritu Bhatt','Gaurav Malhotra','Shalini Pandey','Vivek Chauhan','Asha Kulkarni','Rohit Dubey','Swati Banerjee','Arun Nath','Geeta Srivastava','Manoj Yadav'];
   const shifts = ['A','B','C','General'];
   const departments = ['Operations','Admin','IT','Security','Maintenance','HR','Finance'];
-  const visitorNames = ['John Smith','Sarah Johnson','Michael Brown','Emily Davis','David Wilson','Jessica Martinez','Robert Taylor','Maria Anderson'];
-  const companies = ['TechCorp','Acme Inc','Global Solutions','Future Systems','NextGen Tech','DataWorks','CloudBase','Innovation Labs'];
-  const purposes = ['Meeting','Delivery','Inspection','Consultation','Training','Audit','Service','Maintenance'];
 
   const employees = names.map((name, i) => ({
     EmployeeID: 'EMP' + String(100 + i),
@@ -914,43 +788,13 @@ function getDemoData() {
     });
   }
 
-  const visitorNames = ['John Smith','Sarah Johnson','Michael Brown','Emily Davis','David Wilson','Jessica Martinez','Robert Taylor','Maria Anderson','James White','Patricia Lee'];
-  const companies = ['TechCorp','Acme Inc','Global Solutions','Future Systems','NextGen Tech','DataWorks','CloudBase','Innovation Labs','Strategic Partners','Digital Ventures'];
-  const purposes = ['Meeting','Delivery','Inspection','Consultation','Training','Audit','Service','Maintenance','Evaluation','Discussion'];
-  
-  const visitors = [];
-  const today = new Date().toISOString().split('T')[0];
-  for (let i = 0; i < 8; i++) {
-    const checkInHour = Math.floor(Math.random() * 12) + 8;
-    const checkInMin = Math.floor(Math.random() * 60);
-    const hasCheckout = Math.random() > 0.4;
-    const checkOutHour = checkInHour + Math.floor(Math.random() * 4) + 1;
-    visitors.push({
-      VisitorID: 'VIS' + String(100000 + i),
-      VisitorName: visitorNames[i % visitorNames.length],
-      CompanyName: companies[i % companies.length],
-      Purpose: purposes[i % purposes.length],
-      EmployeeContact: names[i % names.length],
-      Location: locations[i % locations.length],
-      CheckInDate: today,
-      CheckInTime: String(checkInHour).padStart(2,'0') + ':' + String(checkInMin).padStart(2,'0') + ':00',
-      CheckOutTime: hasCheckout ? String(checkOutHour % 24).padStart(2,'0') + ':' + String(Math.floor(Math.random()*60)).padStart(2,'0') + ':00' : '',
-      ApproverEmployeeID: 'EMP' + String(100 + i % 10),
-      ApproverEmployeeName: names[i % names.length],
-      FaceMatchScore: Math.floor(80 + Math.random() * 20),
-      LivenessScore: Math.floor(3 + Math.random() * 2),
-      Status: hasCheckout ? 'Checked Out' : 'Checked In'
-    });
-  }
-
   return {
     success: true,
-    summary: { totalEmployees: 35, presentToday: presentCount, absentToday: 7, lateToday: records.filter(r => r.Status === 'Late' || r.Status === 'Very Late').length, attendanceRate: 80, visitorsToday: visitors.length },
+    summary: { totalEmployees: 35, presentToday: presentCount, absentToday: 7, lateToday: records.filter(r => r.Status === 'Late' || r.Status === 'Very Late').length, attendanceRate: 80 },
     locationOccupancy: occ,
     shiftBreakdown,
     weeklyTrend: week,
     todayRecords: records,
-    visitorRecords: visitors,
     locations: locations.map((l, i) => ({ LocationID: 'LOC' + (100 + i), LocationName: l, Address: l + ' Address', Latitude: '', Longitude: '', Status: 'Active' })),
     employees
   };
@@ -960,46 +804,32 @@ function getDemoData() {
 // INIT
 // ============================================================
 window.addEventListener('load', () => {
-  debugLog('Page loaded - initializing dashboard');
   document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
   // Set default date range to today for both from and to dates
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('filterDateFrom').value = today;
   document.getElementById('filterDateTo').value = today;
-  document.getElementById('visitorDateFrom').value = today;
-  document.getElementById('visitorDateTo').value = today;
-  debugLog('Filters initialized. Calling refreshData()');
   refreshData();
   setInterval(refreshOccupancy, 30000);
-  debugLog('Dashboard initialization complete. Auto-refresh set to 30s');
 });
 
 async function refreshData() {
   try {
-    debugLog('Starting refreshData...');
     if (API_URL) {
-      debugLog('Fetching from API: ' + API_URL);
       const res = await fetch(API_URL + '?action=getDashboardData', { redirect: 'follow' });
       const text = await res.text();
-      debugLog('API Response (first 300 chars): ' + text.substring(0, 300));
       try {
         dashboardData = JSON.parse(text);
-        debugLog('API data parsed successfully. Success: ' + dashboardData.success);
       } catch(pe) {
-        debugLog('JSON parse error: ' + pe.message + ' - Using demo data');
         console.error('JSON parse error:', text.substring(0, 200));
         dashboardData = getDemoData();
       }
     } else {
-      debugLog('No API_URL defined - using demo data');
       dashboardData = getDemoData();
     }
-    debugLog('Rendering dashboard...');
     renderDashboard();
-    debugLog('Dashboard rendered');
     document.getElementById('lastRefresh').textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
   } catch (err) {
-    debugLog('Refresh error: ' + err.message);
     console.error('Refresh error:', err);
     dashboardData = getDemoData();
     renderDashboard();
@@ -1026,80 +856,53 @@ async function refreshOccupancy() {
 // RENDER
 // ============================================================
 function renderDashboard() {
-  try {
-    if (!dashboardData || !dashboardData.success) {
-      debugLog('renderDashboard: dashboardData missing or success=false');
-      return;
-    }
-    debugLog('renderDashboard: Rendering all components...');
-    const d = dashboardData;
+  if (!dashboardData || !dashboardData.success) return;
+  const d = dashboardData;
 
-    // Stats
-    document.getElementById('statTotal').textContent = d.summary.totalEmployees;
-    document.getElementById('statPresent').textContent = d.summary.presentToday;
-    document.getElementById('statAbsent').textContent = d.summary.absentToday;
-    document.getElementById('statLate').textContent = d.summary.lateToday;
-    document.getElementById('statPercent').textContent = d.summary.attendanceRate + '%';
-    document.getElementById('statRate').textContent = d.summary.attendanceRate + '% attendance';
-    const visitorsToday = d.visitorRecords ? d.visitorRecords.length : 0;
-    document.getElementById('statVisitors').textContent = visitorsToday;
-    visitorRecords = d.visitorRecords || [];
-    debugLog('Stats rendered. Visitors: ' + visitorsToday);
+  // Stats
+  document.getElementById('statTotal').textContent = d.summary.totalEmployees;
+  document.getElementById('statPresent').textContent = d.summary.presentToday;
+  document.getElementById('statAbsent').textContent = d.summary.absentToday;
+  document.getElementById('statLate').textContent = d.summary.lateToday;
+  document.getElementById('statPercent').textContent = d.summary.attendanceRate + '%';
+  document.getElementById('statRate').textContent = d.summary.attendanceRate + '% attendance';
 
-    // Shifts
-    document.getElementById('shiftA').textContent = d.shiftBreakdown.A || 0;
-    document.getElementById('shiftB').textContent = d.shiftBreakdown.B || 0;
-    document.getElementById('shiftC').textContent = d.shiftBreakdown.C || 0;
-    document.getElementById('shiftG').textContent = d.shiftBreakdown.General || 0;
+  // Shifts
+  document.getElementById('shiftA').textContent = d.shiftBreakdown.A || 0;
+  document.getElementById('shiftB').textContent = d.shiftBreakdown.B || 0;
+  document.getElementById('shiftC').textContent = d.shiftBreakdown.C || 0;
+  document.getElementById('shiftG').textContent = d.shiftBreakdown.General || 0;
 
-    // Weekly chart
-    renderWeeklyChart(d.weeklyTrend);
+  // Weekly chart
+  renderWeeklyChart(d.weeklyTrend);
 
-    // Quick occupancy — built from actual attendance records
-    renderQuickOccupancy(d.todayRecords);
+  // Quick occupancy — built from actual attendance records
+  renderQuickOccupancy(d.todayRecords);
 
-    // Today's table
-    renderTodayTable(d.todayRecords);
+  // Today's table
+  renderTodayTable(d.todayRecords);
 
-    // Full occupancy page — built from actual records
-    renderOccupancyGrid(d.todayRecords);
+  // Full occupancy page — built from actual records
+  renderOccupancyGrid(d.todayRecords);
 
-    // Employees
-    renderEmployees(d.employees);
+  // Employees
+  renderEmployees(d.employees);
 
-    // Locations
-    renderLocations(d.locations);
+  // Locations
+  renderLocations(d.locations);
 
-    // QR codes
-    renderQRCodes(d.locations);
+  // QR codes
+  renderQRCodes(d.locations);
 
-    // Filter dropdowns
-    const filterLoc = document.getElementById('filterLocation');
-    filterLoc.innerHTML = '<option value="">All Locations</option>';
-    d.locations.forEach(l => {
-      const n = l.LocationName || l;
-      filterLoc.innerHTML += `<option value="${n}">${n}</option>`;
-    });
+  // Filter dropdown
+  const filterLoc = document.getElementById('filterLocation');
+  filterLoc.innerHTML = '<option value="">All Locations</option>';
+  d.locations.forEach(l => {
+    const n = l.LocationName || l;
+    filterLoc.innerHTML += `<option value="${n}">${n}</option>`;
+  });
 
-    const visitorLocFilter = document.getElementById('visitorLocationFilter');
-    visitorLocFilter.innerHTML = '<option value="">All Locations</option>';
-    d.locations.forEach(l => {
-      const n = l.LocationName || l;
-      visitorLocFilter.innerHTML += `<option value="${n}">${n}</option>`;
-    });
-
-    // Render visitor pages
-    if (d.visitorRecords) {
-      renderVisitorOverview(d.visitorRecords, d.locations);
-      renderLiveVisitors(d.visitorRecords);
-    }
-
-    allRecords = d.todayRecords;
-    debugLog('Dashboard rendering complete');
-  } catch (err) {
-    debugLog('Error in renderDashboard: ' + err.message);
-    console.error('renderDashboard error:', err);
-  }
+  allRecords = d.todayRecords;
 }
 
 function renderWeeklyChart(trend) {
@@ -1332,35 +1135,18 @@ function downloadQR(canvasId, name) {
 // NAVIGATION & FILTERS
 // ============================================================
 function showPage(page, el) {
-  try {
-    debugLog('showPage called: page=' + page);
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    const pageEl = document.getElementById('page-' + page);
-    if (!pageEl) {
-      debugLog('ERROR: page-' + page + ' element not found');
-      return;
-    }
-    pageEl.classList.add('active');
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    if (el) el.classList.add('active');
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (el) el.classList.add('active');
 
-    const titles = { overview: 'Dashboard Overview', occupancy: 'Live Occupancy', records: 'Attendance Records', visitors: 'Visitor Overview', livevisitors: 'Live Visitors', visitorlog: 'Visitor Log', employees: 'Employee Directory', locations: 'Office Locations', qrcodes: 'QR Code Generator', debug: 'Debug Console' };
-    document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
-    document.querySelector('.sidebar').classList.remove('open');
-    
-    if (page === 'records') {
-      filterRecords();
-    }
-    if (page === 'visitorlog') {
-      filterVisitorRecords();
-    }
-    if (page === 'livevisitors') {
-      renderLiveVisitors(visitorRecords);
-    }
-    debugLog('showPage complete: page=' + page);
-  } catch (err) {
-    debugLog('ERROR in showPage: ' + err.message);
-    console.error('showPage error:', err);
+  const titles = { overview: 'Dashboard Overview', occupancy: 'Live Occupancy', records: 'Attendance Records', employees: 'Employee Directory', locations: 'Office Locations', qrcodes: 'QR Code Generator' };
+  document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
+  document.querySelector('.sidebar').classList.remove('open');
+  
+  // Populate records table when records page is shown
+  if (page === 'records') {
+    filterRecords();
   }
 }
 
@@ -1411,150 +1197,6 @@ function exportCSV() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'attendance_' + new Date().toISOString().split('T')[0] + '.csv';
-  a.click();
-}
-
-// ============================================================
-// VISITOR FUNCTIONS
-// ============================================================
-function renderVisitorOverview(visitors, locations) {
-  if (!visitors || !visitors.length) {
-    document.getElementById('visitorStatTotal').textContent = '0';
-    document.getElementById('visitorStatPresent').textContent = '0';
-    document.getElementById('visitorStatOut').textContent = '0';
-    return;
-  }
-
-  const total = visitors.length;
-  const present = visitors.filter(v => !v.CheckOutTime).length;
-  const checkedOut = visitors.filter(v => v.CheckOutTime).length;
-
-  document.getElementById('visitorStatTotal').textContent = total;
-  document.getElementById('visitorStatPresent').textContent = present;
-  document.getElementById('visitorStatOut').textContent = checkedOut;
-
-  // Top location
-  const locMap = {};
-  visitors.forEach(v => {
-    locMap[v.Location] = (locMap[v.Location] || 0) + 1;
-  });
-  const topLoc = Object.entries(locMap).sort((a, b) => b[1] - a[1])[0];
-  if (topLoc) {
-    document.getElementById('visitorStatLocation').textContent = topLoc[0].split(' ')[0];
-    document.getElementById('visitorStatLocationCount').textContent = topLoc[1] + ' visitors';
-  }
-
-  // By location
-  const locHtml = Object.entries(locMap).sort((a, b) => b[1] - a[1]).map(([loc, count]) => {
-    const visitorsAtLoc = visitors.filter(v => v.Location === loc);
-    const presentCount = visitorsAtLoc.filter(v => !v.CheckOutTime).length;
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)">
-      <div style="color:var(--text);font-weight:500">${loc}</div>
-      <div style="font-size:13px;color:var(--text2)"><span style="color:var(--accent);font-weight:600">${presentCount}</span> present / ${count} total</div>
-    </div>`;
-  }).join('');
-  document.getElementById('visitorsByLocation').innerHTML = locHtml || '<div style="color:var(--text3)">No visitors</div>';
-
-  // By company
-  const compMap = {};
-  visitors.forEach(v => {
-    compMap[v.CompanyName] = (compMap[v.CompanyName] || 0) + 1;
-  });
-  const compHtml = Object.entries(compMap).sort((a, b) => b[1] - a[1]).map(([comp, count]) => {
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)">
-      <div style="color:var(--text);font-weight:500">${comp}</div>
-      <div style="font-size:13px;color:var(--text2);font-family:'JetBrains Mono'"><span style="color:var(--blue);font-weight:600">${count}</span> visitors</div>
-    </div>`;
-  }).join('');
-  document.getElementById('visitorsByCompany').innerHTML = compHtml || '<div style="color:var(--text3)">No visitors</div>';
-}
-
-function renderLiveVisitors(visitors) {
-  if (!visitors || !visitors.length) {
-    document.getElementById('liveVisitorCount').textContent = '0 present';
-    document.getElementById('liveVisitorsTable').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text3)">No visitors currently on-site</td></tr>';
-    return;
-  }
-
-  const liveVisitors = visitors.filter(v => !v.CheckOutTime);
-  document.getElementById('liveVisitorCount').textContent = liveVisitors.length + ' present';
-
-  if (!liveVisitors.length) {
-    document.getElementById('liveVisitorsTable').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text3)">No visitors currently on-site</td></tr>';
-    return;
-  }
-
-  document.getElementById('liveVisitorsTable').innerHTML = liveVisitors.map(v => {
-    const checkInTime = new Date(`${v.CheckInDate}T${v.CheckInTime}`);
-    const now = new Date();
-    const diffMs = now - checkInTime;
-    const diffMins = Math.floor(diffMs / 60000);
-    let timeOnSite = '';
-    if (diffMins < 60) {
-      timeOnSite = diffMins + ' min';
-    } else {
-      const hours = Math.floor(diffMins / 60);
-      const mins = diffMins % 60;
-      timeOnSite = hours + 'h ' + mins + 'm';
-    }
-
-    return `<tr>
-      <td style="font-family:'JetBrains Mono';font-size:12px;color:var(--accent)">${v.VisitorID}</td>
-      <td style="color:var(--text);font-weight:500">${v.VisitorName}</td>
-      <td>${v.CompanyName}</td>
-      <td>${v.Purpose}</td>
-      <td>${v.Location}</td>
-      <td style="font-family:'JetBrains Mono';font-size:12px">${v.CheckInTime}</td>
-      <td style="color:var(--text2);font-size:13px">${v.ApproverEmployeeName}</td>
-      <td style="font-family:'JetBrains Mono';font-size:12px;color:var(--orange)">${timeOnSite}</td>
-    </tr>`;
-  }).join('');
-}
-
-function filterVisitorRecords() {
-  const dateFrom = document.getElementById('visitorDateFrom').value;
-  const dateTo = document.getElementById('visitorDateTo').value;
-  const loc = document.getElementById('visitorLocationFilter').value;
-
-  let filtered = visitorRecords;
-
-  if (dateFrom || dateTo) {
-    filtered = filtered.filter(r => {
-      const recordDate = r.CheckInDate;
-      if (dateFrom && recordDate < dateFrom) return false;
-      if (dateTo && recordDate > dateTo) return false;
-      return true;
-    });
-  }
-
-  if (loc) filtered = filtered.filter(r => r.Location === loc);
-
-  const tbody = document.getElementById('visitorLogTable');
-  tbody.innerHTML = filtered.map(v => {
-    const statusClass = v.Status === 'Checked In' ? 'on-time' : 'completed';
-    return `<tr>
-      <td style="font-family:'JetBrains Mono';font-size:12px;color:var(--accent)">${v.VisitorID}</td>
-      <td style="color:var(--text);font-weight:500">${v.VisitorName}</td>
-      <td>${v.CompanyName}</td>
-      <td>${v.Purpose}</td>
-      <td>${v.Location}</td>
-      <td>${v.EmployeeContact || '-'}</td>
-      <td style="font-family:'JetBrains Mono';font-size:12px">${v.CheckInTime}</td>
-      <td style="font-family:'JetBrains Mono';font-size:12px">${v.CheckOutTime || '-'}</td>
-      <td>${v.ApproverEmployeeName}</td>
-      <td><span class="status-pill ${statusClass}">${v.Status}</span></td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text3)">No records found</td></tr>';
-}
-
-function exportVisitorCSV() {
-  const headers = ['VisitorID','Name','Company','Purpose','Location','Contact','CheckInDate','CheckInTime','CheckOutTime','Approver','Status'];
-  const rows = visitorRecords.map(v => [v.VisitorID, v.VisitorName, v.CompanyName, v.Purpose, v.Location, v.EmployeeContact, v.CheckInDate, v.CheckInTime, v.CheckOutTime, v.ApproverEmployeeName, v.Status]);
-  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'visitors_' + new Date().toISOString().split('T')[0] + '.csv';
   a.click();
 }
 </script>
