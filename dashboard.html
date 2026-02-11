@@ -1143,6 +1143,11 @@ function showPage(page, el) {
   const titles = { overview: 'Dashboard Overview', occupancy: 'Live Occupancy', records: 'Attendance Records', employees: 'Employee Directory', locations: 'Office Locations', qrcodes: 'QR Code Generator' };
   document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
   document.querySelector('.sidebar').classList.remove('open');
+  
+  // Populate records table when records page is shown
+  if (page === 'records') {
+    filterRecords();
+  }
 }
 
 function filterRecords() {
