@@ -708,7 +708,7 @@
 // ============================================================
 // CONFIG
 // ============================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbzol-TzbH36tutHDtnkFxR3VY-TjiOVYAnuyv2rQZ1bDWqyEQ8fr_0Z0tfwr8tLQTEyOw/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbx-yF8wAFcX-bP-hFtnBZlBJDWmT3AmFyyZmS3vfePEpQf2vktIkbcXBa18FYkwTzIwxA/exec';
 let dashboardData = null;
 let allRecords = [];
 let weeklyChartInstance = null;
@@ -801,70 +801,30 @@ function getDemoData() {
 window.addEventListener('load', () => {
   document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
   document.getElementById('filterDate').value = new Date().toISOString().split('T')[0];
-  
-  // Test API connection
-  console.log('🔌 Testing API connection...');
-  console.log('API URL:', API_URL);
-  testAPIConnection();
-  
   refreshData();
   setInterval(refreshOccupancy, 30000);
 });
 
-async function testAPIConnection() {
-  try {
-    const res = await fetch(API_URL + '?action=getDebugInfo', { redirect: 'follow' });
-    const data = await res.json();
-    console.log('✅ API Connected! Debug Info:', data);
-  } catch (e) {
-    console.error('❌ API Connection Failed:', e.message);
-  }
-}
-
 async function refreshData() {
-  let usingLiveData = false;
   try {
     if (API_URL) {
+      const res = await fetch(API_URL + '?action=getDashboardData', { redirect: 'follow' });
+      const text = await res.text();
       try {
-        const res = await fetch(API_URL + '?action=getDashboardData', { redirect: 'follow' });
-        const text = await res.text();
-        console.log('API Response Status:', res.status);
-        console.log('API Response Length:', text.length);
-        console.log('API Response (first 300 chars):', text.substring(0, 300));
-        
-        if (!res.ok) {
-          console.error('API returned status:', res.status, res.statusText);
-          dashboardData = getDemoData();
-        } else {
-          try {
-            dashboardData = JSON.parse(text);
-            usingLiveData = true;
-            console.log('✓ Successfully parsed API data.');
-            console.log('  - Total Employees:', dashboardData.employees?.length || 0);
-            console.log('  - Today Records:', dashboardData.todayRecords?.length || 0);
-            console.log('  - Locations:', dashboardData.locations?.length || 0);
-            if (dashboardData.debug) console.log('  - Debug:', dashboardData.debug);
-          } catch(pe) {
-            console.error('JSON parse error:', text.substring(0, 200));
-            dashboardData = getDemoData();
-          }
-        }
-      } catch (fetchErr) {
-        console.error('Fetch error:', fetchErr.message);
+        dashboardData = JSON.parse(text);
+      } catch(pe) {
+        console.error('JSON parse error:', text.substring(0, 200));
         dashboardData = getDemoData();
       }
     } else {
-      console.warn('No API_URL configured');
       dashboardData = getDemoData();
     }
     renderDashboard();
-    const status = usingLiveData ? '(LIVE)' : '(DEMO DATA)';
-    document.getElementById('lastRefresh').textContent = 'Last refresh: ' + new Date().toLocaleTimeString() + ' ' + status;
+    document.getElementById('lastRefresh').textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
   } catch (err) {
     console.error('Refresh error:', err);
     dashboardData = getDemoData();
     renderDashboard();
-    document.getElementById('lastRefresh').textContent = 'Last refresh: ' + new Date().toLocaleTimeString() + ' (DEMO DATA)';
   }
 }
 
