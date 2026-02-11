@@ -778,9 +778,50 @@
         </div>
         <div id="qrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px"></div>
       </div>
+
+    <!-- ===== DEBUG PAGE ===== -->
+    <div class="page" id="page-debug" style="display:none">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">🔧 Debug Console</div>
+          <button class="refresh-btn" onclick="logs.length=0; document.getElementById('debugLog').innerHTML='Logs cleared'; setTimeout(() => debugLog('Debug log cleared'), 100)">Clear Logs</button>
+        </div>
+        <div id="debugLog" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);max-height:500px;overflow-y:auto;white-space:pre-wrap;word-break:break-all"></div>
+      </div>
     </div>
   </main>
 </div>
+
+<!-- Debug trigger - hold these keys for 3 seconds to show debug page -->
+<script>
+let keyPressLog = '';
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'p' && e.ctrlKey && e.shiftKey) {
+    e.preventDefault();
+    const debugPage = document.getElementById('page-debug');
+    if (debugPage.style.display === 'none') {
+      showPage('debug', null);
+      updateDebugLog();
+      debugLog('Debug page opened');
+    } else {
+      showPage('overview', null);
+    }
+  }
+});
+
+function updateDebugLog() {
+  const el = document.getElementById('debugLog');
+  el.textContent = logs.join('\n');
+  el.scrollTop = el.scrollHeight;
+}
+
+// Show logs periodically
+setInterval(() => {
+  if (document.getElementById('page-debug').classList.contains('active')) {
+    updateDebugLog();
+  }
+}, 500);
+</script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
@@ -792,6 +833,13 @@ let dashboardData = null;
 let allRecords = [];
 let visitorRecords = [];
 let weeklyChartInstance = null;
+
+// Debug logging
+const logs = [];
+function debugLog(msg) {
+  logs.push('[' + new Date().toLocaleTimeString() + '] ' + msg);
+  console.log(msg);
+}
 
 // ============================================================
 // DEMO DATA
@@ -912,6 +960,7 @@ function getDemoData() {
 // INIT
 // ============================================================
 window.addEventListener('load', () => {
+  debugLog('Page loaded - initializing dashboard');
   document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
   // Set default date range to today for both from and to dates
   const today = new Date().toISOString().split('T')[0];
@@ -919,27 +968,38 @@ window.addEventListener('load', () => {
   document.getElementById('filterDateTo').value = today;
   document.getElementById('visitorDateFrom').value = today;
   document.getElementById('visitorDateTo').value = today;
+  debugLog('Filters initialized. Calling refreshData()');
   refreshData();
   setInterval(refreshOccupancy, 30000);
+  debugLog('Dashboard initialization complete. Auto-refresh set to 30s');
 });
 
 async function refreshData() {
   try {
+    debugLog('Starting refreshData...');
     if (API_URL) {
+      debugLog('Fetching from API: ' + API_URL);
       const res = await fetch(API_URL + '?action=getDashboardData', { redirect: 'follow' });
       const text = await res.text();
+      debugLog('API Response (first 300 chars): ' + text.substring(0, 300));
       try {
         dashboardData = JSON.parse(text);
+        debugLog('API data parsed successfully. Success: ' + dashboardData.success);
       } catch(pe) {
+        debugLog('JSON parse error: ' + pe.message + ' - Using demo data');
         console.error('JSON parse error:', text.substring(0, 200));
         dashboardData = getDemoData();
       }
     } else {
+      debugLog('No API_URL defined - using demo data');
       dashboardData = getDemoData();
     }
+    debugLog('Rendering dashboard...');
     renderDashboard();
+    debugLog('Dashboard rendered');
     document.getElementById('lastRefresh').textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
   } catch (err) {
+    debugLog('Refresh error: ' + err.message);
     console.error('Refresh error:', err);
     dashboardData = getDemoData();
     renderDashboard();
@@ -966,69 +1026,80 @@ async function refreshOccupancy() {
 // RENDER
 // ============================================================
 function renderDashboard() {
-  if (!dashboardData || !dashboardData.success) return;
-  const d = dashboardData;
+  try {
+    if (!dashboardData || !dashboardData.success) {
+      debugLog('renderDashboard: dashboardData missing or success=false');
+      return;
+    }
+    debugLog('renderDashboard: Rendering all components...');
+    const d = dashboardData;
 
-  // Stats
-  document.getElementById('statTotal').textContent = d.summary.totalEmployees;
-  document.getElementById('statPresent').textContent = d.summary.presentToday;
-  document.getElementById('statAbsent').textContent = d.summary.absentToday;
-  document.getElementById('statLate').textContent = d.summary.lateToday;
-  document.getElementById('statPercent').textContent = d.summary.attendanceRate + '%';
-  document.getElementById('statRate').textContent = d.summary.attendanceRate + '% attendance';
-  const visitorsToday = d.visitorRecords ? d.visitorRecords.length : 0;
-  document.getElementById('statVisitors').textContent = visitorsToday;
-  visitorRecords = d.visitorRecords || [];
+    // Stats
+    document.getElementById('statTotal').textContent = d.summary.totalEmployees;
+    document.getElementById('statPresent').textContent = d.summary.presentToday;
+    document.getElementById('statAbsent').textContent = d.summary.absentToday;
+    document.getElementById('statLate').textContent = d.summary.lateToday;
+    document.getElementById('statPercent').textContent = d.summary.attendanceRate + '%';
+    document.getElementById('statRate').textContent = d.summary.attendanceRate + '% attendance';
+    const visitorsToday = d.visitorRecords ? d.visitorRecords.length : 0;
+    document.getElementById('statVisitors').textContent = visitorsToday;
+    visitorRecords = d.visitorRecords || [];
+    debugLog('Stats rendered. Visitors: ' + visitorsToday);
 
-  // Shifts
-  document.getElementById('shiftA').textContent = d.shiftBreakdown.A || 0;
-  document.getElementById('shiftB').textContent = d.shiftBreakdown.B || 0;
-  document.getElementById('shiftC').textContent = d.shiftBreakdown.C || 0;
-  document.getElementById('shiftG').textContent = d.shiftBreakdown.General || 0;
+    // Shifts
+    document.getElementById('shiftA').textContent = d.shiftBreakdown.A || 0;
+    document.getElementById('shiftB').textContent = d.shiftBreakdown.B || 0;
+    document.getElementById('shiftC').textContent = d.shiftBreakdown.C || 0;
+    document.getElementById('shiftG').textContent = d.shiftBreakdown.General || 0;
 
-  // Weekly chart
-  renderWeeklyChart(d.weeklyTrend);
+    // Weekly chart
+    renderWeeklyChart(d.weeklyTrend);
 
-  // Quick occupancy — built from actual attendance records
-  renderQuickOccupancy(d.todayRecords);
+    // Quick occupancy — built from actual attendance records
+    renderQuickOccupancy(d.todayRecords);
 
-  // Today's table
-  renderTodayTable(d.todayRecords);
+    // Today's table
+    renderTodayTable(d.todayRecords);
 
-  // Full occupancy page — built from actual records
-  renderOccupancyGrid(d.todayRecords);
+    // Full occupancy page — built from actual records
+    renderOccupancyGrid(d.todayRecords);
 
-  // Employees
-  renderEmployees(d.employees);
+    // Employees
+    renderEmployees(d.employees);
 
-  // Locations
-  renderLocations(d.locations);
+    // Locations
+    renderLocations(d.locations);
 
-  // QR codes
-  renderQRCodes(d.locations);
+    // QR codes
+    renderQRCodes(d.locations);
 
-  // Filter dropdowns
-  const filterLoc = document.getElementById('filterLocation');
-  filterLoc.innerHTML = '<option value="">All Locations</option>';
-  d.locations.forEach(l => {
-    const n = l.LocationName || l;
-    filterLoc.innerHTML += `<option value="${n}">${n}</option>`;
-  });
+    // Filter dropdowns
+    const filterLoc = document.getElementById('filterLocation');
+    filterLoc.innerHTML = '<option value="">All Locations</option>';
+    d.locations.forEach(l => {
+      const n = l.LocationName || l;
+      filterLoc.innerHTML += `<option value="${n}">${n}</option>`;
+    });
 
-  const visitorLocFilter = document.getElementById('visitorLocationFilter');
-  visitorLocFilter.innerHTML = '<option value="">All Locations</option>';
-  d.locations.forEach(l => {
-    const n = l.LocationName || l;
-    visitorLocFilter.innerHTML += `<option value="${n}">${n}</option>`;
-  });
+    const visitorLocFilter = document.getElementById('visitorLocationFilter');
+    visitorLocFilter.innerHTML = '<option value="">All Locations</option>';
+    d.locations.forEach(l => {
+      const n = l.LocationName || l;
+      visitorLocFilter.innerHTML += `<option value="${n}">${n}</option>`;
+    });
 
-  // Render visitor pages
-  if (d.visitorRecords) {
-    renderVisitorOverview(d.visitorRecords, d.locations);
-    renderLiveVisitors(d.visitorRecords);
+    // Render visitor pages
+    if (d.visitorRecords) {
+      renderVisitorOverview(d.visitorRecords, d.locations);
+      renderLiveVisitors(d.visitorRecords);
+    }
+
+    allRecords = d.todayRecords;
+    debugLog('Dashboard rendering complete');
+  } catch (err) {
+    debugLog('Error in renderDashboard: ' + err.message);
+    console.error('renderDashboard error:', err);
   }
-
-  allRecords = d.todayRecords;
 }
 
 function renderWeeklyChart(trend) {
@@ -1261,23 +1332,35 @@ function downloadQR(canvasId, name) {
 // NAVIGATION & FILTERS
 // ============================================================
 function showPage(page, el) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-' + page).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  if (el) el.classList.add('active');
+  try {
+    debugLog('showPage called: page=' + page);
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const pageEl = document.getElementById('page-' + page);
+    if (!pageEl) {
+      debugLog('ERROR: page-' + page + ' element not found');
+      return;
+    }
+    pageEl.classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    if (el) el.classList.add('active');
 
-  const titles = { overview: 'Dashboard Overview', occupancy: 'Live Occupancy', records: 'Attendance Records', visitors: 'Visitor Overview', livevisitors: 'Live Visitors', visitorlog: 'Visitor Log', employees: 'Employee Directory', locations: 'Office Locations', qrcodes: 'QR Code Generator' };
-  document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
-  document.querySelector('.sidebar').classList.remove('open');
-  
-  if (page === 'records') {
-    filterRecords();
-  }
-  if (page === 'visitorlog') {
-    filterVisitorRecords();
-  }
-  if (page === 'livevisitors') {
-    renderLiveVisitors(visitorRecords);
+    const titles = { overview: 'Dashboard Overview', occupancy: 'Live Occupancy', records: 'Attendance Records', visitors: 'Visitor Overview', livevisitors: 'Live Visitors', visitorlog: 'Visitor Log', employees: 'Employee Directory', locations: 'Office Locations', qrcodes: 'QR Code Generator', debug: 'Debug Console' };
+    document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
+    document.querySelector('.sidebar').classList.remove('open');
+    
+    if (page === 'records') {
+      filterRecords();
+    }
+    if (page === 'visitorlog') {
+      filterVisitorRecords();
+    }
+    if (page === 'livevisitors') {
+      renderLiveVisitors(visitorRecords);
+    }
+    debugLog('showPage complete: page=' + page);
+  } catch (err) {
+    debugLog('ERROR in showPage: ' + err.message);
+    console.error('showPage error:', err);
   }
 }
 
