@@ -184,6 +184,19 @@
 
   .refresh-btn:hover { background: rgba(0,229,160,0.2); }
 
+  /* DATA SOURCE INDICATOR */
+  .data-source-badge {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .data-source-badge.live { background: var(--accent-dim); color: var(--accent); }
+  .data-source-badge.demo { background: var(--orange-dim); color: var(--orange); }
+
   /* STAT CARDS */
   .stats-grid {
     display: grid;
@@ -572,6 +585,7 @@
     <div class="sidebar-footer">
       <div><span class="live-dot"></span>System Active</div>
       <div id="lastRefresh">Last refresh: --</div>
+      <div id="dataSourceIndicator" class="data-source-badge demo">⏳ Loading...</div>
     </div>
   </aside>
 
@@ -725,13 +739,6 @@
         <div id="qrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px"></div>
       </div>
     </div>
-  
-
-<!-- Option A: Add to existing stats-grid (change grid to 6 cols) -->
-<!-- Update CSS: .stats-grid { grid-template-columns: repeat(6, 1fr); } -->
-<!-- Or keep 5 cols and it will just wrap. -->
-
-
 
 
 </main>
@@ -739,9 +746,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-
-
-</script>
 <script>
 // ============================================================
 // CONFIG
@@ -750,10 +754,49 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbylsKHeaqQR0AuL9E5ur-l8
 let dashboardData = null;
 let allRecords = [];
 let weeklyChartInstance = null;
+let isUsingLiveData = false; // Track whether we have real data
 
 // VISITOR MODULE VARIABLES
 let allVisitorRecords = [];
 let activeVisitorData = [];
+
+// ============================================================
+// API FETCH WITH RETRY
+// ============================================================
+async function fetchAPIData(retries = 3, delayMs = 2000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[API] Attempt ${attempt}/${retries} - Fetching dashboard data...`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
+      const res = await fetch(API_URL + '?action=getDashboardData', {
+        redirect: 'follow',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      const text = await res.text();
+      console.log(`[API] Response received (${text.length} chars)`);
+
+      const data = JSON.parse(text);
+      if (data && data.success) {
+        console.log('[API] ✅ Successfully parsed live data');
+        return data;
+      } else {
+        console.warn('[API] Response parsed but success=false or missing:', data);
+      }
+    } catch (err) {
+      console.warn(`[API] Attempt ${attempt} failed:`, err.message);
+      if (attempt < retries) {
+        console.log(`[API] Waiting ${delayMs}ms before retry...`);
+        await new Promise(r => setTimeout(r, delayMs));
+        delayMs *= 1.5; // Increase delay for each retry
+      }
+    }
+  }
+  return null; // All retries failed
+}
 
 // ============================================================
 // DEMO DATA
@@ -776,7 +819,7 @@ function getDemoData() {
 
   const today = new Date().toISOString().split('T')[0];
   const records = [];
-  const presentCount = 28; // ~80% attendance
+  const presentCount = 28;
 
   for (let i = 0; i < presentCount; i++) {
     const emp = employees[i];
@@ -827,6 +870,7 @@ function getDemoData() {
 
   return {
     success: true,
+    _isDemo: true,
     summary: { totalEmployees: 35, presentToday: presentCount, absentToday: 7, lateToday: records.filter(r => r.Status === 'Late' || r.Status === 'Very Late').length, attendanceRate: 80 },
     locationOccupancy: occ,
     shiftBreakdown,
@@ -842,51 +886,84 @@ function getDemoData() {
 // ============================================================
 window.addEventListener('load', () => {
   document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-  // Set default date range to today for both from and to dates
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('filterDateFrom').value = today;
   document.getElementById('filterDateTo').value = today;
   refreshData();
-  setInterval(refreshOccupancy, 30000);
+  // FIX: periodic refresh now updates ALL dashboard data, not just occupancy
+  setInterval(refreshAllData, 30000);
 });
 
+// ============================================================
+// MAIN REFRESH - with retry logic
+// ============================================================
 async function refreshData() {
-  try {
-    if (API_URL) {
-      const res = await fetch(API_URL + '?action=getDashboardData', { redirect: 'follow' });
-      const text = await res.text();
-      try {
-        dashboardData = JSON.parse(text);
-      } catch(pe) {
-        console.error('JSON parse error:', text.substring(0, 200));
-        dashboardData = getDemoData();
-      }
-    } else {
+  updateDataSourceBadge('loading');
+
+  // Try to fetch live data with retries
+  const liveData = await fetchAPIData(3, 2000);
+
+  if (liveData) {
+    dashboardData = liveData;
+    isUsingLiveData = true;
+    updateDataSourceBadge('live');
+    console.log('[Dashboard] ✅ Rendering with LIVE Google Sheet data');
+  } else {
+    // Only fall back to demo if we don't already have live data
+    if (!isUsingLiveData) {
       dashboardData = getDemoData();
+      updateDataSourceBadge('demo');
+      console.warn('[Dashboard] ⚠️ Using DEMO data (API unreachable)');
+    } else {
+      // Keep existing live data, just note the refresh failed
+      console.warn('[Dashboard] ⚠️ Refresh failed, keeping previous live data');
+      updateDataSourceBadge('live');
     }
-    renderDashboard();
-    document.getElementById('lastRefresh').textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
-  } catch (err) {
-    console.error('Refresh error:', err);
-    dashboardData = getDemoData();
-    renderDashboard();
+  }
+
+  renderDashboard();
+  document.getElementById('lastRefresh').textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+}
+
+// ============================================================
+// PERIODIC FULL REFRESH (replaces old refreshOccupancy)
+// FIX: This now updates ALL dashboard components, not just occupancy
+// ============================================================
+async function refreshAllData() {
+  try {
+    const liveData = await fetchAPIData(1, 0); // Single attempt for periodic refresh
+    if (liveData) {
+      dashboardData = liveData;
+      isUsingLiveData = true;
+      updateDataSourceBadge('live');
+
+      // FIX: Re-render the ENTIRE dashboard, not just occupancy
+      renderDashboard();
+
+      document.getElementById('lastRefresh').textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+      console.log('[Periodic] ✅ Full dashboard updated with live data');
+    }
+  } catch (e) {
+    console.warn('[Periodic] Refresh error:', e);
   }
 }
 
-async function refreshOccupancy() {
-  try {
-    if (API_URL) {
-      const res = await fetch(API_URL + '?action=getDashboardData', { redirect: 'follow' });
-      const text = await res.text();
-      try {
-        const data = JSON.parse(text);
-        if (data.success && data.todayRecords) {
-          renderOccupancyGrid(data.todayRecords);
-          renderQuickOccupancy(data.todayRecords);
-        }
-      } catch(e) {}
-    }
-  } catch (e) { console.warn('Occupancy refresh error:', e); }
+// ============================================================
+// DATA SOURCE INDICATOR
+// ============================================================
+function updateDataSourceBadge(state) {
+  const badge = document.getElementById('dataSourceIndicator');
+  if (!badge) return;
+  if (state === 'live') {
+    badge.className = 'data-source-badge live';
+    badge.innerHTML = '<span class="live-dot"></span> Live Data';
+  } else if (state === 'demo') {
+    badge.className = 'data-source-badge demo';
+    badge.textContent = '⚠️ Demo Data';
+  } else {
+    badge.className = 'data-source-badge demo';
+    badge.textContent = '⏳ Loading...';
+  }
 }
 
 // ============================================================
@@ -913,13 +990,13 @@ function renderDashboard() {
   // Weekly chart
   renderWeeklyChart(d.weeklyTrend);
 
-  // Quick occupancy — built from actual attendance records
+  // Quick occupancy
   renderQuickOccupancy(d.todayRecords);
 
   // Today's table
   renderTodayTable(d.todayRecords);
 
-  // Full occupancy page — built from actual records
+  // Full occupancy page
   renderOccupancyGrid(d.todayRecords);
 
   // Employees
@@ -939,10 +1016,13 @@ function renderDashboard() {
     filterLoc.innerHTML += `<option value="${n}">${n}</option>`;
   });
 
-  allRecords = d.todayRecords;
+  // FIX: Always update allRecords when we render
+  allRecords = d.todayRecords || [];
 
   // VISITOR DASHBOARD RENDER
-  renderVisitorDashboard(d);
+  if (typeof renderVisitorDashboard === 'function') {
+    renderVisitorDashboard(d);
+  }
 }
 
 function renderWeeklyChart(trend) {
@@ -998,7 +1078,6 @@ function renderQuickOccupancy(todayRecords) {
     return;
   }
 
-  // Group by location — count currently present (checked in, NOT checked out)
   const locMap = {};
   todayRecords.forEach(r => {
     const loc = r.Location || 'Unknown';
@@ -1012,7 +1091,6 @@ function renderQuickOccupancy(todayRecords) {
   });
 
   let html = '';
-  // Sort: locations with people first
   const sorted = Object.entries(locMap).sort((a, b) => b[1].present - a[1].present);
   sorted.forEach(([name, data]) => {
     const color = data.present > 0 ? 'green' : 'yellow';
@@ -1039,7 +1117,6 @@ function renderOccupancyGrid(todayRecords) {
     return;
   }
 
-  // Group by location
   const locMap = {};
   todayRecords.forEach(r => {
     const loc = r.Location || 'Unknown';
@@ -1180,25 +1257,22 @@ function showPage(page, el) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
 
-  const titles = { 
-  overview: 'Dashboard Overview',
-  occupancy: 'Live Occupancy',
-  records: 'Attendance Records',
-  employees: 'Employee Directory',
-  locations: 'Office Locations',
-  qrcodes: 'QR Code Generator',
-  visitors: 'Visitor Log',
-  activevisitors: 'Active Visitors'
-};
+  const titles = {
+    overview: 'Dashboard Overview',
+    occupancy: 'Live Occupancy',
+    records: 'Attendance Records',
+    employees: 'Employee Directory',
+    locations: 'Office Locations',
+    qrcodes: 'QR Code Generator',
+    visitors: 'Visitor Log',
+    activevisitors: 'Active Visitors'
+  };
   document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
   document.querySelector('.sidebar').classList.remove('open');
-  
-  // Populate records table when records page is shown
-  if (page === 'records') {
-    filterRecords();
-  }
-  if (page === 'visitors') filterVisitors();
-  if (page === 'activevisitors') refreshActiveVisitors();
+
+  if (page === 'records') filterRecords();
+  if (page === 'visitors' && typeof filterVisitors === 'function') filterVisitors();
+  if (page === 'activevisitors' && typeof refreshActiveVisitors === 'function') refreshActiveVisitors();
 }
 
 function filterRecords() {
@@ -1207,19 +1281,17 @@ function filterRecords() {
   const loc = document.getElementById('filterLocation').value;
   const shift = document.getElementById('filterShift').value;
 
-  // If API available, fetch filtered. Otherwise filter demo data.
   let filtered = allRecords;
-  
-  // Apply date range filter
+
   if (dateFrom || dateTo) {
     filtered = filtered.filter(r => {
-      const recordDate = r.Date; // Assuming Date is in YYYY-MM-DD format
+      const recordDate = r.Date;
       if (dateFrom && recordDate < dateFrom) return false;
       if (dateTo && recordDate > dateTo) return false;
       return true;
     });
   }
-  
+
   if (loc) filtered = filtered.filter(r => r.Location === loc);
   if (shift) filtered = filtered.filter(r => r.Shift === shift);
 
@@ -1250,8 +1322,6 @@ function exportCSV() {
   a.download = 'attendance_' + new Date().toISOString().split('T')[0] + '.csv';
   a.click();
 }
-
-
 
 </script>
 </body>
