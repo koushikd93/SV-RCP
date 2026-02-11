@@ -531,7 +531,7 @@
   <aside class="sidebar">
     <div class="sidebar-brand">
       <div class="dot"></div>
-      SV-RCP Attendance 
+      AttendX
     </div>
 
     <div class="nav-section">Dashboard</div>
@@ -634,7 +634,12 @@
     <!-- ===== RECORDS PAGE ===== -->
     <div class="page" id="page-records">
       <div class="filter-bar">
-        <input type="date" id="filterDate" onchange="filterRecords()">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:12px;color:var(--text2);white-space:nowrap">Date Range:</label>
+          <input type="date" id="filterDateFrom" onchange="filterRecords()" title="From Date" style="flex:1">
+          <span style="color:var(--text2)">to</span>
+          <input type="date" id="filterDateTo" onchange="filterRecords()" title="To Date" style="flex:1">
+        </div>
         <select id="filterLocation" onchange="filterRecords()"><option value="">All Locations</option></select>
         <select id="filterShift" onchange="filterRecords()">
           <option value="">All Shifts</option>
@@ -1138,12 +1143,24 @@ function showPage(page, el) {
 }
 
 function filterRecords() {
-  const date = document.getElementById('filterDate').value;
+  const dateFrom = document.getElementById('filterDateFrom').value;
+  const dateTo = document.getElementById('filterDateTo').value;
   const loc = document.getElementById('filterLocation').value;
   const shift = document.getElementById('filterShift').value;
 
   // If API available, fetch filtered. Otherwise filter demo data.
   let filtered = allRecords;
+  
+  // Apply date range filter
+  if (dateFrom || dateTo) {
+    filtered = filtered.filter(r => {
+      const recordDate = r.Date; // Assuming Date is in YYYY-MM-DD format
+      if (dateFrom && recordDate < dateFrom) return false;
+      if (dateTo && recordDate > dateTo) return false;
+      return true;
+    });
+  }
+  
   if (loc) filtered = filtered.filter(r => r.Location === loc);
   if (shift) filtered = filtered.filter(r => r.Shift === shift);
 
