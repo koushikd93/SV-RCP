@@ -738,6 +738,49 @@
         </div>
         <div id="qrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px"></div>
       </div>
+
+    <!-- ===== VISITOR LOG PAGE ===== -->
+    <div class="page" id="page-visitors">
+      <div class="filter-bar">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:12px;color:var(--text2);white-space:nowrap">Date Range:</label>
+          <input type="date" id="visitorDateFrom" onchange="filterVisitors()" style="flex:1">
+          <span style="color:var(--text2)">to</span>
+          <input type="date" id="visitorDateTo" onchange="filterVisitors()" style="flex:1">
+        </div>
+        <select id="visitorFilterLocation" onchange="filterVisitors()"><option value="">All Locations</option></select>
+        <button class="refresh-btn" onclick="filterVisitors()">↻ Refresh</button>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">🪪 Visitor Log</div>
+          <span class="panel-badge" style="background:var(--purple-dim,rgba(139,92,246,0.15));color:var(--purple,#8b5cf6)" id="visitorCount">0 visitors</span>
+        </div>
+        <div class="table-scroll" style="max-height:600px">
+          <table class="att-table">
+            <thead><tr><th>Date</th><th>Visitor</th><th>Phone</th><th>Company</th><th>Host</th><th>Purpose</th><th>Location</th><th>In</th><th>Out</th><th>Auth By</th><th>Status</th></tr></thead>
+            <tbody id="visitorsTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== ACTIVE VISITORS PAGE ===== -->
+    <div class="page" id="page-activevisitors">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title"><span class="live-dot"></span> Active Visitors</div>
+          <span class="panel-badge" style="background:var(--accent-dim);color:var(--accent)" id="activeVisitorCount">0 on-site</span>
+        </div>
+        <div class="table-scroll" style="max-height:600px">
+          <table class="att-table">
+            <thead><tr><th>Visitor ID</th><th>Name</th><th>Phone</th><th>Company</th><th>Host</th><th>Purpose</th><th>Location</th><th>Check-In</th><th>Authorized By</th></tr></thead>
+            <tbody id="activeVisitorsTable"></tbody>
+          </table>
+        </div>
+        <button class="refresh-btn" style="margin-top:12px" onclick="refreshActiveVisitors()">↻ Refresh Active Visitors</button>
+      </div>
+    </div>
     </div>
 
 
@@ -750,7 +793,9 @@
 // ============================================================
 // CONFIG
 // ============================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbwryvAkVb0GR6j42C1PsYQNUXrdenzZk-nG7bmxecZ3O4LL0zgMajiKQuQkFB81vtIP/exec';
+const _dashParams = new URLSearchParams(window.location.search);
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbylsKHeaqQR0AuL9E5ur-l8JHh3f0EzZI0m4xSfVZAVjZcfrGmT2zvTZAGGPQDTwdsNLQ/exec';
+if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
 let weeklyChartInstance = null;
@@ -1275,28 +1320,73 @@ function showPage(page, el) {
   if (page === 'activevisitors' && typeof refreshActiveVisitors === 'function') refreshActiveVisitors();
 }
 
-function filterRecords() {
+async function filterRecords() {
   const dateFrom = document.getElementById('filterDateFrom').value;
   const dateTo = document.getElementById('filterDateTo').value;
   const loc = document.getElementById('filterLocation').value;
   const shift = document.getElementById('filterShift').value;
 
-  let filtered = allRecords;
+  const tbody = document.getElementById('recordsTable');
 
+  // If date filters are set and differ from today, fetch from API
+  const today = new Date().toISOString().split('T')[0];
+  const needsApiFetch = (dateFrom && dateFrom !== today) || (dateTo && dateTo !== today) || (dateFrom && dateTo);
+
+  if (needsApiFetch && API_URL) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Fetching records...</td></tr>';
+    try {
+      const params = { action: 'getAttendance' };
+      if (dateFrom) params.dateFrom = dateFrom;
+      if (dateTo) params.dateTo = dateTo;
+      if (loc) params.location = loc;
+
+      // Fetch with single date if from==to, otherwise fetch all and filter client-side
+      if (dateFrom && !dateTo) params.date = dateFrom;
+      if (dateFrom === dateTo && dateFrom) params.date = dateFrom;
+
+      const url = API_URL + '?' + new URLSearchParams(params).toString();
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+      clearTimeout(tid);
+      const data = JSON.parse(await res.text());
+
+      if (data.success && data.records) {
+        let filtered = data.records;
+        // Apply date range filter (API 'date' is exact match; for ranges we filter client-side)
+        if (dateFrom && dateTo && dateFrom !== dateTo) {
+          filtered = filtered.filter(r => {
+            if (r.Date < dateFrom) return false;
+            if (r.Date > dateTo) return false;
+            return true;
+          });
+        }
+        if (shift) filtered = filtered.filter(r => r.Shift === shift);
+        renderRecordsTable(filtered);
+        return;
+      }
+    } catch (err) {
+      console.warn('[Records] API fetch failed:', err.message);
+    }
+  }
+
+  // Default: filter from allRecords (today's data)
+  let filtered = allRecords;
   if (dateFrom || dateTo) {
     filtered = filtered.filter(r => {
-      const recordDate = r.Date;
-      if (dateFrom && recordDate < dateFrom) return false;
-      if (dateTo && recordDate > dateTo) return false;
+      if (dateFrom && r.Date < dateFrom) return false;
+      if (dateTo && r.Date > dateTo) return false;
       return true;
     });
   }
-
   if (loc) filtered = filtered.filter(r => r.Location === loc);
   if (shift) filtered = filtered.filter(r => r.Shift === shift);
+  renderRecordsTable(filtered);
+}
 
+function renderRecordsTable(records) {
   const tbody = document.getElementById('recordsTable');
-  tbody.innerHTML = filtered.map(r => {
+  tbody.innerHTML = records.map(r => {
     const statusClass = r.Status === 'On Time' ? 'on-time' : r.Status === 'Completed' ? 'completed' : r.Status === 'Late' ? 'late' : 'very-late';
     return `<tr>
       <td style="font-family:'JetBrains Mono';font-size:12px">${r.Date}</td>
@@ -1321,6 +1411,161 @@ function exportCSV() {
   a.href = URL.createObjectURL(blob);
   a.download = 'attendance_' + new Date().toISOString().split('T')[0] + '.csv';
   a.click();
+}
+
+// ============================================================
+// VISITOR MODULE
+// ============================================================
+
+// Fetch visitor summary and update overview stats
+async function renderVisitorDashboard(d) {
+  try {
+    // If getDashboardData already includes visitor data, use it
+    if (d && d.visitorSummary) {
+      document.getElementById('statVisitors').textContent = d.visitorSummary.totalToday || 0;
+      document.getElementById('statVisitorActive').textContent = (d.visitorSummary.activeNow || 0) + ' active now';
+      return;
+    }
+
+    // Otherwise fetch visitor data separately
+    if (!API_URL) return;
+    const url = API_URL + '?' + new URLSearchParams({ action: 'getVisitorDashboardData' }).toString();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 12000);
+    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+    clearTimeout(tid);
+    const data = JSON.parse(await res.text());
+
+    if (data.success) {
+      document.getElementById('statVisitors').textContent = data.summary.totalToday || 0;
+      document.getElementById('statVisitorActive').textContent = (data.summary.activeNow || 0) + ' active now';
+      allVisitorRecords = data.allRecords || data.todayRecords || [];
+      activeVisitorData = data.activeVisitors || [];
+      console.log('[Visitors] ✅ Loaded visitor summary:', data.summary);
+    }
+  } catch (err) {
+    console.warn('[Visitors] Failed to load visitor data:', err.message);
+    document.getElementById('statVisitors').textContent = '?';
+    document.getElementById('statVisitorActive').textContent = 'unavailable';
+  }
+}
+
+// Visitor Log page - fetch and display visitor records with filters
+async function filterVisitors() {
+  const dateFrom = document.getElementById('visitorDateFrom').value;
+  const dateTo = document.getElementById('visitorDateTo').value;
+  const loc = document.getElementById('visitorFilterLocation').value;
+  const tbody = document.getElementById('visitorsTable');
+
+  if (!API_URL) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text3)">No API configured</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text3)"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Loading visitors...</td></tr>';
+
+  // Populate location filter if empty
+  const locFilter = document.getElementById('visitorFilterLocation');
+  if (locFilter.options.length <= 1 && dashboardData && dashboardData.locations) {
+    dashboardData.locations.forEach(l => {
+      const n = l.LocationName || l;
+      if (![...locFilter.options].some(o => o.value === n)) {
+        locFilter.innerHTML += `<option value="${n}">${n}</option>`;
+      }
+    });
+  }
+
+  try {
+    const params = { action: 'getVisitorRecords' };
+    if (dateFrom) params.dateFrom = dateFrom;
+    if (dateTo) params.dateTo = dateTo;
+    if (dateFrom && !dateTo) params.date = dateFrom;
+    if (dateFrom === dateTo && dateFrom) params.date = dateFrom;
+    if (loc) params.location = loc;
+
+    const url = API_URL + '?' + new URLSearchParams(params).toString();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+    clearTimeout(tid);
+    const data = JSON.parse(await res.text());
+
+    if (data.success) {
+      let records = data.records || [];
+
+      // Client-side date range filter if both dates set
+      if (dateFrom && dateTo && dateFrom !== dateTo) {
+        records = records.filter(r => r.Date >= dateFrom && r.Date <= dateTo);
+      }
+
+      document.getElementById('visitorCount').textContent = records.length + ' visitor' + (records.length !== 1 ? 's' : '');
+
+      tbody.innerHTML = records.map(r => {
+        const statusClass = r.Status === 'Active' ? 'on-time' : 'completed';
+        return `<tr>
+          <td style="font-family:'JetBrains Mono';font-size:12px">${r.Date}</td>
+          <td style="color:var(--text);font-weight:500">${r.Name}</td>
+          <td>${r.Phone || '-'}</td>
+          <td>${r.Company || '-'}</td>
+          <td>${r.Host || '-'}</td>
+          <td>${r.Purpose || '-'}</td>
+          <td>${r.Location || '-'}</td>
+          <td style="font-family:'JetBrains Mono';font-size:12px">${r.CheckInTime || '-'}</td>
+          <td style="font-family:'JetBrains Mono';font-size:12px">${r.CheckOutTime || '-'}</td>
+          <td>${r.AuthorizedByName || '-'}</td>
+          <td><span class="status-pill ${statusClass}">${r.Status}</span></td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text3)">No visitor records found</td></tr>';
+    } else {
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text3)">Error: ' + (data.error || 'Unknown') + '</td></tr>';
+    }
+  } catch (err) {
+    console.warn('[Visitors] Filter error:', err.message);
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text3)">Failed to load: ' + err.message + '</td></tr>';
+  }
+}
+
+// Active Visitors page - fetch currently on-site visitors
+async function refreshActiveVisitors() {
+  const tbody = document.getElementById('activeVisitorsTable');
+
+  if (!API_URL) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)">No API configured</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Loading...</td></tr>';
+
+  try {
+    const url = API_URL + '?' + new URLSearchParams({ action: 'getActiveVisitors' }).toString();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 12000);
+    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+    clearTimeout(tid);
+    const data = JSON.parse(await res.text());
+
+    if (data.success) {
+      const visitors = data.visitors || [];
+      document.getElementById('activeVisitorCount').textContent = visitors.length + ' on-site';
+
+      tbody.innerHTML = visitors.map(v => `<tr>
+        <td style="font-family:'JetBrains Mono';font-size:12px">${v.VisitorID}</td>
+        <td style="color:var(--text);font-weight:500">${v.Name}</td>
+        <td>${v.Phone || '-'}</td>
+        <td>${v.Company || '-'}</td>
+        <td>${v.Host || '-'}</td>
+        <td>${v.Purpose || '-'}</td>
+        <td>${v.Location || '-'}</td>
+        <td style="font-family:'JetBrains Mono';font-size:12px">${v.CheckInTime || '-'}</td>
+        <td>${v.AuthorizedByName || '-'}</td>
+      </tr>`).join('') || '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)">No active visitors</td></tr>';
+    } else {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)">Error: ' + (data.error || 'Unknown') + '</td></tr>';
+    }
+  } catch (err) {
+    console.warn('[ActiveVisitors] Error:', err.message);
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)">Failed to load: ' + err.message + '</td></tr>';
+  }
 }
 
 </script>
