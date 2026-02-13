@@ -1420,37 +1420,28 @@ function exportCSV() {
 // ============================================================
 
 // Fetch visitor summary and update overview stats
-async function renderVisitorDashboard(d) {
-  try {
-    // If getDashboardData already includes visitor data, use it
-    if (d && d.visitorSummary) {
-      document.getElementById('statVisitors').textContent = d.visitorSummary.totalToday || 0;
-      document.getElementById('statVisitorActive').textContent = (d.visitorSummary.activeNow || 0) + ' active now';
-      return;
-    }
+function renderVisitorDashboard(d) {
+  if (!d) return;
 
-    // Otherwise fetch visitor data separately
-    if (!API_URL) return;
-    const url = API_URL + '?' + new URLSearchParams({ action: 'getVisitorDashboardData' }).toString();
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 12000);
-    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
-    clearTimeout(tid);
-    const data = JSON.parse(await res.text());
+  const totalEl = document.getElementById('statVisitors');
+  const activeEl = document.getElementById('statVisitorActive');
 
-    if (data.success) {
-      document.getElementById('statVisitors').textContent = data.summary.totalToday || 0;
-      document.getElementById('statVisitorActive').textContent = (data.summary.activeNow || 0) + ' active now';
-      allVisitorRecords = data.allRecords || data.todayRecords || [];
-      activeVisitorData = data.activeVisitors || [];
-      console.log('[Visitors] ✅ Loaded visitor summary:', data.summary);
-    }
-  } catch (err) {
-    console.warn('[Visitors] Failed to load visitor data:', err.message);
-    document.getElementById('statVisitors').textContent = '?';
-    document.getElementById('statVisitorActive').textContent = 'unavailable';
+  if (!totalEl || !activeEl) {
+    console.warn('[Visitors] Stat elements not found');
+    return;
+  }
+
+  console.log('[Visitors] Rendering:', d.visitorSummary);
+
+  if (d.visitorSummary) {
+    totalEl.textContent = d.visitorSummary.totalToday || 0;
+    activeEl.textContent = (d.visitorSummary.activeNow || 0) + ' active now';
+  } else {
+    totalEl.textContent = 0;
+    activeEl.textContent = '0 active now';
   }
 }
+
 
 // Visitor Log page - fetch and display visitor records with filters
 async function filterVisitors() {
