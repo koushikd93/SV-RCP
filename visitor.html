@@ -815,7 +815,10 @@
 // ============================================================
 // CONFIGURATION
 // ============================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbzol-TzbH36tutHDtnkFxR3VY-TjiOVYAnuyv2rQZ1bDWqyEQ8fr_0Z0tfwr8tLQTEyOw/exec';
+// Check URL for custom API override: visitor.html?api=YOUR_NEW_DEPLOYMENT_URL
+const _urlParams = new URLSearchParams(window.location.search);
+const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbzol-TzbH36tutHDtnkFxR3VY-TjiOVYAnuyv2rQZ1bDWqyEQ8fr_0Z0tfwr8tLQTEyOw/exec';
+if (_urlParams.get('api')) console.log('[CONFIG] Using custom API URL from URL param:', API_URL);
 const MODEL_URLS = [
   'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
   'https://unpkg.com/@vladmandic/face-api@1.7.14/model',
@@ -889,6 +892,39 @@ window.addEventListener('load', async () => {
         <button class="btn btn-primary" style="margin-top:16px;width:auto;padding:12px 24px" onclick="location.reload()">Retry</button>
       </div>`;
     return;
+  }
+
+  // DIAGNOSTIC: Test if visitorCheckin route exists on current API deployment
+  try {
+    console.log('[DIAG] Testing API endpoint:', API_URL);
+    const testUrl = API_URL + '?action=visitorCheckin&visitorName=__DIAG_TEST__';
+    const testRes = await fetch(testUrl, { redirect: 'follow' });
+    const testText = await testRes.text();
+    console.log('[DIAG] visitorCheckin test response:', testText.substring(0, 300));
+
+    if (testText.includes('Invalid action') && !testText.includes('Invalid action:')) {
+      // OLD deployment — show clear error
+      console.error('[DIAG] ❌ OLD DEPLOYMENT! API URL points to old code without visitor routes.');
+      alert(
+        '⚠️ DEPLOYMENT ISSUE DETECTED\n\n' +
+        'Your API URL still points to the OLD deployment.\n' +
+        '"New deployment" creates a NEW URL — the old one never updates.\n\n' +
+        'FIX: Go to Apps Script →\n' +
+        '  Deploy → Manage deployments →\n' +
+        '  Click ✏️ on the EXISTING deployment →\n' +
+        '  Version → "New version" → Deploy\n\n' +
+        'OR: Copy your new deployment URL and add ?api=NEW_URL to this page.'
+      );
+    } else if (testText.includes('"success":true')) {
+      console.log('[DIAG] ✅ API deployment is correct! visitorCheckin route works.');
+    } else if (testText.includes('Invalid action:')) {
+      // New code IS deployed but action not recognized — different issue
+      console.warn('[DIAG] New code deployed but action not matched:', testText);
+    } else {
+      console.warn('[DIAG] Unexpected response:', testText.substring(0, 200));
+    }
+  } catch(diagErr) {
+    console.warn('[DIAG] API test failed:', diagErr.message);
   }
 
   try {
