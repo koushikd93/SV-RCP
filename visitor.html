@@ -954,19 +954,68 @@ function setMode(mode) {
 // ============================================================
 // API HELPERS
 // ============================================================
-async function apiGet(params) {
+async function apiGet(params, retries = 2) {
   if (!API_URL) return getDemoData(params);
-  const url = API_URL + '?' + new URLSearchParams(params).toString();
-  const res = await fetch(url, { redirect: 'follow' });
-  const text = await res.text();
-  try { return JSON.parse(text); } catch(e) { return getDemoData(params); }
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const url = API_URL + '?' + new URLSearchParams(params).toString();
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+      clearTimeout(tid);
+      const text = await res.text();
+      try { return JSON.parse(text); }
+      catch(e) { console.warn('[apiGet] parse error:', text.substring(0, 200)); }
+    } catch(err) {
+      console.warn(`[apiGet] Attempt ${attempt} failed:`, err.message);
+      if (attempt < retries) await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  return getDemoData(params);
 }
 
-async function apiPost(data) {
+async function apiPost(data, retries = 3) {
   if (!API_URL) return getDemoPostResult(data);
-  const res = await fetch(API_URL, { method: 'POST', redirect: 'follow', body: JSON.stringify(data) });
-  const text = await res.text();
-  try { return JSON.parse(text); } catch(e) { return { success: false, error: 'Invalid response from server' }; }
+
+  // ================================================================
+  // FIX: Google Apps Script returns a 302 redirect on ALL requests.
+  // For GET, the browser follows the redirect and everything works.
+  // For POST, browsers convert POST→GET on 302 (per HTTP spec),
+  // which DROPS the request body. GAS doPost() never sees the data.
+  //
+  // SOLUTION: Send write operations via GET with flattened URL params.
+  // GAS doGet(e) reads them from e.parameter.visitorName, etc.
+  // This requires adding visitorCheckin/visitorCheckout routes to doGet().
+  // ================================================================
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[apiPost] Attempt ${attempt}/${retries} — action: ${data.action}`);
+
+      // Flatten all fields into URL params (same keys GAS expects)
+      const params = {};
+      for (const [key, val] of Object.entries(data)) {
+        if (val !== null && val !== undefined) params[key] = String(val);
+      }
+      const url = API_URL + '?' + new URLSearchParams(params).toString();
+
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 20000);
+      const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+      clearTimeout(tid);
+
+      const text = await res.text();
+      console.log(`[apiPost] Response:`, text.substring(0, 300));
+
+      const result = JSON.parse(text);
+      return result;
+    } catch (err) {
+      console.warn(`[apiPost] Attempt ${attempt} failed:`, err.message);
+      if (attempt < retries) await new Promise(r => setTimeout(r, 1500 * attempt));
+    }
+  }
+
+  return { success: false, error: 'Network error after ' + retries + ' retries. Check internet.' };
 }
 
 function getDemoData(params) {
@@ -1044,14 +1093,22 @@ async function loadData() {
     });
   }
 
-  // Load face descriptors
+  // Load face descriptors for employee verification
   const faceResult = await apiGet({ action: 'getAllFaceData' });
   if (faceResult.success && faceResult.faceData) {
     faceResult.faceData.forEach(fd => {
       try {
-        faceDescriptors[fd.employeeId] = new Float32Array(JSON.parse(fd.faceDescriptor));
-      } catch (e) { console.warn('Bad face data for', fd.employeeId); }
+        // GAS returns 'employeeId' (line 302 of Code.gs) but we look up
+        // via selectedEmployee.EmployeeID — store under BOTH keys
+        const empId = fd.employeeId || fd.EmployeeID;
+        const descData = fd.faceDescriptor || fd.FaceDescriptor;
+        if (empId && descData) {
+          const parsed = typeof descData === 'string' ? JSON.parse(descData) : descData;
+          faceDescriptors[empId] = new Float32Array(parsed);
+        }
+      } catch (e) { console.warn('Bad face data:', e.message); }
     });
+    console.log('[FaceData] Loaded descriptors:', Object.keys(faceDescriptors).length, Object.keys(faceDescriptors));
   }
 }
 
@@ -1415,6 +1472,7 @@ async function submitVisitorCheckIn() {
     };
 
     const result = await apiPost(payload);
+    console.log('[CheckIn] Server response:', result);
 
     if (result.success) {
       showResult(true, 'Visitor Checked In!', result.message, {
@@ -1428,10 +1486,13 @@ async function submitVisitorCheckIn() {
         'GPS': gpsPosition ? `${gpsPosition.latitude.toFixed(4)}, ${gpsPosition.longitude.toFixed(4)}` : 'N/A'
       });
     } else {
-      showResult(false, 'Check-In Failed', result.message || 'Please try again.');
+      const detail = result.error || result.message || 'Unknown error';
+      console.error('[CheckIn] FAILED:', detail);
+      showResult(false, 'Check-In Failed', detail);
     }
   } catch (err) {
-    showResult(false, 'Error', err.message || 'Network error. Please try again.');
+    console.error('[CheckIn] Exception:', err);
+    showResult(false, 'Network Error', err.message || 'Connection failed. Check internet.');
   }
 }
 
@@ -1512,6 +1573,7 @@ async function submitVisitorCheckOut() {
       gpsLng: lng,
       deviceInfo: navigator.userAgent.substring(0, 100)
     });
+    console.log('[CheckOut] Server response:', result);
 
     if (result.success) {
       document.getElementById('checkoutResult').classList.remove('hidden');
@@ -1530,11 +1592,12 @@ async function submitVisitorCheckOut() {
     } else {
       btn.disabled = false;
       btn.innerHTML = '✕ Confirm Check-Out';
-      alert(result.message || 'Checkout failed. Please try again.');
+      alert((result.error || result.message || 'Checkout failed') + '\nPlease try again.');
     }
   } catch(e) {
     btn.disabled = false;
     btn.innerHTML = '✕ Confirm Check-Out';
+    console.error('[CheckOut] Exception:', e);
     alert('Error: ' + e.message);
   }
 }
