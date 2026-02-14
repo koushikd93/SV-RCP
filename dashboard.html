@@ -772,6 +772,8 @@
         </div>
         <select id="visitorFilterLocation" onchange="filterVisitors()"><option value="">All Locations</option></select>
         <button class="refresh-btn" onclick="filterVisitors()">↻ Refresh</button>
+        <button class="refresh-btn" onclick="exportVisitorsCSV()">↓ Export CSV</button>
+
       </div>
       <div class="panel">
         <div class="panel-header">
@@ -815,6 +817,8 @@
         </div>
         <select id="equipFilterLocation" onchange="filterEquipmentStatus()"><option value="">All Locations</option></select>
         <button class="refresh-btn" onclick="filterEquipmentStatus()">↻ Refresh</button>
+        <button class="refresh-btn" onclick="exportEquipmentCSV()">↓ Export CSV</button>
+
       </div>
       <div class="panel">
         <div class="panel-header">
@@ -1622,6 +1626,8 @@ async function filterVisitors() {
 
     if (data.success) {
       let records = data.records || [];
+      currentVisitorRecords = records;
+
 
       // Client-side date range filter if both dates set
       if (dateFrom && dateTo && dateFrom !== dateTo) {
@@ -1806,6 +1812,7 @@ async function filterEquipmentStatus() {
 
     if (data.success) {
       let records = data.records || [];
+      currentEquipmentRecords = records;
       if (dateFrom && dateTo && dateFrom !== dateTo) {
         records = records.filter(r => r.Date >= dateFrom && r.Date <= dateTo);
       }
@@ -1918,6 +1925,87 @@ async function filterFaultEquipment() {
     console.warn('[FaultEquip] Error:', err.message);
     tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text3)">Failed: ${err.message}</td></tr>`;
   }
+}
+function exportVisitorsCSV() {
+  if (!currentVisitorRecords.length) {
+    alert('No visitor records to export.');
+    return;
+  }
+
+  const headers = [
+    'Date','Visitor Name','Phone','Company','Host',
+    'Purpose','Location','CheckIn','CheckOut','Authorized By','Status'
+  ];
+
+  const rows = currentVisitorRecords.map(r => [
+    r.Date,
+    r.Name,
+    r.Phone,
+    r.Company,
+    r.Host,
+    r.Purpose,
+    r.Location,
+    r.CheckInTime,
+    r.CheckOutTime,
+    r.AuthorizedByName,
+    r.Status
+  ]);
+
+  const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'visitor_log_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+}
+function exportEquipmentCSV() {
+  if (!currentEquipmentRecords.length) {
+    alert('No equipment records to export.');
+    return;
+  }
+
+  const headers = [
+    'Date','Location','Equipment','Status','Remarks','Details'
+  ];
+
+  const rows = currentEquipmentRecords.map(r => {
+    let details = '';
+    if (r.ExtraData) {
+      try {
+        const ex = typeof r.ExtraData === 'string' ? JSON.parse(r.ExtraData) : r.ExtraData;
+        if (ex.dg) {
+          const d = ex.dg;
+          details = [
+            d.currentFuel ? 'Fuel:'+d.currentFuel+'L' : '',
+            d.totalHours ? 'Hours:'+d.totalHours : '',
+            d.fuelDate ? 'Filled:'+d.fuelDate : '',
+            d.trailDate ? 'Trail:'+d.trailDate : ''
+          ].filter(Boolean).join(' | ');
+        }
+        if (ex.mov && ex.mov.testDate) {
+          details = 'Test:'+ex.mov.testDate;
+        }
+      } catch(e){}
+    }
+
+    return [
+      r.Date,
+      r.Location,
+      r.Equipment,
+      r.Status,
+      r.Remarks,
+      details
+    ];
+  });
+
+  const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'equipment_status_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
 }
 
 </script>
