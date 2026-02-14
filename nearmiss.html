@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Near Miss Report | AttendX</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+  :root {
+    --bg:#0a0e1a;--surface:#111827;--surface2:#1a2236;--border:#2a3454;
+    --accent:#06d6a0;--accent2:#118ab2;--danger:#ef476f;--warn:#ffd166;
+    --purple:#8b5cf6;--orange:#f97316;--text:#e8edf5;--text2:#8892a8;--success:#06d6a0;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+  .container{max-width:560px;margin:0 auto;padding:16px;min-height:100vh}
+  .header{text-align:center;padding:20px 0 12px}
+  .header .logo{font-family:'Space Mono',monospace;font-size:14px;color:var(--accent);letter-spacing:4px;text-transform:uppercase;margin-bottom:4px}
+  .header h1{font-size:20px;font-weight:700;background:linear-gradient(135deg,var(--orange),var(--danger));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .header .sub{font-size:12px;color:var(--text2);margin-top:4px}
+  .location-badge{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:6px 14px;margin-top:10px;font-size:13px;color:var(--text2)}
+  .location-badge svg{width:14px;height:14px;fill:var(--accent)}
+  .timestamp-bar{text-align:center;font-family:'Space Mono',monospace;font-size:22px;color:var(--orange);padding:6px;letter-spacing:2px}
+  .timestamp-bar .date{font-size:12px;color:var(--text2);letter-spacing:1px;margin-top:2px}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:12px}
+  .card-title{font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .card-title .icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px}
+
+  .form-group{margin-bottom:14px}
+  label{display:block;font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:1px}
+  label .req{color:var(--danger);margin-left:2px}
+  select,input,textarea{width:100%;padding:11px 13px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s}
+  select:focus,input:focus,textarea:focus{border-color:var(--orange)}
+  textarea{resize:vertical;min-height:70px}
+  input[type="date"],input[type="time"]{color-scheme:dark}
+
+  /* Category selector */
+  .category-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .cat-btn{padding:12px 8px;border:2px solid var(--border);border-radius:12px;background:var(--surface2);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;text-align:center;transition:all .2s;font-family:'DM Sans',sans-serif}
+  .cat-btn:hover{border-color:var(--text2)}
+  .cat-btn .cat-icon{font-size:20px;display:block;margin-bottom:4px}
+  .cat-btn.active-nm{background:rgba(249,115,22,.12);border-color:var(--orange);color:var(--orange)}
+  .cat-btn.active-ua{background:rgba(239,71,111,.12);border-color:var(--danger);color:var(--danger)}
+  .cat-btn.active-uc{background:rgba(255,209,102,.12);border-color:var(--warn);color:var(--warn)}
+
+  /* Past incident toggle */
+  .toggle-row{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)}
+  .toggle-row span{flex:1;font-size:14px}
+  .toggle-switch{position:relative;width:44px;height:24px;cursor:pointer}
+  .toggle-switch input{opacity:0;width:0;height:0}
+  .toggle-track{position:absolute;inset:0;background:var(--border);border-radius:12px;transition:background .2s}
+  .toggle-switch input:checked+.toggle-track{background:var(--orange)}
+  .toggle-knob{position:absolute;top:2px;left:2px;width:20px;height:20px;background:#fff;border-radius:50%;transition:transform .2s}
+  .toggle-switch input:checked~.toggle-knob{transform:translateX(20px)}
+
+  .btn{width:100%;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+  .btn-primary{background:linear-gradient(135deg,var(--orange),var(--danger));color:#fff}
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(249,115,22,.3)}
+  .btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+
+  .result-card{text-align:center;padding:40px 20px}
+  .result-icon{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:36px}
+  .result-icon.success{background:rgba(6,214,160,.15)}
+  .result-icon.error{background:rgba(239,71,111,.15)}
+  .result-card h2{font-size:22px;margin-bottom:8px}
+  .result-card p{color:var(--text2);font-size:14px}
+  .result-details{margin-top:20px;text-align:left}
+  .result-details .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}
+  .result-details .row span:first-child{color:var(--text2)}
+
+  .loading-overlay{position:fixed;inset:0;background:rgba(10,14,26,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:16px;font-size:14px;color:var(--text2)}
+  .loading-spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--orange);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .hidden{display:none!important}
+
+  .section-divider{height:1px;background:var(--border);margin:16px 0}
+  .hint{font-size:11px;color:var(--text2);margin-top:4px;font-style:italic}
+
+  .step-indicator{display:flex;justify-content:center;gap:8px;margin:14px 0}
+  .step-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:all .3s}
+  .step-dot.active{background:var(--orange);width:24px;border-radius:4px}
+  .step-dot.done{background:var(--accent)}
+</style>
+</head>
+<body>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div>Loading Near Miss Module...</div>
+</div>
+
+<div class="container">
+  <div class="header">
+    <div class="logo">● ATTENDX</div>
+    <h1>⚠️ Near Miss Report</h1>
+    <div class="sub">Safety Incident Reporting System</div>
+    <div class="location-badge" id="locationBadge">
+      <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+      <span id="locationName">Select Location</span>
+    </div>
+  </div>
+
+  <div class="timestamp-bar">
+    <div id="liveTime">--:--:--</div>
+    <div class="date" id="liveDate">Loading...</div>
+  </div>
+
+  <div class="step-indicator">
+    <div class="step-dot active" id="dot1"></div>
+    <div class="step-dot" id="dot2"></div>
+    <div class="step-dot" id="dot3"></div>
+  </div>
+
+  <!-- STEP 1: Identity Selection -->
+  <div class="card" id="step1">
+    <div class="card-title"><div class="icon" style="background:rgba(249,115,22,.15)">👤</div> Reporter Details</div>
+
+    <div class="form-group">
+      <label>Location <span class="req">*</span></label>
+      <select id="locationSelect"><option value="">-- Select Location --</option></select>
+    </div>
+
+    <div class="form-group">
+      <label>Reporting Employee <span class="req">*</span></label>
+      <select id="employeeSelect"><option value="">-- Select Employee --</option></select>
+    </div>
+
+    <div id="empInfo" class="hidden" style="padding:10px;background:var(--surface2);border-radius:10px;font-size:13px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between">
+        <span style="color:var(--text2)">Department</span>
+        <span id="empDept">-</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px">
+        <span style="color:var(--text2)">Employee ID</span>
+        <span id="empId" style="font-family:'Space Mono',monospace;font-size:12px">-</span>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="btnStep1" disabled onclick="goToStep(2)">
+      Continue to Report Details →
+    </button>
+  </div>
+
+  <!-- STEP 2: Incident Details -->
+  <div class="card hidden" id="step2">
+    <div class="card-title"><div class="icon" style="background:rgba(239,71,111,.15)">📋</div> Incident Details</div>
+
+    <div class="form-group">
+      <label>Date of Incident <span class="req">*</span></label>
+      <input type="date" id="incidentDate">
+    </div>
+
+    <div class="form-group">
+      <label>Time of Incident <span class="req">*</span></label>
+      <input type="time" id="incidentTime">
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="form-group">
+      <label>Category <span class="req">*</span></label>
+      <div class="category-grid">
+        <button class="cat-btn" onclick="selectCategory('Near Miss',this)">
+          <span class="cat-icon">⚠️</span>Near Miss
+        </button>
+        <button class="cat-btn" onclick="selectCategory('Unsafe Act',this)">
+          <span class="cat-icon">🚫</span>Unsafe Act
+        </button>
+        <button class="cat-btn" onclick="selectCategory('Unsafe Condition',this)">
+          <span class="cat-icon">🔶</span>Unsafe Condition
+        </button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Cause of Incident <span class="req">*</span></label>
+      <textarea id="incidentCause" placeholder="Describe what caused the incident..." rows="3"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Location of Near Miss <span class="req">*</span></label>
+      <input type="text" id="incidentLocation" placeholder="e.g. Main gate area, DG room, Control room...">
+      <div class="hint">Specific area within the site where incident occurred</div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="form-group">
+      <label>Has Similar Incident Occurred in Past?</label>
+      <div class="toggle-row">
+        <span>Similar incident occurred before</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="pastIncident">
+          <span class="toggle-track"></span>
+          <span class="toggle-knob"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="form-group hidden" id="pastDetails">
+      <label>Past Incident Details</label>
+      <textarea id="pastIncidentDetails" placeholder="When and where did the similar incident happen?" rows="2"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Action Taken <span class="req">*</span></label>
+      <textarea id="actionTaken" placeholder="Describe the corrective action taken..." rows="3"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Remarks</label>
+      <textarea id="remarks" placeholder="Any additional observations or notes..." rows="2"></textarea>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button class="btn btn-secondary" onclick="goToStep(1)" style="flex:1">← Back</button>
+      <button class="btn btn-primary" id="btnSubmit" onclick="submitReport()" style="flex:2" disabled>
+        📤 Submit Near Miss Report
+      </button>
+    </div>
+  </div>
+
+  <!-- STEP 3: Result -->
+  <div class="card hidden" id="step3">
+    <div class="result-card" id="resultContent"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const _urlParams = new URLSearchParams(window.location.search);
+const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbzBwElx62BtaL8kZK7xe0pnZ4wh_wYfrYPB7VSzGhhjPht_bdpC2aYo5TEXGDnJd8Xdvw/exec';
+
+let selectedEmployee = null;
+let selectedCategory = '';
+let currentStep = 1;
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('load', async () => {
+  updateClock(); setInterval(updateClock, 1000);
+  parseURLParams();
+  setDefaultDateTime();
+
+  try {
+    await loadData();
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  } catch(e) {
+    document.getElementById('loadingOverlay').innerHTML = `<div style="color:var(--danger);text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:16px">⚠️</div><h3>Load Error</h3><p style="margin-top:8px;font-size:13px;color:var(--text2)">${e.message}</p><button class="btn btn-primary" style="margin-top:16px;width:auto;padding:12px 24px" onclick="location.reload()">Retry</button></div>`;
+  }
+});
+
+function parseURLParams() {
+  const loc = _urlParams.get('location') || _urlParams.get('loc') || '';
+  if (loc) document.getElementById('locationName').textContent = loc;
+  window._qrLocation = loc;
+}
+
+function setDefaultDateTime() {
+  const now = new Date();
+  const dateStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  const timeStr = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('incidentDate').value = dateStr;
+  document.getElementById('incidentTime').value = timeStr;
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('liveTime').textContent = now.toLocaleTimeString('en-US',{hour12:false});
+  document.getElementById('liveDate').textContent = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'short',day:'numeric'});
+}
+
+// ============================================================
+// API
+// ============================================================
+async function apiGet(params) {
+  if (!API_URL) return { success:false };
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 15000);
+  const res = await fetch(url, { redirect:'follow', signal:controller.signal });
+  clearTimeout(tid);
+  return JSON.parse(await res.text());
+}
+
+// ============================================================
+// LOAD DATA
+// ============================================================
+async function loadData() {
+  // Locations
+  const locResult = await apiGet({ action:'getLocations' });
+  const locSel = document.getElementById('locationSelect');
+  locSel.innerHTML = '<option value="">-- Select Location --</option>';
+  if (locResult.success && locResult.locations) {
+    locResult.locations.forEach(l => {
+      const n = l.LocationName || l;
+      const opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      if (window._qrLocation && n === window._qrLocation) opt.selected = true;
+      locSel.appendChild(opt);
+    });
+    if (window._qrLocation && locSel.value) {
+      document.getElementById('locationName').textContent = locSel.value;
+    }
+  }
+
+  // Employees
+  const empResult = await apiGet({ action:'getEmployees' });
+  const empSel = document.getElementById('employeeSelect');
+  empSel.innerHTML = '<option value="">-- Select Employee --</option>';
+  if (empResult.success && empResult.employees) {
+    empResult.employees.forEach(emp => {
+      const opt = document.createElement('option');
+      opt.value = JSON.stringify(emp);
+      opt.textContent = `${emp.Name} (${emp.EmployeeID})`;
+      empSel.appendChild(opt);
+    });
+  }
+}
+
+// ============================================================
+// EVENT HANDLERS
+// ============================================================
+document.getElementById('locationSelect').addEventListener('change', function() {
+  document.getElementById('locationName').textContent = this.value || 'Select Location';
+  checkStep1();
+});
+
+document.getElementById('employeeSelect').addEventListener('change', function() {
+  if (this.value) {
+    selectedEmployee = JSON.parse(this.value);
+    document.getElementById('empInfo').classList.remove('hidden');
+    document.getElementById('empDept').textContent = selectedEmployee.Department || '-';
+    document.getElementById('empId').textContent = selectedEmployee.EmployeeID || '-';
+  } else {
+    selectedEmployee = null;
+    document.getElementById('empInfo').classList.add('hidden');
+  }
+  checkStep1();
+});
+
+document.getElementById('pastIncident').addEventListener('change', function() {
+  document.getElementById('pastDetails').classList.toggle('hidden', !this.checked);
+});
+
+// Validate step 2 fields on input
+['incidentDate','incidentTime','incidentCause','incidentLocation','actionTaken'].forEach(id => {
+  document.getElementById(id).addEventListener('input', checkStep2);
+});
+
+function checkStep1() {
+  const ok = document.getElementById('locationSelect').value && selectedEmployee;
+  document.getElementById('btnStep1').disabled = !ok;
+}
+
+function checkStep2() {
+  const d = document.getElementById('incidentDate').value;
+  const t = document.getElementById('incidentTime').value;
+  const cause = document.getElementById('incidentCause').value.trim();
+  const loc = document.getElementById('incidentLocation').value.trim();
+  const action = document.getElementById('actionTaken').value.trim();
+  const ok = d && t && selectedCategory && cause && loc && action;
+  document.getElementById('btnSubmit').disabled = !ok;
+}
+
+function selectCategory(cat, btn) {
+  document.querySelectorAll('.cat-btn').forEach(b => b.className = 'cat-btn');
+  selectedCategory = cat;
+  if (cat === 'Near Miss') btn.classList.add('active-nm');
+  else if (cat === 'Unsafe Act') btn.classList.add('active-ua');
+  else btn.classList.add('active-uc');
+  checkStep2();
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function goToStep(step) {
+  for (let i = 1; i <= 3; i++) {
+    document.getElementById('step'+i).classList.toggle('hidden', i !== step);
+  }
+  document.querySelectorAll('.step-dot').forEach((d, i) => {
+    d.className = 'step-dot';
+    if (i+1 < step) d.classList.add('done');
+    if (i+1 === step) d.classList.add('active');
+  });
+  currentStep = step;
+}
+
+// ============================================================
+// SUBMIT
+// ============================================================
+async function submitReport() {
+  const btn = document.getElementById('btnSubmit');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="loading-spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin-right:8px"></div> Submitting...';
+
+  try {
+    const location = document.getElementById('locationSelect').value;
+    const pastIncident = document.getElementById('pastIncident').checked;
+
+    const payload = {
+      action: 'submitNearMiss',
+      location: location,
+      employeeId: selectedEmployee.EmployeeID,
+      employeeName: selectedEmployee.Name,
+      incidentDate: document.getElementById('incidentDate').value,
+      incidentTime: document.getElementById('incidentTime').value,
+      category: selectedCategory,
+      cause: document.getElementById('incidentCause').value.trim(),
+      incidentLocation: document.getElementById('incidentLocation').value.trim(),
+      pastIncident: pastIncident ? 'Yes' : 'No',
+      pastIncidentDetails: pastIncident ? (document.getElementById('pastIncidentDetails').value.trim() || '') : '',
+      actionTaken: document.getElementById('actionTaken').value.trim(),
+      remarks: document.getElementById('remarks').value.trim(),
+      deviceInfo: navigator.userAgent.substring(0, 80)
+    };
+
+    console.log('[NearMiss] Submitting:', payload);
+
+    const url = API_URL + '?' + new URLSearchParams(payload).toString();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 20000);
+    const res = await fetch(url, { redirect:'follow', signal:controller.signal });
+    clearTimeout(tid);
+    const result = JSON.parse(await res.text());
+
+    console.log('[NearMiss] Response:', result);
+
+    if (result.success) {
+      showResult(true, 'Report Submitted!', result.message || 'Near miss report recorded successfully.', {
+        'Report ID': result.reportId || '-',
+        'Category': selectedCategory,
+        'Location': location,
+        'Incident Area': payload.incidentLocation,
+        'Reported By': selectedEmployee.Name,
+        'Date': payload.incidentDate,
+        'Time': payload.incidentTime
+      });
+    } else {
+      showResult(false, 'Submission Failed', result.error || result.message || 'Unknown error');
+    }
+  } catch(err) {
+    console.error('[NearMiss] Error:', err);
+    showResult(false, 'Error', err.message || 'Network error');
+  }
+}
+
+function showResult(success, title, message, details) {
+  goToStep(3);
+  let html = `
+    <div class="result-icon ${success ? 'success' : 'error'}">${success ? '✓' : '✕'}</div>
+    <h2 style="color:${success ? 'var(--accent)' : 'var(--danger)'}">${title}</h2>
+    <p>${message}</p>`;
+  if (details) {
+    html += '<div class="result-details">';
+    for (const [k,v] of Object.entries(details)) {
+      html += `<div class="row"><span>${k}</span><span>${v}</span></div>`;
+    }
+    html += '</div>';
+  }
+  html += `<button class="btn btn-secondary" style="margin-top:20px" onclick="location.reload()">Submit Another Report</button>`;
+  document.getElementById('resultContent').innerHTML = html;
+}
+</script>
+</body>
+</html>
