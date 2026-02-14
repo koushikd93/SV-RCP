@@ -578,6 +578,11 @@
     <div class="nav-item" onclick="showPage('equipfault', this)">
       <span class="icon">🔴</span> Non-Working Equipment
     </div>
+    <div class="nav-section">Safety</div>
+    <div class="nav-item" onclick="showPage('nearmiss', this)">
+    <span class="icon">⚠️</span> Near Miss Reports
+    </div>
+
     <div class="nav-section">Management</div>
     <div class="nav-item" onclick="showPage('employees', this)">
       <span class="icon">👥</span> Employees
@@ -629,6 +634,12 @@
           <div class="stat-value" id="statMOV" style="color:var(--accent)">--</div>
           <div class="stat-sub" id="statMOVSub">loading...</div>
         </div>
+        <div class="stat-card">
+          <div class="stat-label">⚠️ Near Miss Reports</div>
+          <div class="stat-value" id="statNearMiss" style="color:#f97316">--</div>
+          <div class="stat-sub" id="statNearMissSub">loading...</div>
+        </div>
+
 
       </div>
 
@@ -816,6 +827,53 @@
         </div>
       </div>
     </div>
+    <!-- ===== NEAR MISS PAGE ===== -->
+    <div class="page" id="page-nearmiss">
+     <div class="filter-bar">
+       <div style="display:flex;gap:8px;align-items:center">
+         <label style="font-size:12px;color:var(--text2);white-space:nowrap">Date Range:</label>
+         <input type="date" id="nearMissDateFrom" onchange="filterNearMiss()" style="flex:1">
+         <span style="color:var(--text2)">to</span>
+         <input type="date" id="nearMissDateTo" onchange="filterNearMiss()" style="flex:1">
+       </div>
+       <select id="nearMissFilterLocation" onchange="filterNearMiss()">
+       <option value="">All Locations</option>
+       </select>
+       <select id="nearMissCategory" onchange="filterNearMiss()">
+       <option value="">All Categories</option>
+       <option value="Near Miss">Near Miss</option>
+       <option value="Unsafe Act">Unsafe Act</option>
+       <option value="Unsafe Condition">Unsafe Condition</option>
+       </select>
+       <button class="refresh-btn" onclick="filterNearMiss()">↻ Refresh</button>
+     </div>
+
+     <div class="panel">
+       <div class="panel-header">
+         <div class="panel-title">⚠️ Near Miss Reports</div>
+         <span class="panel-badge" style="background:var(--orange-dim);color:var(--orange)" id="nearMissCount">0 reports</span>
+        </div>
+
+        <div class="table-scroll" style="max-height:600px">
+         <table class="att-table">
+           <thead>
+              <tr>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Location</th>
+                <th>Employee</th>
+                <th>Category</th>
+                <th>Cause</th>
+                <th>Action Taken</th>
+                <th>Weather</th>
+              </tr>
+            </thead>
+          <tbody id="nearMissTable"></tbody>
+         </table>
+        </div>
+      </div>
+    </div>
+
 
     <!-- ===== NON-WORKING EQUIPMENT PAGE ===== -->
     <div class="page" id="page-equipfault">
@@ -866,6 +924,7 @@ let isUsingLiveData = false; // Track whether we have real data
 let allVisitorRecords = [];
 let activeVisitorData = [];
 
+let nearMissData = [];
 // ============================================================
 // API FETCH WITH RETRY
 // ============================================================
@@ -1170,7 +1229,7 @@ function renderWeeklyChart(trend) {
           tension: 0.4,
           pointRadius: 4,
           pointBackgroundColor: '#00e5a0'
-        }
+        },
         //{
           //label: 'Late',
           //data: trend.map(t => t.late),
@@ -1372,6 +1431,53 @@ function downloadQR(canvasId, name) {
   link.download = 'QR_' + name + '.png';
   link.href = canvas.tagName === 'CANVAS' ? canvas.toDataURL('image/png') : canvas.src;
   link.click();
+}
+// ============================================================
+// near miss NAVIGATION & FILTERS
+// ============================================================
+function renderNearMissTable(data) {
+  const table = document.getElementById("nearMissTable");
+  table.innerHTML = "";
+
+  if (!data || data.length === 0) {
+    table.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text3)">No records found</td></tr>`;
+    document.getElementById("nearMissCount").innerText = "0 reports";
+    return;
+  }
+
+  data.forEach(row => {
+    table.innerHTML += `
+      <tr>
+        <td>${row.date || ""}</td>
+        <td>${row.time || ""}</td>
+        <td>${row.location || ""}</td>
+        <td>${row.employee || ""}</td>
+        <td>${row.category || ""}</td>
+        <td>${row.cause || ""}</td>
+        <td>${row.action || ""}</td>
+        <td>${row.weather || ""}</td>
+      </tr>
+    `;
+  });
+
+  document.getElementById("nearMissCount").innerText = data.length + " reports";
+}
+function filterNearMiss() {
+  const from = document.getElementById("nearMissDateFrom").value;
+  const to = document.getElementById("nearMissDateTo").value;
+  const location = document.getElementById("nearMissFilterLocation").value;
+  const category = document.getElementById("nearMissCategory").value;
+
+  let filtered = nearMissData.filter(row => {
+    const rowDate = row.date;
+
+    return (!from || rowDate >= from) &&
+           (!to || rowDate <= to) &&
+           (!location || row.location === location) &&
+           (!category || row.category === category);
+  });
+
+  renderNearMissTable(filtered);
 }
 
 // ============================================================
