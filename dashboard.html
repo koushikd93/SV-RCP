@@ -846,6 +846,8 @@
        <option value="Unsafe Condition">Unsafe Condition</option>
        </select>
        <button class="refresh-btn" onclick="filterNearMiss()">↻ Refresh</button>
+       <button class="refresh-btn" onclick="exportNearMissCSV()">↓ Export CSV</button>
+
      </div>
 
      <div class="panel">
@@ -925,6 +927,7 @@ let allVisitorRecords = [];
 let activeVisitorData = [];
 
 let nearMissData = [];
+let currentNearMissRecords = [];
 // ============================================================
 // API FETCH WITH RETRY
 // ============================================================
@@ -1462,7 +1465,11 @@ function renderNearMissTable(data) {
   table.innerHTML = "";
 
   if (!data || data.length === 0) {
-    table.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text3)">No records found</td></tr>`;
+    table.innerHTML = `<tr>
+      <td colspan="8" style="text-align:center;color:var(--text3)">
+        No records found
+      </td>
+    </tr>`;
     document.getElementById("nearMissCount").innerText = "0 reports";
     return;
   }
@@ -1470,20 +1477,22 @@ function renderNearMissTable(data) {
   data.forEach(row => {
     table.innerHTML += `
       <tr>
-        <td>${row.date || ""}</td>
-        <td>${row.time || ""}</td>
-        <td>${row.location || ""}</td>
-        <td>${row.employee || ""}</td>
-        <td>${row.category || ""}</td>
-        <td>${row.cause || ""}</td>
-        <td>${row.action || ""}</td>
-        <td>${row.weather || ""}</td>
+        <td>${row.Date || ""}</td>
+        <td>${row.Time || ""}</td>
+        <td>${row.Location || ""}</td>
+        <td>${row.EmployeeName || ""}</td>
+        <td>${row.Category || ""}</td>
+        <td>${row.Cause || ""}</td>
+        <td>${row.ActionTaken || ""}</td>
+        <td>${row.Remarks || ""}</td>
       </tr>
     `;
   });
 
-  document.getElementById("nearMissCount").innerText = data.length + " reports";
+  document.getElementById("nearMissCount").innerText =
+    data.length + " reports";
 }
+
 function filterNearMiss() {
   const from = document.getElementById("nearMissDateFrom").value;
   const to = document.getElementById("nearMissDateTo").value;
@@ -1491,15 +1500,62 @@ function filterNearMiss() {
   const category = document.getElementById("nearMissCategory").value;
 
   let filtered = nearMissData.filter(row => {
-    const rowDate = row.date;
+    const rowDate = row.Date;
 
     return (!from || rowDate >= from) &&
            (!to || rowDate <= to) &&
-           (!location || row.location === location) &&
-           (!category || row.category === category);
+           (!location || row.Location === location) &&
+           (!category || row.Category === category);
   });
 
+  currentNearMissRecords = filtered;   // 🔥 store for export
   renderNearMissTable(filtered);
+}
+
+function exportNearMissCSV() {
+  if (!currentNearMissRecords || !currentNearMissRecords.length) {
+    alert('No Near Miss records to export.');
+    return;
+  }
+
+  const headers = [
+    'Date',
+    'Time',
+    'Location',
+    'Employee Name',
+    'Category',
+    'Cause',
+    'Incident Location',
+    'Past Incident',
+    'Action Taken',
+    'Remarks',
+    'Submitted Date'
+  ];
+
+  const rows = currentNearMissRecords.map(r => [
+    r.Date,
+    r.Time,
+    r.Location,
+    r.EmployeeName,
+    r.Category,
+    r.Cause,
+    r.IncidentLocation,
+    r.PastIncident,
+    r.ActionTaken,
+    r.Remarks,
+    r.SubmittedDate
+  ]);
+
+  const csv = [
+    headers.join(','),
+    ...rows.map(row => row.map(val => `"${val || ''}"`).join(','))
+  ].join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'near_miss_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
 }
 
 // ============================================================
