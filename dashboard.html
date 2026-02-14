@@ -1161,6 +1161,10 @@ function renderDashboard() {
   // document.getElementById('statLate').textContent = d.summary.lateToday; 
   document.getElementById('statPercent').textContent = d.summary.attendanceRate + '%';
   document.getElementById('statRate').textContent = d.summary.attendanceRate + '% attendance';
+  // 🔥 ADD THESE TWO LINES HERE
+  document.getElementById("statNearMiss").textContent = nearMissData.length;
+  document.getElementById("statNearMissSub").textContent = "Total reports logged";
+  
 
   // Shifts
   document.getElementById('shiftA').textContent = d.shiftBreakdown.A || 0;
