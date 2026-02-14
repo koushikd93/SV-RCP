@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Equipment Status | AttendX</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+  :root {
+    --bg:#0a0e1a;--surface:#111827;--surface2:#1a2236;--border:#2a3454;
+    --accent:#06d6a0;--accent2:#118ab2;--danger:#ef476f;--warn:#ffd166;
+    --purple:#8b5cf6;--text:#e8edf5;--text2:#8892a8;--success:#06d6a0;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+  .container{max-width:600px;margin:0 auto;padding:16px;min-height:100vh}
+  .header{text-align:center;padding:20px 0 12px}
+  .header .logo{font-family:'Space Mono',monospace;font-size:14px;color:var(--accent);letter-spacing:4px;text-transform:uppercase;margin-bottom:4px}
+  .header h1{font-size:20px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .location-badge{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:6px 14px;margin-top:10px;font-size:13px;color:var(--text2)}
+  .location-badge svg{width:14px;height:14px;fill:var(--accent)}
+  .timestamp-bar{text-align:center;font-family:'Space Mono',monospace;font-size:22px;color:var(--accent);padding:6px;letter-spacing:2px}
+  .timestamp-bar .date{font-size:12px;color:var(--text2);letter-spacing:1px;margin-top:2px}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:12px}
+  .card-title{font-size:15px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .card-title .icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px}
+
+  label{display:block;font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:1px}
+  select,input,textarea{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s}
+  select:focus,input:focus,textarea:focus{border-color:var(--accent)}
+  textarea{resize:vertical;min-height:60px}
+
+  /* Equipment List */
+  .equip-list{display:flex;flex-direction:column;gap:8px}
+  .equip-item{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px;transition:border-color .2s}
+  .equip-item.critical{border-left:3px solid var(--danger)}
+  .equip-item.important{border-left:3px solid var(--warn)}
+  .equip-item.highlight{border-left:3px solid var(--accent)}
+  .equip-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .equip-name{font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}
+  .equip-num{font-size:11px;color:var(--text2);font-family:'Space Mono',monospace;background:var(--bg);padding:2px 6px;border-radius:4px}
+
+  .status-btns{display:flex;gap:6px}
+  .status-btn{padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif}
+  .status-btn:hover{border-color:var(--text2)}
+  .status-btn.active-w{background:rgba(6,214,160,.15);border-color:var(--success);color:var(--success)}
+  .status-btn.active-nw{background:rgba(239,71,111,.15);border-color:var(--danger);color:var(--danger)}
+  .status-btn.active-o{background:rgba(255,209,102,.15);border-color:var(--warn);color:var(--warn)}
+
+  .equip-remarks{margin-top:8px;display:none}
+  .equip-remarks.show{display:block}
+
+  .equip-extra{margin-top:10px;display:none;background:var(--bg);border-radius:10px;padding:12px;border:1px solid var(--border)}
+  .equip-extra.show{display:block}
+  .extra-title{font-size:12px;font-weight:600;color:var(--accent);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+  .extra-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .extra-grid .full{grid-column:1/-1}
+
+  .btn{width:100%;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--bg)}
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(6,214,160,.3)}
+  .btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+
+  .result-card{text-align:center;padding:40px 20px}
+  .result-icon{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:36px}
+  .result-icon.success{background:rgba(6,214,160,.15)}
+  .result-icon.error{background:rgba(239,71,111,.15)}
+  .result-card h2{font-size:22px;margin-bottom:8px}
+  .result-card p{color:var(--text2);font-size:14px}
+
+  .loading-overlay{position:fixed;inset:0;background:rgba(10,14,26,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:16px;font-size:14px;color:var(--text2)}
+  .loading-spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .hidden{display:none!important}
+
+  .summary-bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .summary-pill{padding:4px 10px;border-radius:8px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px}
+  .summary-pill.ok{background:rgba(6,214,160,.12);color:var(--success)}
+  .summary-pill.bad{background:rgba(239,71,111,.12);color:var(--danger)}
+  .summary-pill.other{background:rgba(255,209,102,.12);color:var(--warn)}
+
+  .progress-ring{width:100%;height:6px;background:var(--border);border-radius:3px;margin-top:10px;overflow:hidden}
+  .progress-fill{height:100%;border-radius:3px;transition:width .5s}
+</style>
+</head>
+<body>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div>Loading Equipment Module...</div>
+</div>
+
+<div class="container">
+  <div class="header">
+    <div class="logo">● ATTENDX</div>
+    <h1>Equipment Status Update</h1>
+    <div class="location-badge" id="locationBadge">
+      <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+      <span id="locationName">Select Location</span>
+    </div>
+  </div>
+
+  <div class="timestamp-bar">
+    <div id="liveTime">--:--:--</div>
+    <div class="date" id="liveDate">Loading...</div>
+  </div>
+
+  <!-- Location Selection -->
+  <div class="card" id="stepSelect">
+    <div class="card-title"><div class="icon" style="background:rgba(6,214,160,.15)">📍</div> Select Location</div>
+    <div style="margin-bottom:12px">
+      <label>Location</label>
+      <select id="locationSelect"><option value="">-- Select Location --</option></select>
+    </div>
+    <button class="btn btn-primary" id="btnStart" disabled onclick="startEquipmentUpdate()">Start Equipment Check →</button>
+  </div>
+
+  <!-- Equipment Form -->
+  <div class="hidden" id="stepForm">
+    <div class="summary-bar" id="summaryBar">
+      <div class="summary-pill ok" id="sumOk">✓ 0 Working</div>
+      <div class="summary-pill bad" id="sumBad">✕ 0 Not Working</div>
+      <div class="summary-pill other" id="sumOther">◎ 0 Other</div>
+      <div class="summary-pill" style="background:rgba(139,92,246,.12);color:var(--purple)" id="sumPending">⏳ 23 Pending</div>
+    </div>
+    <div class="progress-ring"><div class="progress-fill" id="progressFill" style="width:0%;background:var(--accent)"></div></div>
+
+    <div class="equip-list" id="equipList"></div>
+
+    <div style="margin-top:16px;display:flex;gap:10px">
+      <button class="btn btn-secondary" onclick="goBack()" style="flex:1">← Back</button>
+      <button class="btn btn-primary" id="btnSubmit" onclick="submitAll()" style="flex:2" disabled>Submit Equipment Status</button>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="card hidden" id="stepResult">
+    <div class="result-card" id="resultContent"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const _urlParams = new URLSearchParams(window.location.search);
+const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbyYVlpjwCS5bWBGLeIzx4vS2vGuUkFXG64TEP_mrnzHgS4X37ohEjK4wxsCOwKr7dVoGQ/exec';
+
+// ============================================================
+// EQUIPMENT DEFINITIONS
+// ============================================================
+const EQUIPMENT = [
+  { id:1,  name:'DG',               icon:'⚡', priority:'critical',  hasDGExtra:true },
+  { id:2,  name:'MOV',              icon:'🔌', priority:'critical',  hasMOVExtra:true },
+  { id:3,  name:'Battery',          icon:'🔋', priority:'important' },
+  { id:4,  name:'Solar Panel',      icon:'☀️', priority:'important' },
+  { id:5,  name:'RTU',              icon:'📡', priority:'important' },
+  { id:6,  name:'Telecom Panel',    icon:'📶', priority:'important' },
+  { id:7,  name:'Telephone',        icon:'📞', priority:'' },
+  { id:8,  name:'Charger',          icon:'🔌', priority:'' },
+  { id:9,  name:'ACDB',             icon:'⚙️', priority:'important' },
+  { id:10, name:'AMF',              icon:'🔧', priority:'important' },
+  { id:11, name:'Transformer',      icon:'🏗️', priority:'important' },
+  { id:12, name:'EEE',              icon:'💡', priority:'' },
+  { id:13, name:'PT',               icon:'📊', priority:'' },
+  { id:14, name:'TT',               icon:'🌡️', priority:'' },
+  { id:15, name:'HCD',              icon:'🔩', priority:'' },
+  { id:16, name:'MSD',              icon:'📦', priority:'' },
+  { id:17, name:'Earth Pit',        icon:'🌍', priority:'' },
+  { id:18, name:'TRU',              icon:'🔄', priority:'' },
+  { id:19, name:'CCTV',             icon:'📹', priority:'highlight' },
+  { id:20, name:'Fire Extinguishers',icon:'🧯', priority:'highlight' },
+  { id:21, name:'FLP Lights',       icon:'💡', priority:'' },
+  { id:22, name:'Power Fencing',    icon:'🔒', priority:'highlight' },
+  { id:23, name:'Concertina',       icon:'🪢', priority:'' }
+];
+
+let equipmentStatus = {};
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('load', async () => {
+  updateClock(); setInterval(updateClock, 1000);
+  parseURLParams();
+  try {
+    await loadLocations();
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  } catch(e) {
+    document.getElementById('loadingOverlay').innerHTML = `<div style="color:var(--danger);text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:16px">⚠️</div><h3>Load Error</h3><p style="margin-top:8px;font-size:13px;color:var(--text2)">${e.message}</p><button class="btn btn-primary" style="margin-top:16px;width:auto;padding:12px 24px" onclick="location.reload()">Retry</button></div>`;
+  }
+});
+
+function parseURLParams() {
+  const loc = _urlParams.get('location') || _urlParams.get('loc') || '';
+  if (loc) document.getElementById('locationName').textContent = loc;
+  window._qrLocation = loc;
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('liveTime').textContent = now.toLocaleTimeString('en-US',{hour12:false});
+  document.getElementById('liveDate').textContent = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'short',day:'numeric'});
+}
+
+async function apiGet(params) {
+  if (!API_URL) return { success:false, error:'No API' };
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 15000);
+  const res = await fetch(url, { redirect:'follow', signal:controller.signal });
+  clearTimeout(tid);
+  return JSON.parse(await res.text());
+}
+
+async function loadLocations() {
+  const result = await apiGet({ action:'getLocations' });
+  const sel = document.getElementById('locationSelect');
+  sel.innerHTML = '<option value="">-- Select Location --</option>';
+  if (result.success && result.locations) {
+    result.locations.forEach(l => {
+      const n = l.LocationName || l;
+      const opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      if (window._qrLocation && n === window._qrLocation) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    if (window._qrLocation && sel.value) {
+      document.getElementById('locationName').textContent = sel.value;
+      document.getElementById('btnStart').disabled = false;
+    }
+  }
+}
+
+document.getElementById('locationSelect').addEventListener('change', function() {
+  document.getElementById('locationName').textContent = this.value || 'Select Location';
+  document.getElementById('btnStart').disabled = !this.value;
+});
+
+// ============================================================
+// BUILD EQUIPMENT FORM
+// ============================================================
+function startEquipmentUpdate() {
+  document.getElementById('stepSelect').classList.add('hidden');
+  document.getElementById('stepForm').classList.remove('hidden');
+  equipmentStatus = {};
+  buildEquipmentList();
+}
+
+function goBack() {
+  document.getElementById('stepForm').classList.add('hidden');
+  document.getElementById('stepSelect').classList.remove('hidden');
+}
+
+function buildEquipmentList() {
+  const list = document.getElementById('equipList');
+  list.innerHTML = '';
+
+  EQUIPMENT.forEach(eq => {
+    const priorityClass = eq.priority || '';
+    const div = document.createElement('div');
+    div.className = `equip-item ${priorityClass}`;
+    div.id = `equip-${eq.id}`;
+
+    let extraHTML = '';
+
+    // DG extra fields
+    if (eq.hasDGExtra) {
+      extraHTML = `
+        <div class="equip-extra" id="dgExtra-${eq.id}">
+          <div class="extra-title">⚡ DG Additional Details</div>
+          <div class="extra-grid">
+            <div>
+              <label>Fuel Filling Date</label>
+              <input type="date" id="dgFuelDate-${eq.id}">
+            </div>
+            <div>
+              <label>Diesel Qty (Ltrs)</label>
+              <input type="number" id="dgFuelQty-${eq.id}" placeholder="e.g. 50" min="0" step="0.5">
+            </div>
+            <div>
+              <label>Current Fuel Level (Ltrs)</label>
+              <input type="number" id="dgCurrentFuel-${eq.id}" placeholder="e.g. 30" min="0" step="0.5">
+            </div>
+            <div>
+              <label>Total DG Run Hours</label>
+              <input type="number" id="dgTotalHours-${eq.id}" placeholder="e.g. 1500" min="0" step="0.1">
+            </div>
+            <div>
+              <label>Trail Run Date</label>
+              <input type="date" id="dgTrailDate-${eq.id}">
+            </div>
+            <div>
+              <label>Trail Running Time (Mins)</label>
+              <input type="number" id="dgRunTime-${eq.id}" placeholder="e.g. 30" min="0">
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // MOV extra field
+    if (eq.hasMOVExtra) {
+      extraHTML = `
+        <div class="equip-extra" id="movExtra-${eq.id}">
+          <div class="extra-title">🔌 MOV Additional Details</div>
+          <div class="extra-grid">
+            <div class="full">
+              <label>MOV Remote Testing Date</label>
+              <input type="date" id="movTestDate-${eq.id}">
+            </div>
+          </div>
+        </div>`;
+    }
+
+    div.innerHTML = `
+      <div class="equip-header">
+        <div class="equip-name">
+          <span class="equip-num">#${eq.id}</span>
+          ${eq.icon} ${eq.name}
+          ${eq.priority === 'critical' ? '<span style="color:var(--danger);font-size:11px;font-weight:700">★ CRITICAL</span>' : ''}
+        </div>
+      </div>
+      <div class="status-btns">
+        <button class="status-btn" onclick="setStatus(${eq.id},'Working',this)" data-s="w">✓ Working</button>
+        <button class="status-btn" onclick="setStatus(${eq.id},'Not Working',this)" data-s="nw">✕ Not Working</button>
+        <button class="status-btn" onclick="setStatus(${eq.id},'Other',this)" data-s="o">◎ Other</button>
+      </div>
+      <div class="equip-remarks" id="remarks-${eq.id}">
+        <textarea id="remarkText-${eq.id}" placeholder="Describe the issue or status..." rows="2"></textarea>
+      </div>
+      ${extraHTML}
+    `;
+    list.appendChild(div);
+  });
+
+  // Show DG extra fields always (they're informational even when working)
+  EQUIPMENT.forEach(eq => {
+    if (eq.hasDGExtra) document.getElementById(`dgExtra-${eq.id}`).classList.add('show');
+    if (eq.hasMOVExtra) document.getElementById(`movExtra-${eq.id}`).classList.add('show');
+  });
+}
+
+function setStatus(id, status, btn) {
+  // Toggle buttons
+  const parent = btn.parentElement;
+  parent.querySelectorAll('.status-btn').forEach(b => b.className = 'status-btn');
+  if (status === 'Working') btn.classList.add('active-w');
+  else if (status === 'Not Working') btn.classList.add('active-nw');
+  else btn.classList.add('active-o');
+
+  equipmentStatus[id] = status;
+
+  // Show/hide remarks
+  const remarksEl = document.getElementById(`remarks-${id}`);
+  if (status === 'Not Working' || status === 'Other') {
+    remarksEl.classList.add('show');
+  } else {
+    remarksEl.classList.remove('show');
+  }
+
+  updateSummary();
+}
+
+function updateSummary() {
+  const vals = Object.values(equipmentStatus);
+  const w = vals.filter(v => v === 'Working').length;
+  const nw = vals.filter(v => v === 'Not Working').length;
+  const o = vals.filter(v => v === 'Other').length;
+  const pending = EQUIPMENT.length - vals.length;
+
+  document.getElementById('sumOk').textContent = `✓ ${w} Working`;
+  document.getElementById('sumBad').textContent = `✕ ${nw} Not Working`;
+  document.getElementById('sumOther').textContent = `◎ ${o} Other`;
+  document.getElementById('sumPending').textContent = `⏳ ${pending} Pending`;
+
+  const pct = Math.round((vals.length / EQUIPMENT.length) * 100);
+  const fill = document.getElementById('progressFill');
+  fill.style.width = pct + '%';
+  fill.style.background = nw > 0 ? 'var(--danger)' : 'var(--accent)';
+
+  // Enable submit when ALL equipment have status
+  document.getElementById('btnSubmit').disabled = vals.length < EQUIPMENT.length;
+}
+
+// ============================================================
+// SUBMIT
+// ============================================================
+async function submitAll() {
+  const btn = document.getElementById('btnSubmit');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="loading-spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin-right:8px"></div> Submitting...';
+
+  try {
+    const location = document.getElementById('locationSelect').value;
+    const items = EQUIPMENT.map(eq => {
+      const item = {
+        n: eq.name,
+        s: equipmentStatus[eq.id] || 'Pending',
+        r: ''
+      };
+
+      // Remarks
+      const remarkEl = document.getElementById(`remarkText-${eq.id}`);
+      if (remarkEl && remarkEl.value.trim()) item.r = remarkEl.value.trim();
+
+      // DG extra data
+      if (eq.hasDGExtra) {
+        item.dg = {
+          fuelDate: gv(`dgFuelDate-${eq.id}`),
+          fuelQty: gv(`dgFuelQty-${eq.id}`),
+          currentFuel: gv(`dgCurrentFuel-${eq.id}`),
+          trailDate: gv(`dgTrailDate-${eq.id}`),
+          runTime: gv(`dgRunTime-${eq.id}`),
+          totalHours: gv(`dgTotalHours-${eq.id}`)
+        };
+      }
+
+      // MOV extra data
+      if (eq.hasMOVExtra) {
+        item.mov = {
+          testDate: gv(`movTestDate-${eq.id}`)
+        };
+      }
+
+      return item;
+    });
+
+    // Send as JSON in URL param
+    const payload = {
+      action: 'submitEquipmentStatus',
+      location: location,
+      data: JSON.stringify(items),
+      deviceInfo: navigator.userAgent.substring(0, 80)
+    };
+
+    console.log('[Equipment] Submitting:', payload);
+
+    const url = API_URL + '?' + new URLSearchParams(payload).toString();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 25000);
+
+    let result;
+    // Try GET first (URL might be long; if fails try POST fallback)
+    if (url.length > 7500) {
+      // URL too long, use POST with text/plain
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(tid);
+      result = JSON.parse(await res.text());
+    } else {
+      const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+      clearTimeout(tid);
+      result = JSON.parse(await res.text());
+    }
+
+    console.log('[Equipment] Response:', result);
+
+    if (result.success) {
+      const nw = Object.values(equipmentStatus).filter(v => v === 'Not Working').length;
+      const w = Object.values(equipmentStatus).filter(v => v === 'Working').length;
+      showResult(true, 'Equipment Status Submitted!', result.message || `${w} working, ${nw} not working`, {
+        'Location': location,
+        'Working': w + '/' + EQUIPMENT.length,
+        'Not Working': nw,
+        'Time': new Date().toLocaleTimeString(),
+        'Date': new Date().toLocaleDateString()
+      });
+    } else {
+      showResult(false, 'Submission Failed', result.error || result.message || 'Unknown error');
+    }
+  } catch(err) {
+    console.error('[Equipment] Submit error:', err);
+    showResult(false, 'Error', err.message || 'Network error');
+  }
+}
+
+function gv(id) {
+  const el = document.getElementById(id);
+  return el ? el.value : '';
+}
+
+function showResult(success, title, message, details) {
+  document.getElementById('stepForm').classList.add('hidden');
+  document.getElementById('stepResult').classList.remove('hidden');
+  let html = `
+    <div class="result-icon ${success ? 'success' : 'error'}">${success ? '✓' : '✕'}</div>
+    <h2 style="color:${success ? 'var(--accent)' : 'var(--danger)'}">${title}</h2>
+    <p>${message}</p>`;
+  if (details) {
+    html += '<div style="margin-top:20px;text-align:left">';
+    for (const [k,v] of Object.entries(details)) {
+      html += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px"><span style="color:var(--text2)">${k}</span><span>${v}</span></div>`;
+    }
+    html += '</div>';
+  }
+  html += `<button class="btn btn-secondary" style="margin-top:20px" onclick="location.reload()">Done</button>`;
+  document.getElementById('resultContent').innerHTML = html;
+}
+</script>
+</body>
+</html>
