@@ -200,7 +200,7 @@
   /* STAT CARDS */
   .stats-grid {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 16px;
     margin-bottom: 24px;
   }
@@ -580,6 +580,13 @@
     <div class="nav-item" onclick="showPage('activevisitors', this)">
       <span class="icon">🟢</span> Active Visitors
     </div>
+    <div class="nav-section">Equipment</div>
+    <div class="nav-item" onclick="showPage('equipstatus', this)">
+      <span class="icon">⚙️</span> Equipment Status
+    </div>
+    <div class="nav-item" onclick="showPage('equipfault', this)">
+      <span class="icon">🔴</span> Non-Working Equipment
+    </div>
 
 
     <div class="sidebar-footer">
@@ -611,6 +618,18 @@
           <div class="stat-label">Visitors Today</div>
           <div class="stat-value" id="statVisitors" style="color:var(--purple)">--</div>
           <div class="stat-sub" id="statVisitorActive">-- active now</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-label">⚡ DG Status</div>
+          <div class="stat-value" id="statDG" style="color:var(--accent)">--</div>
+          <div class="stat-sub" id="statDGSub">loading...</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-label">🔌 MOV Status</div>
+          <div class="stat-value" id="statMOV" style="color:var(--accent)">--</div>
+          <div class="stat-sub" id="statMOVSub">loading...</div>
         </div>
 
       </div>
@@ -738,8 +757,6 @@
         </div>
         <div id="qrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px"></div>
       </div>
-    </div> <!-- CLOSE page-qrcodes -->
-
 
     <!-- ===== VISITOR LOG PAGE ===== -->
     <div class="page" id="page-visitors">
@@ -783,6 +800,58 @@
         <button class="refresh-btn" style="margin-top:12px" onclick="refreshActiveVisitors()">↻ Refresh Active Visitors</button>
       </div>
     </div>
+
+    <!-- ===== EQUIPMENT STATUS PAGE ===== -->
+    <div class="page" id="page-equipstatus">
+      <div class="filter-bar">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:12px;color:var(--text2);white-space:nowrap">Date:</label>
+          <input type="date" id="equipDateFrom" onchange="filterEquipmentStatus()" style="flex:1">
+          <span style="color:var(--text2)">to</span>
+          <input type="date" id="equipDateTo" onchange="filterEquipmentStatus()" style="flex:1">
+        </div>
+        <select id="equipFilterLocation" onchange="filterEquipmentStatus()"><option value="">All Locations</option></select>
+        <button class="refresh-btn" onclick="filterEquipmentStatus()">↻ Refresh</button>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">⚙️ Equipment Status by Location</div>
+          <span class="panel-badge" style="background:var(--accent-dim);color:var(--accent)" id="equipStatusCount">0 records</span>
+        </div>
+        <div class="table-scroll" style="max-height:600px">
+          <table class="att-table">
+            <thead><tr><th>Date</th><th>Location</th><th>Equipment</th><th>Status</th><th>Remarks</th><th>DG/MOV Details</th></tr></thead>
+            <tbody id="equipStatusTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== NON-WORKING EQUIPMENT PAGE ===== -->
+    <div class="page" id="page-equipfault">
+      <div class="filter-bar">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:12px;color:var(--text2);white-space:nowrap">Date:</label>
+          <input type="date" id="faultDateFrom" onchange="filterFaultEquipment()" style="flex:1">
+          <span style="color:var(--text2)">to</span>
+          <input type="date" id="faultDateTo" onchange="filterFaultEquipment()" style="flex:1">
+        </div>
+        <select id="faultFilterLocation" onchange="filterFaultEquipment()"><option value="">All Locations</option></select>
+        <button class="refresh-btn" onclick="filterFaultEquipment()">↻ Refresh</button>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">🔴 Non-Working / Faulty Equipment</div>
+          <span class="panel-badge" style="background:rgba(239,71,111,.15);color:var(--danger)" id="faultCount">0 issues</span>
+        </div>
+        <div class="table-scroll" style="max-height:600px">
+          <table class="att-table">
+            <thead><tr><th>Date</th><th>Location</th><th>Equipment</th><th>Status</th><th>Remarks</th><th>Details</th></tr></thead>
+            <tbody id="faultTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
     </div>
 
 
@@ -796,7 +865,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = 'https://script.google.com/macros/s/AKfycbyYVlpjwCS5bWBGLeIzx4vS2vGuUkFXG64TEP_mrnzHgS4X37ohEjK4wxsCOwKr7dVoGQ/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbyYVlpjwCS5bWBGLeIzx4vS2vGuUkFXG64TEP_mrnzHgS4X37ohEjK4wxsCOwKr7dVoGQ/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -1070,6 +1139,11 @@ function renderDashboard() {
   if (typeof renderVisitorDashboard === 'function') {
     renderVisitorDashboard(d);
   }
+
+  // EQUIPMENT DASHBOARD RENDER
+  if (typeof renderEquipmentSummary === 'function') {
+    renderEquipmentSummary();
+  }
 }
 
 function renderWeeklyChart(trend) {
@@ -1312,7 +1386,9 @@ function showPage(page, el) {
     locations: 'Office Locations',
     qrcodes: 'QR Code Generator',
     visitors: 'Visitor Log',
-    activevisitors: 'Active Visitors'
+    activevisitors: 'Active Visitors',
+    equipstatus: 'Equipment Status',
+    equipfault: 'Non-Working Equipment'
   };
   document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
   document.querySelector('.sidebar').classList.remove('open');
@@ -1320,6 +1396,8 @@ function showPage(page, el) {
   if (page === 'records') filterRecords();
   if (page === 'visitors' && typeof filterVisitors === 'function') filterVisitors();
   if (page === 'activevisitors' && typeof refreshActiveVisitors === 'function') refreshActiveVisitors();
+  if (page === 'equipstatus') filterEquipmentStatus();
+  if (page === 'equipfault') filterFaultEquipment();
 }
 
 async function filterRecords() {
@@ -1420,28 +1498,60 @@ function exportCSV() {
 // ============================================================
 
 // Fetch visitor summary and update overview stats
-function renderVisitorDashboard(d) {
-  if (!d) return;
-
-  const totalEl = document.getElementById('statVisitors');
-  const activeEl = document.getElementById('statVisitorActive');
-
-  if (!totalEl || !activeEl) {
-    console.warn('[Visitors] Stat elements not found');
+async function renderVisitorDashboard(d) {
+  // If getDashboardData already includes visitor data, use it
+  if (d && d.visitorSummary) {
+    document.getElementById('statVisitors').textContent = d.visitorSummary.totalToday || 0;
+    document.getElementById('statVisitorActive').textContent = (d.visitorSummary.activeNow || 0) + ' active now';
+    console.log('[Visitors] ✅ Using bundled visitor summary:', d.visitorSummary);
     return;
   }
 
-  console.log('[Visitors] Rendering:', d.visitorSummary);
+  // getDashboardData doesn't include visitor data — fetch separately
+  if (!API_URL) {
+    console.warn('[Visitors] No API_URL, skipping');
+    return;
+  }
 
-  if (d.visitorSummary) {
-    totalEl.textContent = d.visitorSummary.totalToday || 0;
-    activeEl.textContent = (d.visitorSummary.activeNow || 0) + ' active now';
-  } else {
-    totalEl.textContent = 0;
-    activeEl.textContent = '0 active now';
+  try {
+    console.log('[Visitors] Fetching visitor dashboard data separately...');
+    const url = API_URL + '?' + new URLSearchParams({ action: 'getVisitorDashboardData' }).toString();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+    clearTimeout(tid);
+    const text = await res.text();
+    console.log('[Visitors] Raw response:', text.substring(0, 200));
+
+    const data = JSON.parse(text);
+
+    if (data.error) {
+      // Route doesn't exist in this deployment
+      console.error('[Visitors] ❌ API error:', data.error);
+      if (data.error.includes('Invalid action')) {
+        console.error('[Visitors] ❌ The dashboard API deployment does NOT have visitor routes!');
+        console.error('[Visitors] Update the dashboard API_URL or redeploy with visitor code.');
+        document.getElementById('statVisitors').textContent = '!';
+        document.getElementById('statVisitorActive').textContent = 'API needs update';
+      }
+      return;
+    }
+
+    if (data.success && data.summary) {
+      document.getElementById('statVisitors').textContent = data.summary.totalToday || 0;
+      document.getElementById('statVisitorActive').textContent = (data.summary.activeNow || 0) + ' active now';
+      allVisitorRecords = data.allRecords || data.todayRecords || [];
+      activeVisitorData = data.activeVisitors || [];
+      console.log('[Visitors] ✅ Loaded visitor summary:', data.summary);
+    } else {
+      console.warn('[Visitors] Unexpected response:', data);
+    }
+  } catch (err) {
+    console.warn('[Visitors] Failed to fetch visitor data:', err.message);
+    document.getElementById('statVisitors').textContent = '?';
+    document.getElementById('statVisitorActive').textContent = 'unavailable';
   }
 }
-
 
 // Visitor Log page - fetch and display visitor records with filters
 async function filterVisitors() {
@@ -1558,6 +1668,226 @@ async function refreshActiveVisitors() {
   } catch (err) {
     console.warn('[ActiveVisitors] Error:', err.message);
     tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)">Failed to load: ' + err.message + '</td></tr>';
+  }
+}
+
+// ============================================================
+// EQUIPMENT MODULE
+// ============================================================
+
+// Fetch equipment summary for overview page (DG + MOV stats)
+async function renderEquipmentSummary() {
+  if (!API_URL) return;
+  try {
+    const url = API_URL + '?' + new URLSearchParams({ action: 'getEquipmentSummary' }).toString();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 12000);
+    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+    clearTimeout(tid);
+    const text = await res.text();
+    const data = JSON.parse(text);
+
+    if (data.error && data.error.includes('Invalid action')) {
+      console.warn('[Equipment] ❌ API does not have equipment routes yet. Add GAS code and redeploy.');
+      document.getElementById('statDG').textContent = '!';
+      document.getElementById('statDGSub').textContent = 'API needs update';
+      document.getElementById('statMOV').textContent = '!';
+      document.getElementById('statMOVSub').textContent = 'API needs update';
+      return;
+    }
+
+    if (data.success) {
+      // DG summary
+      const dg = data.dgSummary || {};
+      const dgWorking = dg.working || 0;
+      const dgTotal = dg.total || 0;
+      const dgEl = document.getElementById('statDG');
+      const dgSub = document.getElementById('statDGSub');
+      if (dgTotal > 0) {
+        dgEl.textContent = dgWorking + '/' + dgTotal;
+        dgEl.style.color = dgWorking === dgTotal ? 'var(--accent)' : 'var(--danger)';
+        dgSub.textContent = dgWorking === dgTotal ? 'All locations OK' : (dgTotal - dgWorking) + ' location(s) down';
+      } else {
+        dgEl.textContent = '--';
+        dgSub.textContent = 'No data today';
+      }
+
+      // MOV summary
+      const mov = data.movSummary || {};
+      const movWorking = mov.working || 0;
+      const movTotal = mov.total || 0;
+      const movEl = document.getElementById('statMOV');
+      const movSub = document.getElementById('statMOVSub');
+      if (movTotal > 0) {
+        movEl.textContent = movWorking + '/' + movTotal;
+        movEl.style.color = movWorking === movTotal ? 'var(--accent)' : 'var(--danger)';
+        movSub.textContent = movWorking === movTotal ? 'All locations OK' : (movTotal - movWorking) + ' location(s) down';
+      } else {
+        movEl.textContent = '--';
+        movSub.textContent = 'No data today';
+      }
+
+      console.log('[Equipment] ✅ Summary loaded:', data);
+    }
+  } catch (err) {
+    console.warn('[Equipment] Summary fetch failed:', err.message);
+    document.getElementById('statDG').textContent = '?';
+    document.getElementById('statDGSub').textContent = 'unavailable';
+    document.getElementById('statMOV').textContent = '?';
+    document.getElementById('statMOVSub').textContent = 'unavailable';
+  }
+}
+
+// Equipment Status page — location-wise with date/location filters
+async function filterEquipmentStatus() {
+  const dateFrom = document.getElementById('equipDateFrom').value;
+  const dateTo = document.getElementById('equipDateTo').value;
+  const loc = document.getElementById('equipFilterLocation').value;
+  const tbody = document.getElementById('equipStatusTable');
+
+  if (!API_URL) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text3)">No API</td></tr>'; return; }
+
+  // Populate location filter
+  const locFilter = document.getElementById('equipFilterLocation');
+  if (locFilter.options.length <= 1 && dashboardData && dashboardData.locations) {
+    dashboardData.locations.forEach(l => {
+      const n = l.LocationName || l;
+      if (![...locFilter.options].some(o => o.value === n)) {
+        locFilter.innerHTML += `<option value="${n}">${n}</option>`;
+      }
+    });
+  }
+
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text3)"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Loading...</td></tr>';
+
+  try {
+    const params = { action: 'getEquipmentStatus' };
+    if (dateFrom) params.dateFrom = dateFrom;
+    if (dateTo) params.dateTo = dateTo;
+    if (loc) params.location = loc;
+    if (dateFrom && !dateTo) params.date = dateFrom;
+    if (dateFrom === dateTo && dateFrom) params.date = dateFrom;
+
+    const url = API_URL + '?' + new URLSearchParams(params).toString();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+    clearTimeout(tid);
+    const data = JSON.parse(await res.text());
+
+    if (data.success) {
+      let records = data.records || [];
+      if (dateFrom && dateTo && dateFrom !== dateTo) {
+        records = records.filter(r => r.Date >= dateFrom && r.Date <= dateTo);
+      }
+
+      document.getElementById('equipStatusCount').textContent = records.length + ' record' + (records.length !== 1 ? 's' : '');
+
+      tbody.innerHTML = records.map(r => {
+        const sc = r.Status === 'Working' ? 'on-time' : r.Status === 'Not Working' ? 'very-late' : 'late';
+        let details = '';
+        if (r.ExtraData) {
+          try {
+            const ex = typeof r.ExtraData === 'string' ? JSON.parse(r.ExtraData) : r.ExtraData;
+            if (ex.dg) {
+              const d = ex.dg;
+              const parts = [];
+              if (d.currentFuel) parts.push('Fuel: ' + d.currentFuel + 'L');
+              if (d.totalHours) parts.push('Hours: ' + d.totalHours);
+              if (d.fuelDate) parts.push('Filled: ' + d.fuelDate);
+              if (d.trailDate) parts.push('Trail: ' + d.trailDate);
+              details = parts.join(' | ');
+            }
+            if (ex.mov) {
+              if (ex.mov.testDate) details = 'Test: ' + ex.mov.testDate;
+            }
+          } catch(e) {}
+        }
+        return `<tr>
+          <td style="font-family:'JetBrains Mono';font-size:12px">${r.Date}</td>
+          <td>${r.Location}</td>
+          <td style="font-weight:500">${r.Equipment}</td>
+          <td><span class="status-pill ${sc}">${r.Status}</span></td>
+          <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis">${r.Remarks || '-'}</td>
+          <td style="font-size:11px;color:var(--text2)">${details || '-'}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text3)">No equipment records found. Use the Equipment page to submit status.</td></tr>';
+    } else {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text3)">Error: ${data.error || 'Unknown'}</td></tr>`;
+    }
+  } catch(err) {
+    console.warn('[EquipStatus] Error:', err.message);
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text3)">Failed: ${err.message}</td></tr>`;
+  }
+}
+
+// Non-Working Equipment page
+async function filterFaultEquipment() {
+  const dateFrom = document.getElementById('faultDateFrom').value;
+  const dateTo = document.getElementById('faultDateTo').value;
+  const loc = document.getElementById('faultFilterLocation').value;
+  const tbody = document.getElementById('faultTable');
+
+  if (!API_URL) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text3)">No API</td></tr>'; return; }
+
+  // Populate location filter
+  const locFilter = document.getElementById('faultFilterLocation');
+  if (locFilter.options.length <= 1 && dashboardData && dashboardData.locations) {
+    dashboardData.locations.forEach(l => {
+      const n = l.LocationName || l;
+      if (![...locFilter.options].some(o => o.value === n)) {
+        locFilter.innerHTML += `<option value="${n}">${n}</option>`;
+      }
+    });
+  }
+
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text3)"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Loading...</td></tr>';
+
+  try {
+    const params = { action: 'getNonWorkingEquipment' };
+    if (dateFrom) params.dateFrom = dateFrom;
+    if (dateTo) params.dateTo = dateTo;
+    if (loc) params.location = loc;
+
+    const url = API_URL + '?' + new URLSearchParams(params).toString();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+    clearTimeout(tid);
+    const data = JSON.parse(await res.text());
+
+    if (data.success) {
+      let records = data.records || [];
+      if (dateFrom && dateTo) {
+        records = records.filter(r => r.Date >= dateFrom && r.Date <= dateTo);
+      }
+
+      document.getElementById('faultCount').textContent = records.length + ' issue' + (records.length !== 1 ? 's' : '');
+
+      tbody.innerHTML = records.map(r => {
+        const sc = r.Status === 'Not Working' ? 'very-late' : 'late';
+        let details = '';
+        if (r.ExtraData) {
+          try {
+            const ex = typeof r.ExtraData === 'string' ? JSON.parse(r.ExtraData) : r.ExtraData;
+            if (ex.dg) { const d = ex.dg; details = [d.currentFuel ? 'Fuel:'+d.currentFuel+'L' : '', d.totalHours ? 'Hrs:'+d.totalHours : ''].filter(Boolean).join(' | '); }
+          } catch(e) {}
+        }
+        return `<tr>
+          <td style="font-family:'JetBrains Mono';font-size:12px">${r.Date}</td>
+          <td>${r.Location}</td>
+          <td style="font-weight:500;color:var(--danger)">${r.Equipment}</td>
+          <td><span class="status-pill ${sc}">${r.Status}</span></td>
+          <td style="font-size:12px">${r.Remarks || '-'}</td>
+          <td style="font-size:11px;color:var(--text2)">${details || '-'}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--accent)">✅ All equipment working! No faults reported.</td></tr>';
+    } else {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text3)">Error: ${data.error || 'Unknown'}</td></tr>`;
+    }
+  } catch(err) {
+    console.warn('[FaultEquip] Error:', err.message);
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text3)">Failed: ${err.message}</td></tr>`;
   }
 }
 
