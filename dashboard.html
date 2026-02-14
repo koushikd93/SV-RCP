@@ -1161,9 +1161,7 @@ function renderDashboard() {
   // document.getElementById('statLate').textContent = d.summary.lateToday; 
   document.getElementById('statPercent').textContent = d.summary.attendanceRate + '%';
   document.getElementById('statRate').textContent = d.summary.attendanceRate + '% attendance';
-  // 🔥 ADD THESE TWO LINES HERE
-  document.getElementById("statNearMiss").textContent = nearMissData.length;
-  document.getElementById("statNearMissSub").textContent = "Total reports logged";
+  
   
 
   // Shifts
@@ -1212,6 +1210,26 @@ function renderDashboard() {
   if (typeof renderEquipmentSummary === 'function') {
     renderEquipmentSummary();
   }
+  // ===== Near Miss Dashboard =====
+  if (d.nearMissSummary) {
+    document.getElementById("statNearMiss").textContent = d.nearMissSummary.today || 0;
+    document.getElementById("statNearMissSub").textContent =
+      d.nearMissSummary.thisWeek + " this week";
+  }
+
+  // Store full records for page
+  nearMissData = d.nearMissRecords || [];
+  renderNearMissTable(nearMissData);
+
+
+ // Populate location filter
+  const nearLoc = document.getElementById("nearMissFilterLocation");
+  nearLoc.innerHTML = '<option value="">All Locations</option>';
+  d.locations.forEach(l => {
+     const name = l.LocationName || l;
+     nearLoc.innerHTML += `<option value="${name}">${name}</option>`;
+   });
+
 }
 
 function renderWeeklyChart(trend) {
@@ -1502,7 +1520,8 @@ function showPage(page, el) {
     visitors: 'Visitor Log',
     activevisitors: 'Active Visitors',
     equipstatus: 'Equipment Status',
-    equipfault: 'Non-Working Equipment'
+    equipfault: 'Non-Working Equipment',
+    nearmiss: 'Near Miss Reports'
   };
   document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
   document.querySelector('.sidebar').classList.remove('open');
@@ -1512,6 +1531,7 @@ function showPage(page, el) {
   if (page === 'activevisitors' && typeof refreshActiveVisitors === 'function') refreshActiveVisitors();
   if (page === 'equipstatus') filterEquipmentStatus();
   if (page === 'equipfault') filterFaultEquipment();
+  if (page === 'nearmiss') filterNearMiss();
 }
 
 async function filterRecords() {
