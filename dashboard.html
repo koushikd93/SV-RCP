@@ -28,6 +28,7 @@
     --orange-dim: rgba(245,158,11,0.12);
     --red: #ef4444;
     --red-dim: rgba(239,68,68,0.12);
+    --danger: #ef4444;
     --cyan: #06b6d4;
     --cyan-dim: rgba(6,182,212,0.12);
     --text: #e2e8f0;
@@ -758,6 +759,8 @@
         <div id="qrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px"></div>
       </div>
 
+    </div>
+
     <!-- ===== VISITOR LOG PAGE ===== -->
     <div class="page" id="page-visitors">
       <div class="filter-bar">
@@ -1003,8 +1006,24 @@ function getDemoData() {
 window.addEventListener('load', () => {
   document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
   const today = new Date().toISOString().split('T')[0];
-  document.getElementById('filterDateFrom').value = today;
-  document.getElementById('filterDateTo').value = today;
+  
+ // Attendance filters
+ document.getElementById('filterDateFrom').value = today;
+ document.getElementById('filterDateTo').value = today;
+
+ // Visitor filters
+ document.getElementById('visitorDateFrom').value = today;
+ document.getElementById('visitorDateTo').value = today;
+
+ // Equipment filters
+ document.getElementById('equipDateFrom').value = today;
+ document.getElementById('equipDateTo').value = today;
+
+ // Fault filters
+ document.getElementById('faultDateFrom').value = today;
+ document.getElementById('faultDateTo').value = today;
+
+  
   refreshData();
   // FIX: periodic refresh now updates ALL dashboard data, not just occupancy
   setInterval(refreshAllData, 30000);
@@ -1579,7 +1598,15 @@ async function filterVisitors() {
   }
 
   try {
-    const params = { action: 'getVisitorRecords' };
+    
+    const params = {
+    action: 'getVisitorRecords',
+    dateFrom: dateFrom || new Date().toISOString().split('T')[0],
+    dateTo: dateTo || new Date().toISOString().split('T')[0]
+    };
+
+    if (loc) params.location = loc;
+
     if (dateFrom) params.dateFrom = dateFrom;
     if (dateTo) params.dateTo = dateTo;
     if (dateFrom && !dateTo) params.date = dateFrom;
@@ -1761,12 +1788,14 @@ async function filterEquipmentStatus() {
   tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text3)"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Loading...</td></tr>';
 
   try {
-    const params = { action: 'getEquipmentStatus' };
-    if (dateFrom) params.dateFrom = dateFrom;
-    if (dateTo) params.dateTo = dateTo;
-    if (loc) params.location = loc;
-    if (dateFrom && !dateTo) params.date = dateFrom;
-    if (dateFrom === dateTo && dateFrom) params.date = dateFrom;
+    const params = {
+    action: 'getEquipmentStatus',
+    dateFrom: dateFrom || new Date().toISOString().split('T')[0],
+    dateTo: dateTo || new Date().toISOString().split('T')[0]
+   };
+
+   if (loc) params.location = loc;
+
 
     const url = API_URL + '?' + new URLSearchParams(params).toString();
     const controller = new AbortController();
