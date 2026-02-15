@@ -1116,21 +1116,62 @@ async function refreshData() {
 async function refreshAllData() {
   try {
     const liveData = await fetchAPIData(1, 0); // Single attempt for periodic refresh
+
     if (liveData) {
       dashboardData = liveData;
       isUsingLiveData = true;
       updateDataSourceBadge('live');
 
-      // FIX: Re-render the ENTIRE dashboard, not just occupancy
+      // Re-render full dashboard
       renderDashboard();
 
-      document.getElementById('lastRefresh').textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+      // 🔥 If Near Miss page is currently open, refresh it separately
+      const nearMissPage = document.getElementById('page-nearmiss');
+      if (nearMissPage && nearMissPage.classList.contains('active')) {
+        if (typeof fetchNearMissRecords === 'function') {
+          fetchNearMissRecords();
+        }
+      }
+
+      // 🔥 If Equipment page is open, refresh it
+      const equipPage = document.getElementById('page-equipstatus');
+      if (equipPage && equipPage.classList.contains('active')) {
+        filterEquipmentStatus();
+      }
+
+      // 🔥 If Fault page is open, refresh it
+      const faultPage = document.getElementById('page-equipfault');
+      if (faultPage && faultPage.classList.contains('active')) {
+        filterFaultEquipment();
+      }
+
+      // 🔥 If Visitor page is open, refresh it
+      const visitorPage = document.getElementById('page-visitors');
+      if (visitorPage && visitorPage.classList.contains('active')) {
+        if (typeof filterVisitors === 'function') {
+          filterVisitors();
+        }
+      }
+
+      // 🔥 If Active Visitor page is open, refresh it
+      const activeVisitorPage = document.getElementById('page-activevisitors');
+      if (activeVisitorPage && activeVisitorPage.classList.contains('active')) {
+        if (typeof refreshActiveVisitors === 'function') {
+          refreshActiveVisitors();
+        }
+      }
+
+      document.getElementById('lastRefresh').textContent =
+        'Last refresh: ' + new Date().toLocaleTimeString();
+
       console.log('[Periodic] ✅ Full dashboard updated with live data');
     }
+
   } catch (e) {
     console.warn('[Periodic] Refresh error:', e);
   }
 }
+
 
 // ============================================================
 // DATA SOURCE INDICATOR
@@ -1214,15 +1255,15 @@ function renderDashboard() {
     renderEquipmentSummary();
   }
   // ===== Near Miss Dashboard =====
-  if (d.nearMissSummary) {
-    document.getElementById("statNearMiss").textContent = d.nearMissSummary.today || 0;
-    document.getElementById("statNearMissSub").textContent =
-      d.nearMissSummary.thisWeek + " this week";
+ // if (d.nearMissSummary) {
+   // document.getElementById("statNearMiss").textContent = d.nearMissSummary.today || 0;
+   // document.getElementById("statNearMissSub").textContent =
+   //   d.nearMissSummary.thisWeek + " this week";
   }
 
   // Store full records for page
-  nearMissData = d.nearMissRecords || [];
-  renderNearMissTable(nearMissData);
+  //nearMissData = d.nearMissRecords || [];
+  //srenderNearMissTable(nearMissData);
 
 
  // Populate location filter
@@ -1557,6 +1598,54 @@ function exportNearMissCSV() {
   a.download = 'near_miss_' + new Date().toISOString().split('T')[0] + '.csv';
   a.click();
 }
+// ============================================================
+// NEAR MISS MODULE
+// ============================================================
+
+async function fetchNearMissRecords() {
+  const tbody = document.getElementById('nearMissTable');
+
+  if (!API_URL) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text3)">No API configured</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text3)">Loading Near Miss reports...</td></tr>';
+
+  try {
+    const url = API_URL + '?' + new URLSearchParams({
+      action: 'getNearMissRecords'
+    }).toString();
+
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+    clearTimeout(tid);
+
+    const data = JSON.parse(await res.text());
+
+    if (data.success) {
+      nearMissData = data.records || [];
+      currentNearMissRecords = nearMissData;
+
+      renderNearMissTable(nearMissData);
+
+      document.getElementById("statNearMiss").textContent =
+        nearMissData.length;
+
+      document.getElementById("statNearMissSub").textContent =
+        "Total reports";
+
+    } else {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text3)">Error: ${data.error || 'Unknown error'}</td></tr>`;
+    }
+
+  } catch (err) {
+    console.warn('[NearMiss] Error:', err.message);
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text3)">Failed: ${err.message}</td></tr>`;
+  }
+}
 
 // ============================================================
 // NAVIGATION & FILTERS
@@ -1587,7 +1676,8 @@ function showPage(page, el) {
   if (page === 'activevisitors' && typeof refreshActiveVisitors === 'function') refreshActiveVisitors();
   if (page === 'equipstatus') filterEquipmentStatus();
   if (page === 'equipfault') filterFaultEquipment();
-  if (page === 'nearmiss') filterNearMiss();
+  if (page === 'nearmiss') fetchNearMissRecords();
+
 }
 
 async function filterRecords() {
