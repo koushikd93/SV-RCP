@@ -129,6 +129,30 @@
 
     <div class="equip-list" id="equipList"></div>
 
+    <!-- Energy Meter Reading -->
+    <div class="card" style="margin-top:12px;border-left:3px solid var(--purple)">
+      <div class="card-title"><div class="icon" style="background:rgba(139,92,246,.15)">⚡</div> Energy Meter Reading</div>
+      <div style="background:var(--bg);border-radius:10px;padding:12px;border:1px solid var(--border)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label>Meter Reading (kWh) <span style="color:var(--danger)">*</span></label>
+            <input type="number" id="energyReading" placeholder="e.g. 45230.5" min="0" step="0.01" oninput="checkEnergyFilled()">
+          </div>
+          <div>
+            <label>Meter Number / ID</label>
+            <input type="text" id="meterNumber" placeholder="e.g. MR-001">
+          </div>
+          <div style="grid-column:1/-1">
+            <label>Remarks (Optional)</label>
+            <textarea id="energyRemarks" placeholder="Any observations about the meter..." rows="2"></textarea>
+          </div>
+        </div>
+        <div id="energyWarning" class="hidden" style="margin-top:8px;padding:8px 12px;background:rgba(255,209,102,.1);border:1px solid var(--warn);border-radius:8px;font-size:12px;color:var(--warn)">
+          ⚠ Energy meter reading is mandatory for each location update.
+        </div>
+      </div>
+    </div>
+
     <div style="margin-top:16px;display:flex;gap:10px">
       <button class="btn btn-secondary" onclick="goBack()" style="flex:1">← Back</button>
       <button class="btn btn-primary" id="btnSubmit" onclick="submitAll()" style="flex:2" disabled>Submit Equipment Status</button>
@@ -146,7 +170,7 @@
 // CONFIG
 // ============================================================
 const _urlParams = new URLSearchParams(window.location.search);
-const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbxd7krvqYxhUd9hmuWnOOu56OjyeetcstVmz0PhEdt9NKUtpxhI_wBLp8HIz9UsIJ8zIw/exec';
+const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbyYVlpjwCS5bWBGLeIzx4vS2vGuUkFXG64TEP_mrnzHgS4X37ohEjK4wxsCOwKr7dVoGQ/exec';
 
 // ============================================================
 // EQUIPMENT DEFINITIONS
@@ -380,8 +404,14 @@ function updateSummary() {
   fill.style.width = pct + '%';
   fill.style.background = nw > 0 ? 'var(--danger)' : 'var(--accent)';
 
-  // Enable submit when ALL equipment have status
-  document.getElementById('btnSubmit').disabled = vals.length < EQUIPMENT.length;
+  // Enable submit when ALL equipment have status AND energy reading is filled
+  const energyOk = document.getElementById('energyReading').value.trim() !== '';
+  document.getElementById('btnSubmit').disabled = vals.length < EQUIPMENT.length || !energyOk;
+  document.getElementById('energyWarning').classList.toggle('hidden', energyOk);
+}
+
+function checkEnergyFilled() {
+  updateSummary();
 }
 
 // ============================================================
@@ -432,6 +462,9 @@ async function submitAll() {
       action: 'submitEquipmentStatus',
       location: location,
       data: JSON.stringify(items),
+      energyReading: gv('energyReading'),
+      meterNumber: gv('meterNumber'),
+      energyRemarks: gv('energyRemarks'),
       deviceInfo: navigator.userAgent.substring(0, 80)
     };
 
@@ -469,6 +502,7 @@ async function submitAll() {
         'Location': location,
         'Working': w + '/' + EQUIPMENT.length,
         'Not Working': nw,
+        'Energy Reading': gv('energyReading') ? gv('energyReading') + ' kWh' : 'Not entered',
         'Time': new Date().toLocaleTimeString(),
         'Date': new Date().toLocaleDateString()
       });
