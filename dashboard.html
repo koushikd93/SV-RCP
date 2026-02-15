@@ -1218,34 +1218,45 @@ function renderDashboard() {
   if (typeof renderEquipmentSummary === 'function') {
     renderEquipmentSummary();
   }
-  // ===== Near Miss Dashboard =====
+ 
+  // =========================
+  // NEAR MISS DASHBOARD
+  // =========================
   if (d.nearMissSummary) {
-    document.getElementById("statNearMiss").textContent = d.nearMissSummary.today || 0;
-    document.getElementById("statNearMissSub").textContent = d.nearMissSummary.thisWeek + " this week";
+    document.getElementById("statNearMiss").textContent =
+      d.nearMissSummary.today ?? 0;
+
+    document.getElementById("statNearMissSub").textContent =
+      (d.nearMissSummary.thisWeek ?? 0) + " this week";
   }
 
-  
+  // Store Near Miss data safely
+  nearMissData = Array.isArray(d.nearMissRecords)
+    ? d.nearMissRecords
+    : [];
 
- // Store Near Miss records for filtering
- nearMissData = d.nearMissRecords || [];
+  currentNearMissRecords = nearMissData;
 
- // ONLY auto-render table if Near Miss page is active
- const nearMissPage = document.getElementById("page-nearmiss");
- if (nearMissPage && nearMissPage.classList.contains("active")) {
-  filterNearMiss();  // Apply active filters instead of overwriting table
- }
-
+  // Always render table once data is loaded
+  renderNearMissTable(nearMissData);
 
 
- // Populate location filter
+  // =========================
+  // NEAR MISS LOCATION FILTER
+  // =========================
   const nearLoc = document.getElementById("nearMissFilterLocation");
-  nearLoc.innerHTML = '<option value="">All Locations</option>';
-  d.locations.forEach(l => {
-     const name = l.LocationName || l;
-     nearLoc.innerHTML += `<option value="${name}">${name}</option>`;
-   });
+  if (nearLoc && d.locations) {
+    nearLoc.innerHTML = '<option value="">All Locations</option>';
+    d.locations.forEach(l => {
+      const name = l.LocationName || l;
+      nearLoc.innerHTML += `<option value="${name}">${name}</option>`;
+    });
+  }
 
+  console.log("Dashboard rendered successfully");
 }
+
+
 
 function renderWeeklyChart(trend) {
   const ctx = document.getElementById('weeklyChart').getContext('2d');
