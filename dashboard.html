@@ -1072,6 +1072,11 @@ window.addEventListener('load', () => {
  document.getElementById('faultDateFrom').value = today;
  document.getElementById('faultDateTo').value = today;
 
+ // Near Miss filters
+ document.getElementById('nearMissDateFrom').value = today;
+ document.getElementById('nearMissDateTo').value = today;
+
+
   
   refreshData();
   // FIX: periodic refresh now updates ALL dashboard data, not just occupancy
@@ -1216,13 +1221,20 @@ function renderDashboard() {
   // ===== Near Miss Dashboard =====
   if (d.nearMissSummary) {
     document.getElementById("statNearMiss").textContent = d.nearMissSummary.today || 0;
-    document.getElementById("statNearMissSub").textContent =
-      d.nearMissSummary.thisWeek + " this week";
+    document.getElementById("statNearMissSub").textContent = d.nearMissSummary.thisWeek + " this week";
   }
 
-  // Store full records for page
-  nearMissData = d.nearMissRecords || [];
-  renderNearMissTable(nearMissData);
+  
+
+ // Store Near Miss records for filtering
+ nearMissData = d.nearMissRecords || [];
+
+ // ONLY auto-render table if Near Miss page is active
+ const nearMissPage = document.getElementById("page-nearmiss");
+ if (nearMissPage && nearMissPage.classList.contains("active")) {
+  filterNearMiss();  // Apply active filters instead of overwriting table
+ }
+
 
 
  // Populate location filter
@@ -1499,18 +1511,21 @@ function filterNearMiss() {
   const location = document.getElementById("nearMissFilterLocation").value;
   const category = document.getElementById("nearMissCategory").value;
 
-  let filtered = nearMissData.filter(row => {
+  let filtered = (nearMissData || []).filter(row => {
     const rowDate = row.Date;
 
-    return (!from || rowDate >= from) &&
-           (!to || rowDate <= to) &&
-           (!location || row.Location === location) &&
-           (!category || row.Category === category);
+    if (from && rowDate < from) return false;
+    if (to && rowDate > to) return false;
+    if (location && row.Location !== location) return false;
+    if (category && row.Category !== category) return false;
+
+    return true;
   });
 
-  currentNearMissRecords = filtered;   // 🔥 store for export
+  currentNearMissRecords = filtered;
   renderNearMissTable(filtered);
 }
+
 
 function exportNearMissCSV() {
   if (!currentNearMissRecords || !currentNearMissRecords.length) {
