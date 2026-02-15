@@ -52,7 +52,7 @@
     width: 260px;
     background: var(--bg2);
     border-right: 1px solid var(--border);
-    padding: 24px 16px;
+    padding: 24px 20px;
     display: flex;
     flex-direction: column;
     position: fixed;
@@ -599,6 +599,9 @@
     <div class="nav-item" onclick="showPage('equipfault', this)">
       <span class="icon">🔴</span> Non-Working Equipment
     </div>
+    <div class="nav-item" onclick="showPage('energy', this)">
+      <span class="icon">⚡</span> Energy Consumption
+    </div>
     <div class="nav-section">Safety</div>
     <div class="nav-item" onclick="showPage('nearmiss', this)">
     <span class="icon">⚠️</span> Near Miss Reports
@@ -919,6 +922,44 @@
           <table class="att-table">
             <thead><tr><th>Date</th><th>Location</th><th>Equipment</th><th>Status</th><th>Remarks</th><th>Details</th></tr></thead>
             <tbody id="faultTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== ENERGY CONSUMPTION PAGE ===== -->
+    <div class="page" id="page-energy">
+      <div class="filter-bar">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:12px;color:var(--text2);white-space:nowrap">From:</label>
+          <input type="date" id="energyDateFrom" style="flex:1">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:12px;color:var(--text2);white-space:nowrap">To:</label>
+          <input type="date" id="energyDateTo" style="flex:1">
+        </div>
+        <select id="energyFilterLocation"><option value="">All Locations</option></select>
+        <button class="refresh-btn" onclick="calculateEnergyConsumption()">⚡ Calculate</button>
+        <button class="refresh-btn" onclick="exportEnergyCSV()">↓ Export CSV</button>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">⚡ Energy Consumption (kWh)</div>
+          <span class="panel-badge" style="background:rgba(139,92,246,.15);color:var(--purple)" id="energyCount">Select dates to calculate</span>
+        </div>
+        <div id="energySummaryCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px"></div>
+        <div class="table-scroll" style="max-height:600px">
+          <table class="att-table">
+            <thead><tr>
+              <th>Location</th>
+              <th>From Date</th>
+              <th>Reading (kWh)</th>
+              <th>To Date</th>
+              <th>Reading (kWh)</th>
+              <th>Consumption (kWh)</th>
+              <th>Remarks</th>
+            </tr></thead>
+            <tbody id="energyTable"></tbody>
           </table>
         </div>
       </div>
@@ -1626,7 +1667,8 @@ function showPage(page, el) {
     activevisitors: 'Active Visitors',
     equipstatus: 'Equipment Status',
     equipfault: 'Non-Working Equipment',
-    nearmiss: 'Near Miss Reports'
+    nearmiss: 'Near Miss Reports',
+    energy: 'Energy Consumption'
   };
   document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
   document.querySelector('.sidebar').classList.remove('open');
@@ -1637,6 +1679,7 @@ function showPage(page, el) {
   if (page === 'equipstatus') filterEquipmentStatus();
   if (page === 'equipfault') filterFaultEquipment();
   if (page === 'nearmiss') filterNearMiss();
+  if (page === 'energy') initEnergyPage();
 }
 
 async function filterRecords() {
@@ -2221,6 +2264,179 @@ function exportEquipmentCSV() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'equipment_status_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+}
+
+// ============================================================
+// ENERGY CONSUMPTION MODULE
+// ============================================================
+let energyConsumptionData = []; // cache for CSV export
+
+function initEnergyPage() {
+  // Populate location filter
+  const locFilter = document.getElementById('energyFilterLocation');
+  if (locFilter.options.length <= 1 && dashboardData && dashboardData.locations) {
+    dashboardData.locations.forEach(l => {
+      const n = l.LocationName || l;
+      if (![...locFilter.options].some(o => o.value === n)) {
+        locFilter.innerHTML += `<option value="${n}">${n}</option>`;
+      }
+    });
+  }
+
+  // Default dates: 30 days ago → today
+  if (!document.getElementById('energyDateFrom').value) {
+    const today = new Date();
+    const from = new Date(today);
+    from.setDate(from.getDate() - 30);
+    document.getElementById('energyDateTo').value = today.toISOString().split('T')[0];
+    document.getElementById('energyDateFrom').value = from.toISOString().split('T')[0];
+  }
+}
+
+async function calculateEnergyConsumption() {
+  const dateFrom = document.getElementById('energyDateFrom').value;
+  const dateTo = document.getElementById('energyDateTo').value;
+  const loc = document.getElementById('energyFilterLocation').value;
+  const tbody = document.getElementById('energyTable');
+  const summaryDiv = document.getElementById('energySummaryCards');
+
+  if (!dateFrom || !dateTo) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--warn)">⚠ Please select both From and To dates.</td></tr>';
+    return;
+  }
+
+  if (dateFrom > dateTo) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--danger)">❌ From date must be before To date.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text3)"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Fetching energy readings...</td></tr>';
+  summaryDiv.innerHTML = '';
+
+  try {
+    const params = { action: 'getEnergyConsumption', dateFrom: dateFrom, dateTo: dateTo };
+    if (loc) params.location = loc;
+
+    const url = API_URL + '?' + new URLSearchParams(params).toString();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+    clearTimeout(tid);
+    const data = JSON.parse(await res.text());
+
+    if (data.error && data.error.includes('Invalid action')) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--danger)">❌ API does not have energy routes. Update GAS code and redeploy.</td></tr>';
+      return;
+    }
+
+    if (data.success) {
+      const records = data.consumption || [];
+      energyConsumptionData = records;
+
+      document.getElementById('energyCount').textContent = records.length + ' location' + (records.length !== 1 ? 's' : '');
+
+      // Summary cards
+      let totalConsumption = 0;
+      let locWithData = 0;
+      let locMissing = 0;
+
+      records.forEach(r => {
+        if (r.consumption !== null && r.consumption !== undefined) {
+          totalConsumption += r.consumption;
+          locWithData++;
+        } else {
+          locMissing++;
+        }
+      });
+
+      summaryDiv.innerHTML = `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:1px">Total Consumption</div>
+          <div style="font-size:24px;font-weight:700;color:var(--purple);margin-top:4px">${totalConsumption.toFixed(2)} kWh</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:1px">Locations with Data</div>
+          <div style="font-size:24px;font-weight:700;color:var(--accent);margin-top:4px">${locWithData}</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:1px">Missing Data</div>
+          <div style="font-size:24px;font-weight:700;color:${locMissing > 0 ? 'var(--danger)' : 'var(--accent)'};margin-top:4px">${locMissing}</div>
+        </div>
+      `;
+
+      tbody.innerHTML = records.map(r => {
+        const hasFrom = r.fromReading !== null && r.fromReading !== undefined;
+        const hasTo = r.toReading !== null && r.toReading !== undefined;
+        const hasBoth = hasFrom && hasTo;
+        const consumption = hasBoth ? (r.toReading - r.fromReading) : null;
+        const consText = consumption !== null ? consumption.toFixed(2) : '-';
+
+        let remarks = r.remarks || '';
+        if (!hasFrom && !hasTo) remarks = '⚠ No readings found for either date';
+        else if (!hasFrom) remarks = '⚠ No reading found for ' + dateFrom;
+        else if (!hasTo) remarks = '⚠ No reading found for ' + dateTo;
+        else if (consumption < 0) remarks = '⚠ Negative consumption — check meter readings';
+        else if (!remarks) remarks = '✅ OK';
+
+        const rowColor = !hasBoth ? 'color:var(--warn)' : consumption < 0 ? 'color:var(--danger)' : '';
+
+        return `<tr style="${rowColor}">
+          <td style="font-weight:500">${r.location}</td>
+          <td style="font-family:'JetBrains Mono';font-size:12px">${r.fromDate || dateFrom}</td>
+          <td>${hasFrom ? r.fromReading.toFixed(2) : '<span style="color:var(--danger)">N/A</span>'}</td>
+          <td style="font-family:'JetBrains Mono';font-size:12px">${r.toDate || dateTo}</td>
+          <td>${hasTo ? r.toReading.toFixed(2) : '<span style="color:var(--danger)">N/A</span>'}</td>
+          <td style="font-weight:600;font-size:15px">${hasBoth ? consText : '<span style="color:var(--danger)">—</span>'}</td>
+          <td style="font-size:12px">${remarks}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text3)">No energy data found. Submit readings via Equipment page.</td></tr>';
+    } else {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text3)">Error: ${data.error || 'Unknown'}</td></tr>`;
+    }
+  } catch (err) {
+    console.warn('[Energy] Error:', err.message);
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text3)">Failed: ${err.message}</td></tr>`;
+  }
+}
+
+function exportEnergyCSV() {
+  if (!energyConsumptionData.length) {
+    alert('No data to export. Calculate consumption first.');
+    return;
+  }
+
+  const dateFrom = document.getElementById('energyDateFrom').value;
+  const dateTo = document.getElementById('energyDateTo').value;
+
+  const headers = ['Location', 'From Date', 'From Reading (kWh)', 'To Date', 'To Reading (kWh)', 'Consumption (kWh)', 'Remarks'];
+
+  const rows = energyConsumptionData.map(r => {
+    const hasFrom = r.fromReading !== null && r.fromReading !== undefined;
+    const hasTo = r.toReading !== null && r.toReading !== undefined;
+    const consumption = (hasFrom && hasTo) ? (r.toReading - r.fromReading).toFixed(2) : '';
+    let remarks = r.remarks || '';
+    if (!hasFrom && !hasTo) remarks = 'No readings found for either date';
+    else if (!hasFrom) remarks = 'No reading for ' + dateFrom;
+    else if (!hasTo) remarks = 'No reading for ' + dateTo;
+    else if (consumption < 0) remarks = 'Negative consumption - check readings';
+
+    return [
+      r.location,
+      r.fromDate || dateFrom,
+      hasFrom ? r.fromReading.toFixed(2) : 'N/A',
+      r.toDate || dateTo,
+      hasTo ? r.toReading.toFixed(2) : 'N/A',
+      consumption || 'N/A',
+      remarks
+    ];
+  });
+
+  const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'energy_consumption_' + dateFrom + '_to_' + dateTo + '.csv';
   a.click();
 }
 
