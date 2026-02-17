@@ -817,7 +817,7 @@
 // ============================================================
 // Check URL for custom API override: visitor.html?api=YOUR_NEW_DEPLOYMENT_URL
 const _urlParams = new URLSearchParams(window.location.search);
-const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycby62RPYvYMwBTSlbJLQoHPxrMJ9nJfgy4SM56OAxlQjy2I8x0TPDQ5a9PSoNtOSd6rzGg/exec';
+const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbyPe33BFetFwfecW6h7OoNHdVMkZQv2wtsUSEQ-_0WmMsHwB8Gcv-udCEfWVFZBs5mNew/exec';
 if (_urlParams.get('api')) console.log('[CONFIG] Using custom API URL from URL param:', API_URL);
 const MODEL_URLS = [
   'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
@@ -1664,6 +1664,7 @@ function showResult(success, title, message, details = null) {
 </script>
 </body>
 </html>
+
 
 
 
