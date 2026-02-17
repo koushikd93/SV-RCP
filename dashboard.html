@@ -599,12 +599,12 @@
     <div class="nav-item" onclick="showPage('equipfault', this)">
       <span class="icon">🔴</span> Non-Working Equipment
     </div>
-    <div class="nav-item" onclick="showPage('energy', this)">
-      <span class="icon">⚡</span> Energy Consumption
-    </div>
     <div class="nav-section">Safety</div>
     <div class="nav-item" onclick="showPage('nearmiss', this)">
     <span class="icon">⚠️</span> Near Miss Reports
+    </div>
+    <div class="nav-item" onclick="showPage('permits', this)">
+    <span class="icon">📋</span> Work Permits
     </div>
 
     <div class="nav-section">Management</div>
@@ -927,41 +927,48 @@
       </div>
     </div>
 
-    <!-- ===== ENERGY CONSUMPTION PAGE ===== -->
-    <div class="page" id="page-energy">
+    <!-- ===== WORK PERMITS PAGE ===== -->
+    <div class="page" id="page-permits">
       <div class="filter-bar">
         <div style="display:flex;gap:8px;align-items:center">
-          <label style="font-size:12px;color:var(--text2);white-space:nowrap">From:</label>
-          <input type="date" id="energyDateFrom" style="flex:1">
+          <label style="font-size:12px;color:var(--text2);white-space:nowrap">Date:</label>
+          <input type="date" id="wpFilterDateFrom" onchange="filterPermits()" style="flex:1">
+          <span style="color:var(--text2)">to</span>
+          <input type="date" id="wpFilterDateTo" onchange="filterPermits()" style="flex:1">
         </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <label style="font-size:12px;color:var(--text2);white-space:nowrap">To:</label>
-          <input type="date" id="energyDateTo" style="flex:1">
-        </div>
-        <select id="energyFilterLocation"><option value="">All Locations</option></select>
-        <button class="refresh-btn" onclick="calculateEnergyConsumption()">⚡ Calculate</button>
-        <button class="refresh-btn" onclick="exportEnergyCSV()">↓ Export CSV</button>
+        <select id="wpFilterLocation" onchange="filterPermits()"><option value="">All Locations</option></select>
+        <select id="wpFilterStatus" onchange="filterPermits()">
+          <option value="">All Status</option>
+          <option value="Pending">Pending Approval</option>
+          <option value="Issued">Issued / Active</option>
+          <option value="ClosureRequested">Closure Requested</option>
+          <option value="Closed">Closed</option>
+        </select>
+        <button class="refresh-btn" onclick="filterPermits()">↻ Refresh</button>
       </div>
       <div class="panel">
         <div class="panel-header">
-          <div class="panel-title">⚡ Energy Consumption (kWh)</div>
-          <span class="panel-badge" style="background:rgba(139,92,246,.15);color:var(--purple)" id="energyCount">Select dates to calculate</span>
+          <div class="panel-title">📋 Work Permits</div>
+          <span class="panel-badge" style="background:rgba(255,209,102,.15);color:var(--warn)" id="wpCount">0 permits</span>
         </div>
-        <div id="energySummaryCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px"></div>
         <div class="table-scroll" style="max-height:600px">
           <table class="att-table">
             <thead><tr>
-              <th>Location</th>
-              <th>From Date</th>
-              <th>Reading (kWh)</th>
-              <th>To Date</th>
-              <th>Reading (kWh)</th>
-              <th>Consumption (kWh)</th>
-              <th>Remarks</th>
+              <th>Permit ID</th><th>Type</th><th>Location</th><th>Description</th>
+              <th>Receiver</th><th>From</th><th>To</th><th>Status</th><th>Actions</th>
             </tr></thead>
-            <tbody id="energyTable"></tbody>
+            <tbody id="wpTable"></tbody>
           </table>
         </div>
+      </div>
+
+      <!-- Permit Detail Modal -->
+      <div id="wpDetailPanel" class="panel hidden" style="margin-top:12px">
+        <div class="panel-header">
+          <div class="panel-title" id="wpDetailTitle">Permit Details</div>
+          <button class="refresh-btn" onclick="document.getElementById('wpDetailPanel').classList.add('hidden')">✕ Close</button>
+        </div>
+        <div id="wpDetailContent" style="padding:12px"></div>
       </div>
     </div>
     </div>
@@ -971,6 +978,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
 
 <script>
 // ============================================================
@@ -1668,7 +1676,7 @@ function showPage(page, el) {
     equipstatus: 'Equipment Status',
     equipfault: 'Non-Working Equipment',
     nearmiss: 'Near Miss Reports',
-    energy: 'Energy Consumption'
+    permits: 'Work Permits'
   };
   document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
   document.querySelector('.sidebar').classList.remove('open');
@@ -1679,7 +1687,7 @@ function showPage(page, el) {
   if (page === 'equipstatus') filterEquipmentStatus();
   if (page === 'equipfault') filterFaultEquipment();
   if (page === 'nearmiss') filterNearMiss();
-  if (page === 'energy') initEnergyPage();
+  if (page === 'permits') filterPermits();
 }
 
 async function filterRecords() {
@@ -2268,176 +2276,309 @@ function exportEquipmentCSV() {
 }
 
 // ============================================================
-// ENERGY CONSUMPTION MODULE
+// WORK PERMITS MODULE
 // ============================================================
-let energyConsumptionData = []; // cache for CSV export
+let currentPermits = [];
 
-function initEnergyPage() {
+async function filterPermits() {
+  const dateFrom = document.getElementById('wpFilterDateFrom').value;
+  const dateTo = document.getElementById('wpFilterDateTo').value;
+  const loc = document.getElementById('wpFilterLocation').value;
+  const status = document.getElementById('wpFilterStatus').value;
+  const tbody = document.getElementById('wpTable');
+
   // Populate location filter
-  const locFilter = document.getElementById('energyFilterLocation');
+  const locFilter = document.getElementById('wpFilterLocation');
   if (locFilter.options.length <= 1 && dashboardData && dashboardData.locations) {
     dashboardData.locations.forEach(l => {
       const n = l.LocationName || l;
-      if (![...locFilter.options].some(o => o.value === n)) {
+      if (![...locFilter.options].some(o => o.value === n))
         locFilter.innerHTML += `<option value="${n}">${n}</option>`;
-      }
     });
   }
 
-  // Default dates: 30 days ago → today
-  if (!document.getElementById('energyDateFrom').value) {
-    const today = new Date();
-    const from = new Date(today);
-    from.setDate(from.getDate() - 30);
-    document.getElementById('energyDateTo').value = today.toISOString().split('T')[0];
-    document.getElementById('energyDateFrom').value = from.toISOString().split('T')[0];
-  }
-}
-
-async function calculateEnergyConsumption() {
-  const dateFrom = document.getElementById('energyDateFrom').value;
-  const dateTo = document.getElementById('energyDateTo').value;
-  const loc = document.getElementById('energyFilterLocation').value;
-  const tbody = document.getElementById('energyTable');
-  const summaryDiv = document.getElementById('energySummaryCards');
-
-  if (!dateFrom || !dateTo) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--warn)">⚠ Please select both From and To dates.</td></tr>';
-    return;
-  }
-
-  if (dateFrom > dateTo) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--danger)">❌ From date must be before To date.</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text3)"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Fetching energy readings...</td></tr>';
-  summaryDiv.innerHTML = '';
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Loading...</td></tr>';
 
   try {
-    const params = { action: 'getEnergyConsumption', dateFrom: dateFrom, dateTo: dateTo };
+    const params = { action: 'getWorkPermits' };
+    if (dateFrom) params.dateFrom = dateFrom;
+    if (dateTo) params.dateTo = dateTo;
     if (loc) params.location = loc;
+    if (status) params.status = status;
 
     const url = API_URL + '?' + new URLSearchParams(params).toString();
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
-    clearTimeout(tid);
-    const data = JSON.parse(await res.text());
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 15000);
+    const r = await fetch(url, { redirect:'follow', signal:c.signal });
+    clearTimeout(t);
+    const data = JSON.parse(await r.text());
 
     if (data.error && data.error.includes('Invalid action')) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--danger)">❌ API does not have energy routes. Update GAS code and redeploy.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--danger)">❌ API needs update. Add work permit GAS code and redeploy.</td></tr>';
       return;
     }
 
     if (data.success) {
-      const records = data.consumption || [];
-      energyConsumptionData = records;
+      currentPermits = data.permits || [];
+      document.getElementById('wpCount').textContent = currentPermits.length + ' permit' + (currentPermits.length !== 1 ? 's' : '');
 
-      document.getElementById('energyCount').textContent = records.length + ' location' + (records.length !== 1 ? 's' : '');
+      tbody.innerHTML = currentPermits.map(p => {
+        const isHot = p.PermitTypeKey === 'hot' || p.PermitTypeKey === 'comp';
+        const typeBg = isHot ? 'background:rgba(220,38,38,.15);color:#dc2626' : 'background:rgba(255,209,102,.15);color:#ca8a04';
+        let statusClass = 'completed';
+        if (p.Status === 'Pending') statusClass = 'late';
+        else if (p.Status === 'Issued') statusClass = 'on-time';
+        else if (p.Status === 'ClosureRequested') statusClass = 'very-late';
+        else if (p.Status === 'Closed') statusClass = 'completed';
 
-      // Summary cards
-      let totalConsumption = 0;
-      let locWithData = 0;
-      let locMissing = 0;
-
-      records.forEach(r => {
-        if (r.consumption !== null && r.consumption !== undefined) {
-          totalConsumption += r.consumption;
-          locWithData++;
-        } else {
-          locMissing++;
+        let actions = `<button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="viewPermitDetail('${p.PermitID}')">👁 View</button>`;
+        if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.15);color:var(--accent)" onclick="approvePermit('${p.PermitID}')">✓ Approve</button>`;
+        if (p.Status === 'Issued') {
+          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(255,209,102,.15);color:var(--warn)" onclick="requestClosure('${p.PermitID}')">🔒 Close</button>`;
+          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="exportPermitPDF('${p.PermitID}')">📄 PDF</button>`;
         }
-      });
+        if (p.Status === 'ClosureRequested') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.15);color:var(--accent)" onclick="confirmClosure('${p.PermitID}')">✓ Confirm Close</button>`;
+        if (p.Status === 'Closed') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="exportPermitPDF('${p.PermitID}')">📄 PDF</button>`;
 
-      summaryDiv.innerHTML = `
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center">
-          <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:1px">Total Consumption</div>
-          <div style="font-size:24px;font-weight:700;color:var(--purple);margin-top:4px">${totalConsumption.toFixed(2)} kWh</div>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center">
-          <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:1px">Locations with Data</div>
-          <div style="font-size:24px;font-weight:700;color:var(--accent);margin-top:4px">${locWithData}</div>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center">
-          <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:1px">Missing Data</div>
-          <div style="font-size:24px;font-weight:700;color:${locMissing > 0 ? 'var(--danger)' : 'var(--accent)'};margin-top:4px">${locMissing}</div>
-        </div>
-      `;
-
-      tbody.innerHTML = records.map(r => {
-        const hasFrom = r.fromReading !== null && r.fromReading !== undefined;
-        const hasTo = r.toReading !== null && r.toReading !== undefined;
-        const hasBoth = hasFrom && hasTo;
-        const consumption = hasBoth ? (r.toReading - r.fromReading) : null;
-        const consText = consumption !== null ? consumption.toFixed(2) : '-';
-
-        let remarks = r.remarks || '';
-        if (!hasFrom && !hasTo) remarks = '⚠ No readings found for either date';
-        else if (!hasFrom) remarks = '⚠ No reading found for ' + dateFrom;
-        else if (!hasTo) remarks = '⚠ No reading found for ' + dateTo;
-        else if (consumption < 0) remarks = '⚠ Negative consumption — check meter readings';
-        else if (!remarks) remarks = '✅ OK';
-
-        const rowColor = !hasBoth ? 'color:var(--warn)' : consumption < 0 ? 'color:var(--danger)' : '';
-
-        return `<tr style="${rowColor}">
-          <td style="font-weight:500">${r.location}</td>
-          <td style="font-family:'JetBrains Mono';font-size:12px">${r.fromDate || dateFrom}</td>
-          <td>${hasFrom ? r.fromReading.toFixed(2) : '<span style="color:var(--danger)">N/A</span>'}</td>
-          <td style="font-family:'JetBrains Mono';font-size:12px">${r.toDate || dateTo}</td>
-          <td>${hasTo ? r.toReading.toFixed(2) : '<span style="color:var(--danger)">N/A</span>'}</td>
-          <td style="font-weight:600;font-size:15px">${hasBoth ? consText : '<span style="color:var(--danger)">—</span>'}</td>
-          <td style="font-size:12px">${remarks}</td>
+        return `<tr>
+          <td style="font-family:'JetBrains Mono';font-size:11px">${p.PermitID}</td>
+          <td><span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;${typeBg}">${p.PermitType}</span></td>
+          <td style="font-size:12px">${p.Location}</td>
+          <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(p.Description||'').replace(/"/g,'&quot;')}">${p.Description || '-'}</td>
+          <td style="font-size:12px">${p.ReceiverName || '-'}</td>
+          <td style="font-family:'JetBrains Mono';font-size:11px">${p.DateFrom} ${p.TimeFrom}</td>
+          <td style="font-family:'JetBrains Mono';font-size:11px">${p.DateTo} ${p.TimeTo}</td>
+          <td><span class="status-pill ${statusClass}">${p.Status}</span></td>
+          <td style="white-space:nowrap">${actions}</td>
         </tr>`;
-      }).join('') || '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text3)">No energy data found. Submit readings via Equipment page.</td></tr>';
-    } else {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text3)">Error: ${data.error || 'Unknown'}</td></tr>`;
+      }).join('') || '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)">No work permits found.</td></tr>';
     }
-  } catch (err) {
-    console.warn('[Energy] Error:', err.message);
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text3)">Failed: ${err.message}</td></tr>`;
+  } catch(err) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)">Failed: ${err.message}</td></tr>`;
   }
 }
 
-function exportEnergyCSV() {
-  if (!energyConsumptionData.length) {
-    alert('No data to export. Calculate consumption first.');
-    return;
+function viewPermitDetail(id) {
+  const p = currentPermits.find(x => x.PermitID === id);
+  if (!p) return;
+  const panel = document.getElementById('wpDetailPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('wpDetailTitle').textContent = `📋 ${p.PermitType} — ${p.PermitID}`;
+
+  let checklist = '';
+  try {
+    const cl = typeof p.Checklist === 'string' ? JSON.parse(p.Checklist) : (p.Checklist || {});
+    const items = Object.entries(cl);
+    if (items.length) checklist = items.map(([k,v]) => `<span style="padding:2px 6px;border-radius:4px;font-size:10px;margin:2px;display:inline-block;background:${v==='Done'?'rgba(6,214,160,.15)':'rgba(255,209,102,.15)'};color:${v==='Done'?'var(--accent)':'var(--warn)'}">${k}:${v}</span>`).join('');
+    else checklist = '<span style="color:var(--text2);font-size:12px">No checklist data</span>';
+  } catch(e) { checklist = '-'; }
+
+  const fields = [
+    ['Location', p.Location], ['Exact Location', p.ExactLocation],
+    ['Issued To', p.IssuedTo], ['Description', p.Description],
+    ['Clearance', `${p.DateFrom} ${p.TimeFrom} → ${p.DateTo} ${p.TimeTo}`],
+    ['Receiver', `${p.ReceiverName} (${p.ReceiverDesignation || '-'})`],
+    ['Site Person', p.SitePerson], ['Security Guard', p.SecurityGuard || '-'],
+    ['JSA Ref', p.JSARef || '-'], ['Emergency', p.EmergencyContact],
+    ['Gas Test', `HC:${p.GasHC||'-'}% | Toxic:${p.GasToxic||'-'}PPM | O₂:${p.GasO2||'-'}%`],
+    ['Status', p.Status], ['Created', p.CreatedAt || '-'], ['Issued At', p.IssuedAt || '-'],
+    ['Closed At', p.ClosedAt || '-']
+  ];
+
+  document.getElementById('wpDetailContent').innerHTML =
+    fields.map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2);min-width:120px">${k}</span><span style="max-width:300px;word-break:break-word;text-align:right">${v || '-'}</span></div>`).join('') +
+    `<div style="margin-top:10px"><div style="font-size:12px;font-weight:600;margin-bottom:6px">Checklist:</div>${checklist}</div>`;
+  panel.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function approvePermit(id) {
+  if (!confirm('Approve this permit as Issuer? This will mark it as ISSUED.')) return;
+  const issuer = prompt('Enter Issuer Name & Designation:');
+  if (!issuer) return;
+  try {
+    const url = API_URL + '?' + new URLSearchParams({ action:'updatePermitStatus', permitId:id, status:'Issued', issuerName:issuer }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+    if (d.success) { alert('✅ Permit approved and issued!'); filterPermits(); }
+    else alert('Error: ' + (d.error || 'Failed'));
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function requestClosure(id) {
+  if (!confirm('Request closure as Receiver? Certify that work is completed and area cleared.')) return;
+  try {
+    const url = API_URL + '?' + new URLSearchParams({ action:'updatePermitStatus', permitId:id, status:'ClosureRequested' }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+    if (d.success) { alert('🔒 Closure requested. Issuer must confirm.'); filterPermits(); }
+    else alert('Error: ' + (d.error || 'Failed'));
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function confirmClosure(id) {
+  if (!confirm('Confirm closure as Issuer? Verify job completed and area safe.')) return;
+  try {
+    const url = API_URL + '?' + new URLSearchParams({ action:'updatePermitStatus', permitId:id, status:'Closed' }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+    if (d.success) { alert('✅ Permit closed successfully!'); filterPermits(); }
+    else alert('Error: ' + (d.error || 'Failed'));
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+// ============================================================
+// PDF EXPORT
+// ============================================================
+function exportPermitPDF(id) {
+  const p = currentPermits.find(x => x.PermitID === id);
+  if (!p) { alert('Permit not found'); return; }
+  if (!window.jspdf) { alert('PDF library not loaded. Please wait and try again.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const W = 210, H = 297;
+  const isHot = p.PermitTypeKey === 'hot' || p.PermitTypeKey === 'comp';
+
+  // Background color
+  if (isHot) {
+    doc.setFillColor(255, 235, 235); // Light red
+  } else {
+    doc.setFillColor(255, 252, 235); // Light yellow
   }
+  doc.rect(0, 0, W, H, 'F');
 
-  const dateFrom = document.getElementById('energyDateFrom').value;
-  const dateTo = document.getElementById('energyDateTo').value;
+  // Border
+  const bc = isHot ? [220, 38, 38] : [202, 138, 4];
+  doc.setDrawColor(...bc);
+  doc.setLineWidth(1.5);
+  doc.rect(5, 5, W-10, H-10);
+  doc.rect(7, 7, W-14, H-14);
 
-  const headers = ['Location', 'From Date', 'From Reading (kWh)', 'To Date', 'To Reading (kWh)', 'Consumption (kWh)', 'Remarks'];
+  let y = 18;
 
-  const rows = energyConsumptionData.map(r => {
-    const hasFrom = r.fromReading !== null && r.fromReading !== undefined;
-    const hasTo = r.toReading !== null && r.toReading !== undefined;
-    const consumption = (hasFrom && hasTo) ? (r.toReading - r.fromReading).toFixed(2) : '';
-    let remarks = r.remarks || '';
-    if (!hasFrom && !hasTo) remarks = 'No readings found for either date';
-    else if (!hasFrom) remarks = 'No reading for ' + dateFrom;
-    else if (!hasTo) remarks = 'No reading for ' + dateTo;
-    else if (consumption < 0) remarks = 'Negative consumption - check readings';
+  // Header
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0);
+  doc.text('INDIAN OIL CORPORATION LIMITED', W/2, y, { align: 'center' }); y += 5;
+  doc.setFontSize(9);
+  doc.text('EASTERN REGION PIPELINES — HSE DEPT.', W/2, y, { align: 'center' }); y += 5;
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Doc No.: ERPL/HS&E/25-26 | Issue: 01 | Date: 01.09.2025 | Rev: 00', W/2, y, { align: 'center' }); y += 7;
 
-    return [
-      r.location,
-      r.fromDate || dateFrom,
-      hasFrom ? r.fromReading.toFixed(2) : 'N/A',
-      r.toDate || dateTo,
-      hasTo ? r.toReading.toFixed(2) : 'N/A',
-      consumption || 'N/A',
-      remarks
-    ];
-  });
+  // Permit Type Banner
+  doc.setFillColor(...bc);
+  doc.rect(10, y, W-20, 8, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text(p.PermitType.toUpperCase() + ' PERMIT', W/2, y+6, { align: 'center' });
+  doc.setTextColor(0);
+  y += 13;
 
-  const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'energy_consumption_' + dateFrom + '_to_' + dateTo + '.csv';
-  a.click();
+  // Permit ID and Status
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Permit ID: ' + p.PermitID, 12, y);
+  doc.text('Sl. No: ___________', W-60, y);
+  doc.text('Status: ' + p.Status, W/2-10, y);
+  y += 7;
+
+  // Fields
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+
+  const addField = (label, value, indent) => {
+    indent = indent || 12;
+    if (y > 272) { doc.addPage(); y = 15; doc.setFillColor(isHot ? 255 : 255, isHot ? 235 : 252, 235); doc.rect(0,0,W,H,'F'); doc.setDrawColor(...bc); doc.setLineWidth(1); doc.rect(5,5,W-10,H-10); }
+    doc.setFont('helvetica', 'bold');
+    doc.text(label + ':', indent, y);
+    doc.setFont('helvetica', 'normal');
+    const lines = doc.splitTextToSize(String(value || '-'), W - 90);
+    doc.text(lines, 75, y);
+    y += Math.max(lines.length * 4, 5);
+  };
+
+  addField('Work Clearance', p.DateFrom + ' ' + p.TimeFrom + '  To  ' + p.DateTo + ' ' + p.TimeTo);
+  addField('Issued To', p.IssuedTo);
+  addField('Exact Location', p.ExactLocation);
+  addField('Description', p.Description);
+  addField('Site Person', p.SitePerson);
+  addField('Security Guard', p.SecurityGuard || '-');
+  addField('JSA Ref No.', p.JSARef || '-');
+  addField('Cross-Ref', p.CrossRef || '-');
+  addField('Emergency Contact', p.EmergencyContact);
+  addField('Fire Station/Hospital', p.FireStation || '-');
+  y += 3;
+
+  // Gas Test
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('GAS TEST:', 12, y); y += 5;
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('HCs = ' + (p.GasHC || '___') + '% LEL    Toxic Gas = ' + (p.GasToxic || '___') + ' PPM    O₂ = ' + (p.GasO2 || '___') + '%', 12, y);
+  y += 7;
+
+  // Checklist summary
+  try {
+    const cl = typeof p.Checklist === 'string' ? JSON.parse(p.Checklist) : (p.Checklist || {});
+    const items = Object.entries(cl);
+    if (items.length) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text('CHECKLIST ITEMS:', 12, y); y += 5;
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      items.forEach(([k, v]) => {
+        if (y > 275) { doc.addPage(); y = 15; doc.setFillColor(isHot?255:255,isHot?235:252,235); doc.rect(0,0,W,H,'F'); }
+        doc.text(k + ': ' + v, 14, y);
+        y += 3.5;
+      });
+      y += 3;
+    }
+  } catch(e) {}
+
+  // Signatures section
+  if (y > 245) { doc.addPage(); y = 15; doc.setFillColor(isHot?255:255,isHot?235:252,235); doc.rect(0,0,W,H,'F'); doc.setDrawColor(...bc); doc.setLineWidth(1); doc.rect(5,5,W-10,H-10); }
+
+  y += 5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('ISSUER', 35, y, { align: 'center' });
+  doc.text('RECEIVER', W - 55, y, { align: 'center' });
+  y += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Name: ' + (p.IssuerName || '_______________'), 12, y);
+  doc.text('Name: ' + (p.ReceiverName || '_______________'), W/2 + 5, y);
+  y += 5;
+  doc.text('Designation: ' + (p.IssuerDesignation || '_______________'), 12, y);
+  doc.text('Designation: ' + (p.ReceiverDesignation || '_______________'), W/2 + 5, y);
+  y += 5;
+  doc.text('Signature: _______________', 12, y);
+  doc.text('Signature: _______________', W/2 + 5, y);
+  y += 10;
+
+  // Closing section
+  doc.setDrawColor(...bc);
+  doc.setLineWidth(0.5);
+  doc.line(10, y, W-10, y); y += 5;
+  doc.setFont('helvetica', 'bold');
+  doc.text('CLOSING OF WORK PERMIT', W/2, y, { align: 'center' }); y += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.text('Receiver: Certified that the work has been completed/stopped and area cleared.', 12, y); y += 4;
+  doc.text('Issuer: Verified that the job has been completed and area is safe from any hazard.', 12, y); y += 4;
+  if (p.ClosedAt) { doc.text('Closed At: ' + p.ClosedAt, 12, y); y += 4; }
+
+  // Footer
+  doc.setFontSize(6);
+  doc.setTextColor(128);
+  doc.text('Generated from AttendX Work Permit System | ' + new Date().toLocaleString(), W/2, H - 8, { align: 'center' });
+
+  doc.save('WorkPermit_' + p.PermitID + '.pdf');
 }
 
 </script>
