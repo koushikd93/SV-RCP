@@ -142,7 +142,9 @@
         <select id="wpIssuer"><option value="">-- Select Issuer --</option></select></div>
       <div class="form-group"><label>Issuer Designation</label>
         <input type="text" id="wpIssuerDesg" placeholder="e.g. Area In-charge"></div>
-      <div class="hint" style="margin-top:-6px;margin-bottom:12px;color:var(--warn)">⚠ Issuer's face ID must match during approval for the permit to be issued.</div>
+      <div class="form-group"><label>Issuer Email (for OTP verification) <span class="req">*</span></label>
+        <input type="email" id="wpIssuerEmail" placeholder="e.g. koushik.das@indianoil.in"></div>
+      <div class="hint" style="margin-top:-6px;margin-bottom:12px;color:var(--accent2)">🔐 An OTP will be sent to this email for permit approval (valid for 30 minutes).</div>
       <div class="divider"></div>
       <div class="form-group"><label>Person from Contractor/Dept at Site (Name & Contact) <span class="req">*</span></label>
         <input type="text" id="wpSitePerson" placeholder="Name - 9876543210"></div>
@@ -229,7 +231,7 @@
 
 <script>
 const _p = new URLSearchParams(window.location.search);
-const API_URL = _p.get('api') || 'https://script.google.com/macros/s/AKfycbz7Iibr9sB20rO5SlWslx48XF819WGy1Jp8sv4IYCO0LhXSR74ThdclfW7BKHysse-S8w/exec';
+const API_URL = _p.get('api') || 'https://script.google.com/macros/s/AKfycby62RPYvYMwBTSlbJLQoHPxrMJ9nJfgy4SM56OAxlQjy2I8x0TPDQ5a9PSoNtOSd6rzGg/exec';
 
 let permitType = '', permitTypeKey = '';
 let checklistData = {};
@@ -326,10 +328,10 @@ async function loadData() {
   // Populate Issuer dropdown — Koushik Das is the default issuer
   const is = document.getElementById('wpIssuer');
   const ISSUERS = [
-    { name: 'Koushik Das', id: 'EMP597090', desg: 'Area In-charge' }
+    { name: 'Koushik Das', id: 'EMP597090', desg: 'Area In-charge', email: 'koushik.das@indianoil.in' }
   ];
   ISSUERS.forEach(i => {
-    is.innerHTML += `<option value="${i.name} (${i.id})" data-desg="${i.desg}">${i.name} (${i.id})</option>`;
+    is.innerHTML += `<option value="${i.name} (${i.id})" data-desg="${i.desg}" data-email="${i.email}">${i.name} (${i.id})</option>`;
   });
   // Also add all employees as potential issuers
   if (empR.success && empR.employees) empR.employees.forEach(e => {
@@ -343,7 +345,9 @@ async function loadData() {
   document.getElementById('wpIssuer').addEventListener('change', function() {
     const sel = this.options[this.selectedIndex];
     const desg = sel.getAttribute('data-desg');
+    const email = sel.getAttribute('data-email');
     if (desg) document.getElementById('wpIssuerDesg').value = desg;
+    if (email) document.getElementById('wpIssuerEmail').value = email;
     validateStep1();
   });
 
@@ -370,6 +374,7 @@ function validateStep1() {
     && document.getElementById('wpDescription').value.trim()
     && document.getElementById('wpReceiver').value
     && document.getElementById('wpIssuer').value
+    && document.getElementById('wpIssuerEmail').value.trim()
     && document.getElementById('wpSitePerson').value.trim()
     && document.getElementById('wpEmergency').value.trim();
   document.getElementById('btnStep1').disabled = !ok;
@@ -449,6 +454,7 @@ function buildSummary() {
     ['Work Description', gv('wpDescription')],
     ['Receiver', gv('wpReceiver')],
     ['Issuer (Approver)', gv('wpIssuer')],
+    ['Issuer Email', gv('wpIssuerEmail')],
     ['Site Person', gv('wpSitePerson')],
     ['Gas Test', `HC:${gv('wpGasHC')||'-'}% | Toxic:${gv('wpGasToxic')||'-'}PPM | O₂:${gv('wpGasO2')||'-'}%`],
     ['Checklist Items', Object.keys(checklistData).length + ' items marked'],
@@ -481,6 +487,7 @@ async function submitPermit() {
       receiverDesignation: gv('wpReceiverDesg'),
       issuerName: gv('wpIssuer'),
       issuerDesignation: gv('wpIssuerDesg'),
+      issuerEmail: gv('wpIssuerEmail'),
       sitePerson: gv('wpSitePerson'),
       securityGuard: gv('wpSecurityGuard'),
       jsaRef: gv('wpJSA'),
@@ -517,8 +524,8 @@ async function submitPermit() {
         <h2 style="color:var(--accent)">Permit Submitted!</h2>
         <p style="font-size:14px;color:var(--text2)">Permit ID: <b style="color:var(--warn);font-family:'Space Mono',monospace">${result.permitId || '-'}</b></p>
         <p style="font-size:12px;color:var(--text2);margin-top:8px">Status: <b>Pending Issuer Approval</b></p>
-        <p style="font-size:11px;color:var(--warn);margin-top:8px">⚠ Issuer's face ID must be verified for permit approval.</p>
-        <p style="font-size:11px;color:var(--text2);margin-top:6px">The Issuer must approve this permit from the Dashboard.</p>
+        <p style="font-size:11px;color:var(--accent2);margin-top:8px">🔐 An OTP will be sent to the Issuer's email for verification.</p>
+        <p style="font-size:11px;color:var(--text2);margin-top:6px">The Issuer must verify the OTP from the Dashboard to approve this permit.</p>
         <button class="btn btn-secondary" style="margin-top:16px" onclick="location.reload()">Submit Another</button>`;
     } else {
       goStep(5);
