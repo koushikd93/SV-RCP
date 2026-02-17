@@ -137,6 +137,13 @@
         <select id="wpReceiver"><option value="">-- Select Employee --</option></select></div>
       <div class="form-group"><label>Receiver Designation</label>
         <input type="text" id="wpReceiverDesg" placeholder="e.g. Site Supervisor"></div>
+      <div class="divider"></div>
+      <div class="form-group"><label>Permit Issuer (Approver) <span class="req">*</span></label>
+        <select id="wpIssuer"><option value="">-- Select Issuer --</option></select></div>
+      <div class="form-group"><label>Issuer Designation</label>
+        <input type="text" id="wpIssuerDesg" placeholder="e.g. Area In-charge"></div>
+      <div class="hint" style="margin-top:-6px;margin-bottom:12px;color:var(--warn)">⚠ Issuer's face ID must match during approval for the permit to be issued.</div>
+      <div class="divider"></div>
       <div class="form-group"><label>Person from Contractor/Dept at Site (Name & Contact) <span class="req">*</span></label>
         <input type="text" id="wpSitePerson" placeholder="Name - 9876543210"></div>
       <div class="form-group"><label>Patrolling/Security Guard at Site (Name & Contact)</label>
@@ -222,7 +229,7 @@
 
 <script>
 const _p = new URLSearchParams(window.location.search);
-const API_URL = _p.get('api') || 'https://script.google.com/macros/s/AKfycbythbfaraTxjIxYiR7rfdrWowR4ijdIdvHkyp5rNpp67grI7E-Wn_gnaUY_5_8GSbT55Q/exec';
+const API_URL = _p.get('api') || 'https://script.google.com/macros/s/AKfycbz7Iibr9sB20rO5SlWslx48XF819WGy1Jp8sv4IYCO0LhXSR74ThdclfW7BKHysse-S8w/exec';
 
 let permitType = '', permitTypeKey = '';
 let checklistData = {};
@@ -315,6 +322,31 @@ async function loadData() {
   if (empR.success && empR.employees) empR.employees.forEach(e => {
     es.innerHTML += `<option value="${e.Name} (${e.EmployeeID})">${e.Name} (${e.EmployeeID})</option>`;
   });
+
+  // Populate Issuer dropdown — Koushik Das is the default issuer
+  const is = document.getElementById('wpIssuer');
+  const ISSUERS = [
+    { name: 'Koushik Das', id: 'EMP597090', desg: 'Area In-charge' }
+  ];
+  ISSUERS.forEach(i => {
+    is.innerHTML += `<option value="${i.name} (${i.id})" data-desg="${i.desg}">${i.name} (${i.id})</option>`;
+  });
+  // Also add all employees as potential issuers
+  if (empR.success && empR.employees) empR.employees.forEach(e => {
+    const val = e.Name + ' (' + e.EmployeeID + ')';
+    if (!ISSUERS.some(i => i.id === e.EmployeeID)) {
+      is.innerHTML += `<option value="${val}">${val}</option>`;
+    }
+  });
+
+  // Auto-fill issuer designation when selected
+  document.getElementById('wpIssuer').addEventListener('change', function() {
+    const sel = this.options[this.selectedIndex];
+    const desg = sel.getAttribute('data-desg');
+    if (desg) document.getElementById('wpIssuerDesg').value = desg;
+    validateStep1();
+  });
+
   // Set default dates
   const now = new Date();
   const ds = now.toISOString().split('T')[0];
@@ -337,6 +369,7 @@ function validateStep1() {
     && document.getElementById('wpIssuedTo').value.trim()
     && document.getElementById('wpDescription').value.trim()
     && document.getElementById('wpReceiver').value
+    && document.getElementById('wpIssuer').value
     && document.getElementById('wpSitePerson').value.trim()
     && document.getElementById('wpEmergency').value.trim();
   document.getElementById('btnStep1').disabled = !ok;
@@ -415,6 +448,7 @@ function buildSummary() {
     ['Issued To', gv('wpIssuedTo')],
     ['Work Description', gv('wpDescription')],
     ['Receiver', gv('wpReceiver')],
+    ['Issuer (Approver)', gv('wpIssuer')],
     ['Site Person', gv('wpSitePerson')],
     ['Gas Test', `HC:${gv('wpGasHC')||'-'}% | Toxic:${gv('wpGasToxic')||'-'}PPM | O₂:${gv('wpGasO2')||'-'}%`],
     ['Checklist Items', Object.keys(checklistData).length + ' items marked'],
@@ -445,6 +479,8 @@ async function submitPermit() {
       description: gv('wpDescription'),
       receiverName: gv('wpReceiver'),
       receiverDesignation: gv('wpReceiverDesg'),
+      issuerName: gv('wpIssuer'),
+      issuerDesignation: gv('wpIssuerDesg'),
       sitePerson: gv('wpSitePerson'),
       securityGuard: gv('wpSecurityGuard'),
       jsaRef: gv('wpJSA'),
@@ -481,7 +517,8 @@ async function submitPermit() {
         <h2 style="color:var(--accent)">Permit Submitted!</h2>
         <p style="font-size:14px;color:var(--text2)">Permit ID: <b style="color:var(--warn);font-family:'Space Mono',monospace">${result.permitId || '-'}</b></p>
         <p style="font-size:12px;color:var(--text2);margin-top:8px">Status: <b>Pending Issuer Approval</b></p>
-        <p style="font-size:11px;color:var(--text2);margin-top:12px">The Issuer must approve this permit from the Dashboard before work can begin.</p>
+        <p style="font-size:11px;color:var(--warn);margin-top:8px">⚠ Issuer's face ID must be verified for permit approval.</p>
+        <p style="font-size:11px;color:var(--text2);margin-top:6px">The Issuer must approve this permit from the Dashboard.</p>
         <button class="btn btn-secondary" style="margin-top:16px" onclick="location.reload()">Submit Another</button>`;
     } else {
       goStep(5);
