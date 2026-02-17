@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Work Permit | ERPL HSE</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+  :root{--bg:#0a0e1a;--surface:#111827;--surface2:#1a2236;--border:#2a3454;--accent:#06d6a0;--accent2:#118ab2;--danger:#ef476f;--warn:#ffd166;--purple:#8b5cf6;--orange:#f97316;--red:#dc2626;--text:#e8edf5;--text2:#8892a8;--success:#06d6a0}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+  .container{max-width:640px;margin:0 auto;padding:16px}
+  .header{text-align:center;padding:16px 0 8px}
+  .header .org{font-size:13px;font-weight:700;color:var(--warn);letter-spacing:1px}
+  .header h1{font-size:18px;font-weight:700;margin-top:4px}
+  .header .doc{font-family:'Space Mono',monospace;font-size:11px;color:var(--text2);margin-top:4px}
+  .permit-type-bar{display:flex;gap:6px;justify-content:center;margin:12px 0;flex-wrap:wrap}
+  .pt-btn{padding:8px 14px;border:2px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif}
+  .pt-btn:hover{border-color:var(--text2)}
+  .pt-btn.sel-hot{background:rgba(220,38,38,.15);border-color:var(--red);color:var(--red)}
+  .pt-btn.sel-cold{background:rgba(255,209,102,.15);border-color:var(--warn);color:var(--warn)}
+  .pt-btn.sel-conf{background:rgba(139,92,246,.15);border-color:var(--purple);color:var(--purple)}
+  .pt-btn.sel-veh{background:rgba(6,214,160,.15);border-color:var(--accent);color:var(--accent)}
+  .pt-btn.sel-exc{background:rgba(249,115,22,.15);border-color:var(--orange);color:var(--orange)}
+  .pt-btn.sel-comp{background:rgba(17,138,178,.15);border-color:var(--accent2);color:var(--accent2)}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
+  .card-title{font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .form-group{margin-bottom:12px}
+  label{display:block;font-size:11px;color:var(--text2);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.8px}
+  label .req{color:var(--danger)}
+  select,input,textarea{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s}
+  select:focus,input:focus,textarea:focus{border-color:var(--accent)}
+  textarea{resize:vertical;min-height:55px}
+  input[type="date"],input[type="time"]{color-scheme:dark}
+  .row-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+
+  .step-bar{display:flex;justify-content:center;gap:6px;margin:10px 0 14px}
+  .step-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:all .3s}
+  .step-dot.active{background:var(--warn);width:20px;border-radius:4px}
+  .step-dot.done{background:var(--accent)}
+
+  /* Checklist */
+  .checklist{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .cl-header{background:var(--surface2);padding:8px 12px;font-size:12px;font-weight:600;color:var(--warn);text-transform:uppercase;letter-spacing:1px}
+  .cl-item{display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;gap:8px}
+  .cl-item:last-child{border-bottom:none}
+  .cl-num{font-family:'Space Mono',monospace;font-size:11px;color:var(--text2);min-width:22px}
+  .cl-text{flex:1}
+  .cl-opts{display:flex;gap:4px}
+  .cl-opt{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:10px;font-weight:600;cursor:pointer;background:var(--bg);color:var(--text2);transition:all .15s;font-family:'DM Sans',sans-serif}
+  .cl-opt:hover{border-color:var(--text2)}
+  .cl-opt.done{background:rgba(6,214,160,.15);border-color:var(--accent);color:var(--accent)}
+  .cl-opt.na{background:rgba(255,209,102,.15);border-color:var(--warn);color:var(--warn)}
+
+  .btn{width:100%;padding:13px;border:none;border-radius:11px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+  .btn-primary{background:linear-gradient(135deg,var(--warn),var(--orange));color:var(--bg)}
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(255,209,102,.3)}
+  .btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+  .btn-hot{background:linear-gradient(135deg,var(--red),#b91c1c);color:#fff}
+  .btn-cold{background:linear-gradient(135deg,var(--warn),#ca8a04);color:var(--bg)}
+  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .btn-row{display:flex;gap:8px;margin-top:12px}
+
+  .result-card{text-align:center;padding:30px 16px}
+  .result-icon{width:70px;height:70px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:32px}
+  .result-icon.success{background:rgba(6,214,160,.15)}
+  .result-icon.error{background:rgba(239,71,111,.15)}
+
+  .loading-overlay{position:fixed;inset:0;background:rgba(10,14,26,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:16px;font-size:14px;color:var(--text2)}
+  .loading-spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--warn);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .hidden{display:none!important}
+  .divider{height:1px;background:var(--border);margin:14px 0}
+  .hint{font-size:10px;color:var(--text2);margin-top:3px;font-style:italic}
+</style>
+</head>
+<body>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div>Loading Work Permit Module...</div>
+</div>
+
+<div class="container">
+  <div class="header">
+    <div class="org">INDIAN OIL CORPORATION LIMITED — ERPL HSE DEPT.</div>
+    <h1>📋 Work Permit System</h1>
+    <div class="doc">Doc No.: ERPL/HS&E/25-26 | Rev: 00</div>
+  </div>
+
+  <div class="step-bar">
+    <div class="step-dot active" id="dot1"></div>
+    <div class="step-dot" id="dot2"></div>
+    <div class="step-dot" id="dot3"></div>
+    <div class="step-dot" id="dot4"></div>
+  </div>
+
+  <!-- STEP 1: Permit Type & Basic Info -->
+  <div id="step1">
+    <div class="card">
+      <div class="card-title">📌 Permit Type <span class="req">*</span></div>
+      <div class="permit-type-bar" id="permitTypeBar">
+        <button class="pt-btn" onclick="selType('Composite Work','comp',this)">Composite</button>
+        <button class="pt-btn" onclick="selType('Cold Work','cold',this)">Cold Work</button>
+        <button class="pt-btn" onclick="selType('Hot Work','hot',this)">Hot Work</button>
+        <button class="pt-btn" onclick="selType('Confined Space Entry','conf',this)">Confined Space</button>
+        <button class="pt-btn" onclick="selType('Vehicle Entry','veh',this)">Vehicle Entry</button>
+        <button class="pt-btn" onclick="selType('Excavation Work','exc',this)">Excavation</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📍 Work Details</div>
+      <div class="form-group"><label>Location <span class="req">*</span></label>
+        <select id="wpLocation"><option value="">-- Select Location --</option></select></div>
+      <div class="form-group"><label>Exact Location of Work (Area/RCP/SV/Chainage KM) <span class="req">*</span></label>
+        <input type="text" id="wpExactLocation" placeholder="e.g. RCP-3, Chainage KM 45.2"></div>
+      <div class="row-2">
+        <div class="form-group"><label>Clearance From Date <span class="req">*</span></label><input type="date" id="wpDateFrom"></div>
+        <div class="form-group"><label>From Time <span class="req">*</span></label><input type="time" id="wpTimeFrom"></div>
+      </div>
+      <div class="row-2">
+        <div class="form-group"><label>Clearance To Date <span class="req">*</span></label><input type="date" id="wpDateTo"></div>
+        <div class="form-group"><label>To Time <span class="req">*</span></label><input type="time" id="wpTimeTo"></div>
+      </div>
+      <div class="form-group"><label>Issued To (Department/Section/Contractor) <span class="req">*</span></label>
+        <input type="text" id="wpIssuedTo" placeholder="e.g. M/s ABC Contractor, Maintenance Dept"></div>
+      <div class="form-group"><label>Description of Work <span class="req">*</span></label>
+        <textarea id="wpDescription" placeholder="Detailed description of the work to be performed..." rows="3"></textarea></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">👤 Personnel</div>
+      <div class="form-group"><label>Receiver Name (Initiator) <span class="req">*</span></label>
+        <select id="wpReceiver"><option value="">-- Select Employee --</option></select></div>
+      <div class="form-group"><label>Receiver Designation</label>
+        <input type="text" id="wpReceiverDesg" placeholder="e.g. Site Supervisor"></div>
+      <div class="form-group"><label>Person from Contractor/Dept at Site (Name & Contact) <span class="req">*</span></label>
+        <input type="text" id="wpSitePerson" placeholder="Name - 9876543210"></div>
+      <div class="form-group"><label>Patrolling/Security Guard at Site (Name & Contact)</label>
+        <input type="text" id="wpSecurityGuard" placeholder="Name - 9876543210"></div>
+      <div class="row-2">
+        <div class="form-group"><label>JSA Ref. No.</label><input type="text" id="wpJSA" placeholder="JSA-001"></div>
+        <div class="form-group"><label>Cross-Ref Permits</label><input type="text" id="wpCrossRef" placeholder="WP-xxx"></div>
+      </div>
+      <div class="form-group"><label>Emergency Contact (Name & Phone) <span class="req">*</span></label>
+        <input type="text" id="wpEmergency" placeholder="Name - 9876543210"></div>
+      <div class="form-group"><label>Nearest Fire Station & Hospital</label>
+        <input type="text" id="wpFireStation" placeholder="Fire Station - XYZ, Hospital - ABC"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btnStep1" disabled onclick="goStep(2)">Continue to Checklist →</button>
+    </div>
+  </div>
+
+  <!-- STEP 2: Checklist -->
+  <div id="step2" class="hidden">
+    <div class="card">
+      <div class="card-title">✅ Safety Checklist</div>
+      <div class="hint" style="margin-bottom:12px">Mark each item as ✓ Done or N/A (Not Required)</div>
+      <div id="checklistContainer"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goStep(1)" style="flex:1">← Back</button>
+      <button class="btn btn-primary" onclick="goStep(3)" style="flex:2">Continue to Gas Test & Remarks →</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: Gas Test, Remarks, PPE -->
+  <div id="step3" class="hidden">
+    <div class="card">
+      <div class="card-title">🧪 Gas Test Results</div>
+      <div class="row-3">
+        <div class="form-group"><label>HCs (% LEL)</label><input type="text" id="wpGasHC" placeholder="0"></div>
+        <div class="form-group"><label>Toxic Gas (PPM)</label><input type="text" id="wpGasToxic" placeholder="0"></div>
+        <div class="form-group"><label>O₂ (%)</label><input type="text" id="wpGasO2" placeholder="20.9"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">⚠️ Residual Hazards</div>
+      <div class="hint" style="margin-bottom:10px">Select expected residual hazards:</div>
+      <div id="hazardsList" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">🦺 Additional PPE Required</div>
+      <div class="hint" style="margin-bottom:10px">Beyond standard PPE (Helmet, Safety Shoes, Gloves, Boiler Suit):</div>
+      <div id="ppeList" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📝 Additional Precautions</div>
+      <div class="form-group"><textarea id="wpPrecautions" placeholder="Any additional precautions..." rows="3"></textarea></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goStep(2)" style="flex:1">← Back</button>
+      <button class="btn btn-primary" onclick="goStep(4)" style="flex:2">Review & Submit →</button>
+    </div>
+  </div>
+
+  <!-- STEP 4: Review & Submit -->
+  <div id="step4" class="hidden">
+    <div class="card">
+      <div class="card-title">📄 Permit Summary</div>
+      <div id="permitSummary"></div>
+    </div>
+    <div class="card" style="border:1px solid var(--warn);background:rgba(255,209,102,.05)">
+      <div class="card-title" style="color:var(--warn)">⚠️ Submission Notice</div>
+      <p style="font-size:12px;color:var(--text2);line-height:1.5">By submitting, the <b>Receiver</b> initiates this work permit. It will be in <b>Pending Approval</b> status until the <b>Issuer</b> approves it via the Dashboard. The permit is valid only after Issuer approval.</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goStep(3)" style="flex:1">← Back</button>
+      <button class="btn btn-hot" id="btnSubmit" onclick="submitPermit()" style="flex:2">📤 Submit Work Permit</button>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div id="step5" class="hidden">
+    <div class="card"><div class="result-card" id="resultContent"></div></div>
+  </div>
+</div>
+
+<script>
+const _p = new URLSearchParams(window.location.search);
+const API_URL = _p.get('api') || 'https://script.google.com/macros/s/AKfycbythbfaraTxjIxYiR7rfdrWowR4ijdIdvHkyp5rNpp67grI7E-Wn_gnaUY_5_8GSbT55Q/exec';
+
+let permitType = '', permitTypeKey = '';
+let checklistData = {};
+let selectedHazards = new Set();
+let selectedPPE = new Set();
+
+// Checklist items from the IOCL permit format
+const CHECKLIST = {
+  'A': { title: 'General Points', items: [
+    {id:'A1', text:'Equipment/Work Area inspected'},
+    {id:'A2', text:'Surrounding area checked, cleaned and covered (Oil/RAGS/Grass removed)'},
+    {id:'A3', text:'Sewers, Manholes, CBD etc. and hot surface nearby covered'},
+    {id:'A4', text:'Considered hazards from other routine/non-routine operations, person alerted'},
+    {id:'A5', text:'Equipment blinded/disconnected/closed/isolated/wedge opened'},
+    {id:'A6', text:'Equipment properly drained and depressurized'},
+    {id:'A7', text:'Equipment properly steamed/purged'},
+    {id:'A8', text:'Equipment water flushed'},
+    {id:'A9', text:'Free access for approach of Fire Tender'},
+    {id:'A10',text:'Iron Sulfide removed/Kept wet'},
+    {id:'A11',text:'Equipment electrically isolated and tagged'},
+    {id:'A13',text:'Running water hose/Fire extinguisher provided'},
+    {id:'A14',text:'Area cordoned off and Precautionary tag/Board provided'},
+    {id:'A15',text:'CCTV monitoring facility available at site'},
+    {id:'A16',text:'Proper ventilation and Lighting provided'},
+    {id:'A4R',text:'Shield provided against spark'},
+    {id:'A5R',text:'Portable equipment nozzle properly grounded'},
+    {id:'A6R',text:'Standby persons provided for entry to confined space'},
+    {id:'A7R',text:'Adequate Communication Provided to Standby Person'},
+    {id:'A8R',text:'Trained Attendant Provided With Rescue Equipment/SCBA'},
+    {id:'A9R',text:'Space Adequately Cooled for Safe Entry'},
+    {id:'A10R',text:'Continuous Inert Gas Flow Arranged'},
+    {id:'A11R',text:'Check Earthing/ELCB of all Temporary Electrical Connections for welding'},
+    {id:'A12R',text:'Gas Cylinders kept outside the confined space'},
+    {id:'A13R',text:'Checked Spark arrestor on mobile Equipments'},
+    {id:'A14R',text:'Welding Machine Checked for Safe Location'},
+    {id:'A15R',text:'Permit taken for working at height'}
+  ]},
+  'B': { title: 'For Hot Work / Entry to Confined Space', items: [
+    {id:'B1', text:'Proper means of exit/escape provided'},
+    {id:'B2', text:'Standby personnel provided from Mainline/Maint./Contractor/HSE'},
+    {id:'B3', text:'Checked for oil and Gas trapped behind the lining in equipment'}
+  ]},
+  'C': { title: 'For Vehicle Entry in Hazardous Area', items: [
+    {id:'C1', text:'PESO approved spark elimination system provided on mobile equipment/vehicle'}
+  ]},
+  'D': { title: 'For Excavation Work', items: [
+    {id:'D1', text:'Proper slop/shoring/shuttering provided to prevent soil collapse'},
+    {id:'D2', text:'Excavated soil kept at safe distance from trench/pit edge'},
+    {id:'D3', text:'Safe means of access provided inside trench/pit'},
+    {id:'D4', text:'Movement of heavy vehicle prohibited'}
+  ]}
+};
+
+const HAZARDS = ['Lack of Oxygen','H2S / Toxic Gases','HC or Combustible Gases','Pyrophoric Iron','Corrosive Chemicals','Cave-in Formation','Others'];
+const PPE_LIST = ['Face Shield','Apron','Goggles','Dust Respirator','Fresh Air Mask','Lifeline','Safety Harness','Airline','Earmuff'];
+
+// Init
+window.addEventListener('load', async () => {
+  buildChecklist();
+  buildHazards();
+  buildPPE();
+  try {
+    await loadData();
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  } catch(e) {
+    document.getElementById('loadingOverlay').innerHTML = `<div style="color:var(--danger);text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:16px">⚠️</div><h3>Load Error</h3><p style="margin-top:8px;font-size:13px;color:var(--text2)">${e.message}</p><button class="btn btn-primary" style="margin-top:16px;width:auto;padding:12px 24px" onclick="location.reload()">Retry</button></div>`;
+  }
+});
+
+async function apiGet(params) {
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), 15000);
+  const r = await fetch(url, { redirect:'follow', signal:c.signal });
+  clearTimeout(t);
+  return JSON.parse(await r.text());
+}
+
+async function loadData() {
+  const [locR, empR] = await Promise.all([
+    apiGet({action:'getLocations'}),
+    apiGet({action:'getEmployees'})
+  ]);
+  const ls = document.getElementById('wpLocation');
+  if (locR.success && locR.locations) locR.locations.forEach(l => {
+    const n = l.LocationName || l;
+    ls.innerHTML += `<option value="${n}">${n}</option>`;
+  });
+  const es = document.getElementById('wpReceiver');
+  if (empR.success && empR.employees) empR.employees.forEach(e => {
+    es.innerHTML += `<option value="${e.Name} (${e.EmployeeID})">${e.Name} (${e.EmployeeID})</option>`;
+  });
+  // Set default dates
+  const now = new Date();
+  const ds = now.toISOString().split('T')[0];
+  document.getElementById('wpDateFrom').value = ds;
+  document.getElementById('wpDateTo').value = ds;
+}
+
+function selType(type, key, btn) {
+  permitType = type; permitTypeKey = key;
+  document.querySelectorAll('.pt-btn').forEach(b => b.className = 'pt-btn');
+  btn.classList.add('sel-' + key);
+  validateStep1();
+}
+
+function validateStep1() {
+  const ok = permitType && document.getElementById('wpLocation').value
+    && document.getElementById('wpExactLocation').value.trim()
+    && document.getElementById('wpDateFrom').value && document.getElementById('wpTimeFrom').value
+    && document.getElementById('wpDateTo').value && document.getElementById('wpTimeTo').value
+    && document.getElementById('wpIssuedTo').value.trim()
+    && document.getElementById('wpDescription').value.trim()
+    && document.getElementById('wpReceiver').value
+    && document.getElementById('wpSitePerson').value.trim()
+    && document.getElementById('wpEmergency').value.trim();
+  document.getElementById('btnStep1').disabled = !ok;
+}
+document.querySelectorAll('#step1 input, #step1 select, #step1 textarea').forEach(el => {
+  el.addEventListener('input', validateStep1);
+  el.addEventListener('change', validateStep1);
+});
+
+function buildChecklist() {
+  const container = document.getElementById('checklistContainer');
+  container.innerHTML = '';
+  for (const [sec, data] of Object.entries(CHECKLIST)) {
+    let html = `<div class="checklist" style="margin-bottom:10px"><div class="cl-header">${sec}. ${data.title}</div>`;
+    data.items.forEach(item => {
+      html += `<div class="cl-item">
+        <span class="cl-num">${item.id}</span>
+        <span class="cl-text">${item.text}</span>
+        <div class="cl-opts">
+          <button class="cl-opt" onclick="setCL('${item.id}','Done',this)">✓ Done</button>
+          <button class="cl-opt" onclick="setCL('${item.id}','N/A',this)">N/A</button>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+    container.innerHTML += html;
+  }
+}
+
+function setCL(id, val, btn) {
+  checklistData[id] = val;
+  const opts = btn.parentElement.querySelectorAll('.cl-opt');
+  opts.forEach(o => o.className = 'cl-opt');
+  btn.classList.add(val === 'Done' ? 'done' : 'na');
+}
+
+function buildHazards() {
+  const c = document.getElementById('hazardsList');
+  HAZARDS.forEach(h => {
+    c.innerHTML += `<button class="cl-opt" style="padding:6px 10px;font-size:11px" onclick="toggleSet(selectedHazards,'${h}',this)">${h}</button>`;
+  });
+}
+function buildPPE() {
+  const c = document.getElementById('ppeList');
+  PPE_LIST.forEach(p => {
+    c.innerHTML += `<button class="cl-opt" style="padding:6px 10px;font-size:11px" onclick="toggleSet(selectedPPE,'${p}',this)">${p}</button>`;
+  });
+}
+function toggleSet(set, val, btn) {
+  if (set.has(val)) { set.delete(val); btn.classList.remove('done'); }
+  else { set.add(val); btn.classList.add('done'); }
+}
+
+function goStep(n) {
+  for (let i = 1; i <= 5; i++) document.getElementById('step'+i).classList.toggle('hidden', i !== n);
+  document.querySelectorAll('.step-dot').forEach((d, i) => {
+    d.className = 'step-dot';
+    if (i+1 < n) d.classList.add('done');
+    if (i+1 === n) d.classList.add('active');
+  });
+  if (n === 4) buildSummary();
+  window.scrollTo(0, 0);
+}
+
+function gv(id) { const e = document.getElementById(id); return e ? e.value : ''; }
+
+function buildSummary() {
+  const s = document.getElementById('permitSummary');
+  const isHot = permitTypeKey === 'hot' || permitTypeKey === 'comp';
+  const color = isHot ? 'var(--red)' : 'var(--warn)';
+  const fields = [
+    ['Permit Type', permitType],
+    ['Location', gv('wpLocation')],
+    ['Exact Work Location', gv('wpExactLocation')],
+    ['Clearance Period', `${gv('wpDateFrom')} ${gv('wpTimeFrom')} → ${gv('wpDateTo')} ${gv('wpTimeTo')}`],
+    ['Issued To', gv('wpIssuedTo')],
+    ['Work Description', gv('wpDescription')],
+    ['Receiver', gv('wpReceiver')],
+    ['Site Person', gv('wpSitePerson')],
+    ['Gas Test', `HC:${gv('wpGasHC')||'-'}% | Toxic:${gv('wpGasToxic')||'-'}PPM | O₂:${gv('wpGasO2')||'-'}%`],
+    ['Checklist Items', Object.keys(checklistData).length + ' items marked'],
+    ['Hazards', [...selectedHazards].join(', ') || 'None'],
+    ['Additional PPE', [...selectedPPE].join(', ') || 'None']
+  ];
+  s.innerHTML = `<div style="padding:10px;border-radius:8px;border:2px solid ${color};background:${isHot?'rgba(220,38,38,.08)':'rgba(255,209,102,.08)'};margin-bottom:12px;text-align:center;font-weight:700;color:${color};font-size:15px">${permitType.toUpperCase()} PERMIT</div>` +
+    fields.map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2);min-width:120px">${k}</span><span style="text-align:right;max-width:280px;word-break:break-word">${v}</span></div>`).join('');
+}
+
+async function submitPermit() {
+  const btn = document.getElementById('btnSubmit');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="loading-spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin-right:8px"></div> Submitting...';
+
+  try {
+    const payload = {
+      action: 'submitWorkPermit',
+      permitType: permitType,
+      permitTypeKey: permitTypeKey,
+      location: gv('wpLocation'),
+      exactLocation: gv('wpExactLocation'),
+      dateFrom: gv('wpDateFrom'),
+      timeFrom: gv('wpTimeFrom'),
+      dateTo: gv('wpDateTo'),
+      timeTo: gv('wpTimeTo'),
+      issuedTo: gv('wpIssuedTo'),
+      description: gv('wpDescription'),
+      receiverName: gv('wpReceiver'),
+      receiverDesignation: gv('wpReceiverDesg'),
+      sitePerson: gv('wpSitePerson'),
+      securityGuard: gv('wpSecurityGuard'),
+      jsaRef: gv('wpJSA'),
+      crossRef: gv('wpCrossRef'),
+      emergencyContact: gv('wpEmergency'),
+      fireStation: gv('wpFireStation'),
+      gasHC: gv('wpGasHC'),
+      gasToxic: gv('wpGasToxic'),
+      gasO2: gv('wpGasO2'),
+      checklist: JSON.stringify(checklistData),
+      hazards: JSON.stringify([...selectedHazards]),
+      ppe: JSON.stringify([...selectedPPE]),
+      precautions: gv('wpPrecautions'),
+      deviceInfo: navigator.userAgent.substring(0, 80)
+    };
+
+    const url = API_URL + '?' + new URLSearchParams(payload).toString();
+    let result;
+    if (url.length > 7500) {
+      const r = await fetch(API_URL, { method:'POST', redirect:'follow', headers:{'Content-Type':'text/plain'}, body:JSON.stringify(payload) });
+      result = JSON.parse(await r.text());
+    } else {
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), 25000);
+      const r = await fetch(url, { redirect:'follow', signal:c.signal });
+      clearTimeout(t);
+      result = JSON.parse(await r.text());
+    }
+
+    if (result.success) {
+      goStep(5);
+      document.getElementById('resultContent').innerHTML = `
+        <div class="result-icon success">✓</div>
+        <h2 style="color:var(--accent)">Permit Submitted!</h2>
+        <p style="font-size:14px;color:var(--text2)">Permit ID: <b style="color:var(--warn);font-family:'Space Mono',monospace">${result.permitId || '-'}</b></p>
+        <p style="font-size:12px;color:var(--text2);margin-top:8px">Status: <b>Pending Issuer Approval</b></p>
+        <p style="font-size:11px;color:var(--text2);margin-top:12px">The Issuer must approve this permit from the Dashboard before work can begin.</p>
+        <button class="btn btn-secondary" style="margin-top:16px" onclick="location.reload()">Submit Another</button>`;
+    } else {
+      goStep(5);
+      document.getElementById('resultContent').innerHTML = `
+        <div class="result-icon error">✕</div>
+        <h2 style="color:var(--danger)">Submission Failed</h2>
+        <p>${result.error || 'Unknown error'}</p>
+        <button class="btn btn-secondary" style="margin-top:16px" onclick="goStep(4)">← Try Again</button>`;
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '📤 Submit Work Permit';
+    alert('Error: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>
