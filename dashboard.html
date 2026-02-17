@@ -978,14 +978,14 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
 <script>
 // ============================================================
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbythbfaraTxjIxYiR7rfdrWowR4ijdIdvHkyp5rNpp67grI7E-Wn_gnaUY_5_8GSbT55Q/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbz7Iibr9sB20rO5SlWslx48XF819WGy1Jp8sv4IYCO0LhXSR74ThdclfW7BKHysse-S8w/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -2275,10 +2275,39 @@ function exportEquipmentCSV() {
   a.click();
 }
 
+
 // ============================================================
 // WORK PERMITS MODULE
 // ============================================================
 let currentPermits = [];
+
+function cleanDate(v) {
+  if (!v || v === 'undefined' || v === 'null' || v === '-') return '-';
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m1 = s.match(/(\d{4}-\d{2}-\d{2})/);
+  if (m1) return m1[1];
+  const m2 = s.match(/\w+ (\w+) (\d+) (\d{4})/);
+  if (m2) {
+    const mo = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+    return m2[3]+'-'+(mo[m2[1]]||'01')+'-'+m2[2].padStart(2,'0');
+  }
+  try { const d = new Date(s); if (!isNaN(d) && d.getFullYear()>1900) return d.toISOString().split('T')[0]; } catch(e){}
+  return s.substring(0,10);
+}
+
+function cleanTime(v) {
+  if (!v || v === 'undefined' || v === 'null' || v === '-') return '-';
+  const s = String(v);
+  if (/^\d{2}:\d{2}(:\d{2})?$/.test(s)) return s.substring(0,5);
+  const m = s.match(/(\d{1,2}):(\d{2}):\d{2}/);
+  if (m) return m[1].padStart(2,'0')+':'+m[2];
+  try {
+    const d = new Date(s);
+    if (!isNaN(d)) { const h=d.getHours(),mn=d.getMinutes(); if(h||mn) return String(h).padStart(2,'0')+':'+String(mn).padStart(2,'0'); }
+  } catch(e){}
+  return s.substring(0,5);
+}
 
 async function filterPermits() {
   const dateFrom = document.getElementById('wpFilterDateFrom').value;
@@ -2287,7 +2316,6 @@ async function filterPermits() {
   const status = document.getElementById('wpFilterStatus').value;
   const tbody = document.getElementById('wpTable');
 
-  // Populate location filter
   const locFilter = document.getElementById('wpFilterLocation');
   if (locFilter.options.length <= 1 && dashboardData && dashboardData.locations) {
     dashboardData.locations.forEach(l => {
@@ -2325,11 +2353,7 @@ async function filterPermits() {
       tbody.innerHTML = currentPermits.map(p => {
         const isHot = p.PermitTypeKey === 'hot' || p.PermitTypeKey === 'comp';
         const typeBg = isHot ? 'background:rgba(220,38,38,.15);color:#dc2626' : 'background:rgba(255,209,102,.15);color:#ca8a04';
-        let statusClass = 'completed';
-        if (p.Status === 'Pending') statusClass = 'late';
-        else if (p.Status === 'Issued') statusClass = 'on-time';
-        else if (p.Status === 'ClosureRequested') statusClass = 'very-late';
-        else if (p.Status === 'Closed') statusClass = 'completed';
+        let statusClass = p.Status==='Pending'?'late':p.Status==='Issued'?'on-time':p.Status==='ClosureRequested'?'very-late':'completed';
 
         let actions = `<button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="viewPermitDetail('${p.PermitID}')">👁 View</button>`;
         if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.15);color:var(--accent)" onclick="approvePermit('${p.PermitID}')">✓ Approve</button>`;
@@ -2340,14 +2364,17 @@ async function filterPermits() {
         if (p.Status === 'ClosureRequested') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.15);color:var(--accent)" onclick="confirmClosure('${p.PermitID}')">✓ Confirm Close</button>`;
         if (p.Status === 'Closed') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="exportPermitPDF('${p.PermitID}')">📄 PDF</button>`;
 
+        const df = cleanDate(p.DateFrom), tf = cleanTime(p.TimeFrom);
+        const dt = cleanDate(p.DateTo), tt = cleanTime(p.TimeTo);
+
         return `<tr>
           <td style="font-family:'JetBrains Mono';font-size:11px">${p.PermitID}</td>
           <td><span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;${typeBg}">${p.PermitType}</span></td>
           <td style="font-size:12px">${p.Location}</td>
-          <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(p.Description||'').replace(/"/g,'&quot;')}">${p.Description || '-'}</td>
-          <td style="font-size:12px">${p.ReceiverName || '-'}</td>
-          <td style="font-family:'JetBrains Mono';font-size:11px">${p.DateFrom} ${p.TimeFrom}</td>
-          <td style="font-family:'JetBrains Mono';font-size:11px">${p.DateTo} ${p.TimeTo}</td>
+          <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(p.Description||'').replace(/"/g,'&quot;')}">${p.Description||'-'}</td>
+          <td style="font-size:12px">${p.ReceiverName||'-'}</td>
+          <td style="font-family:'JetBrains Mono';font-size:11px">${df} ${tf}</td>
+          <td style="font-family:'JetBrains Mono';font-size:11px">${dt} ${tt}</td>
           <td><span class="status-pill ${statusClass}">${p.Status}</span></td>
           <td style="white-space:nowrap">${actions}</td>
         </tr>`;
@@ -2358,61 +2385,135 @@ async function filterPermits() {
   }
 }
 
+// IOCL-format detail view
 function viewPermitDetail(id) {
   const p = currentPermits.find(x => x.PermitID === id);
   if (!p) return;
   const panel = document.getElementById('wpDetailPanel');
   panel.classList.remove('hidden');
-  document.getElementById('wpDetailTitle').textContent = `📋 ${p.PermitType} — ${p.PermitID}`;
+  const isHot = p.PermitTypeKey === 'hot' || p.PermitTypeKey === 'comp';
+  const bc = isHot ? '#dc2626' : '#ca8a04';
+  const bg = isHot ? 'rgba(220,38,38,.04)' : 'rgba(255,209,102,.04)';
+  const stColor = p.Status==='Issued'?'var(--accent)':p.Status==='Pending'?'var(--warn)':p.Status==='Closed'?'var(--text2)':'var(--danger)';
+  document.getElementById('wpDetailTitle').textContent = '📋 '+p.PermitType+' — '+p.PermitID;
 
-  let checklist = '';
+  const df = cleanDate(p.DateFrom), tf = cleanTime(p.TimeFrom);
+  const dt = cleanDate(p.DateTo), tt = cleanTime(p.TimeTo);
+
+  const row = (l,v) => `<div style="display:flex;border-bottom:1px solid var(--border);padding:7px 0;font-size:12px"><div style="color:var(--text2);min-width:170px;flex-shrink:0">${l}</div><div style="flex:1;text-align:right;font-weight:500;word-break:break-word">${v||'-'}</div></div>`;
+
+  let html = `<div style="border:2px solid ${bc};border-radius:12px;padding:16px;background:${bg}">`;
+
+  // IOCL Header
+  html += `<div style="text-align:center;margin-bottom:14px">
+    <div style="font-size:12px;font-weight:700">INDIAN OIL CORPORATION LIMITED</div>
+    <div style="font-size:11px;font-weight:600">EASTERN REGION PIPELINES — HSE DEPT.</div>
+    <div style="font-size:10px;color:var(--text2)">Doc No.: ERPL/HS&E/25-26 | Issue: 01 | Rev: 00</div>
+    <div style="margin-top:8px;padding:6px 20px;display:inline-block;background:${bc};color:#fff;border-radius:6px;font-size:13px;font-weight:700;letter-spacing:1px">${p.PermitType.toUpperCase()} PERMIT</div>
+    <div style="margin-top:6px;font-family:monospace;font-size:12px;color:var(--text2)">Sl. No: ${p.PermitID}</div>
+    <div style="margin-top:4px"><span style="padding:3px 12px;border-radius:6px;border:2px solid ${stColor};color:${stColor};font-size:11px;font-weight:700">${p.Status.toUpperCase()}</span></div>
+  </div>`;
+
+  // Clearance period box
+  html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;background:var(--surface)">
+    <div style="font-size:11px;font-weight:600;color:${bc};text-transform:uppercase;margin-bottom:6px">Work Clearance Period</div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600">
+      <div>From: <span style="font-family:monospace">${df} ${tf}</span></div>
+      <div>To: <span style="font-family:monospace">${dt} ${tt}</span></div>
+    </div>
+  </div>`;
+
+  html += row('Issued To (Dept/Contractor)', p.IssuedTo);
+  html += row('Location', p.Location);
+  html += row('Exact Location of Work', p.ExactLocation);
+  html += row('Description of Work', p.Description);
+  html += row('Site Person (Name & Contact)', p.SitePerson);
+  html += row('Security Guard', p.SecurityGuard);
+  html += row('JSA Ref. No.', p.JSARef);
+  html += row('Cross-Reference Permits', p.CrossRef);
+  html += row('Emergency Contact', p.EmergencyContact);
+  html += row('Nearest Fire Station / Hospital', p.FireStation);
+
+  // Gas test box
+  html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin:12px 0;background:var(--surface)">
+    <div style="font-size:11px;font-weight:600;color:${bc};text-transform:uppercase;margin-bottom:6px">Gas Test Results</div>
+    <div style="display:flex;gap:20px;font-size:13px">
+      <div>HCs = <b>${p.GasHC||'___'}% LEL</b></div>
+      <div>Toxic Gas = <b>${p.GasToxic||'___'} PPM</b></div>
+      <div>O₂ = <b>${p.GasO2||'___'}%</b></div>
+    </div>
+  </div>`;
+
+  // Checklist
+  let clHtml = '<span style="font-size:12px;color:var(--text2)">None</span>';
   try {
-    const cl = typeof p.Checklist === 'string' ? JSON.parse(p.Checklist) : (p.Checklist || {});
+    const cl = typeof p.Checklist==='string' ? JSON.parse(p.Checklist) : (p.Checklist||{});
     const items = Object.entries(cl);
-    if (items.length) checklist = items.map(([k,v]) => `<span style="padding:2px 6px;border-radius:4px;font-size:10px;margin:2px;display:inline-block;background:${v==='Done'?'rgba(6,214,160,.15)':'rgba(255,209,102,.15)'};color:${v==='Done'?'var(--accent)':'var(--warn)'}">${k}:${v}</span>`).join('');
-    else checklist = '<span style="color:var(--text2);font-size:12px">No checklist data</span>';
-  } catch(e) { checklist = '-'; }
+    if (items.length) {
+      clHtml = '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+      items.forEach(([k,v]) => {
+        const c = v==='Done'?'rgba(6,214,160,.15)':'rgba(255,209,102,.15)';
+        const tc = v==='Done'?'var(--accent)':'var(--warn)';
+        clHtml += `<span style="padding:2px 6px;border-radius:4px;font-size:10px;background:${c};color:${tc}">${k}: ${v}</span>`;
+      });
+      clHtml += '</div>';
+    }
+  } catch(e) {}
+  html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin:12px 0;background:var(--surface)">
+    <div style="font-size:11px;font-weight:600;color:${bc};text-transform:uppercase;margin-bottom:6px">Safety Checklist</div>${clHtml}</div>`;
 
-  const fields = [
-    ['Location', p.Location], ['Exact Location', p.ExactLocation],
-    ['Issued To', p.IssuedTo], ['Description', p.Description],
-    ['Clearance', `${p.DateFrom} ${p.TimeFrom} → ${p.DateTo} ${p.TimeTo}`],
-    ['Receiver', `${p.ReceiverName} (${p.ReceiverDesignation || '-'})`],
-    ['Site Person', p.SitePerson], ['Security Guard', p.SecurityGuard || '-'],
-    ['JSA Ref', p.JSARef || '-'], ['Emergency', p.EmergencyContact],
-    ['Gas Test', `HC:${p.GasHC||'-'}% | Toxic:${p.GasToxic||'-'}PPM | O₂:${p.GasO2||'-'}%`],
-    ['Status', p.Status], ['Created', p.CreatedAt || '-'], ['Issued At', p.IssuedAt || '-'],
-    ['Closed At', p.ClosedAt || '-']
-  ];
+  // Hazards & PPE
+  let hazards='-', ppe='-';
+  try { const h=JSON.parse(p.Hazards||'[]'); if(h.length) hazards=h.join(', '); } catch(e){}
+  try { const pp=JSON.parse(p.PPE||'[]'); if(pp.length) ppe=pp.join(', '); } catch(e){}
+  html += row('Residual Hazards', hazards);
+  html += row('Additional PPE', ppe);
+  if (p.Precautions) html += row('Additional Precautions', p.Precautions);
 
-  document.getElementById('wpDetailContent').innerHTML =
-    fields.map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2);min-width:120px">${k}</span><span style="max-width:300px;word-break:break-word;text-align:right">${v || '-'}</span></div>`).join('') +
-    `<div style="margin-top:10px"><div style="font-size:12px;font-weight:600;margin-bottom:6px">Checklist:</div>${checklist}</div>`;
-  panel.scrollIntoView({ behavior: 'smooth' });
+  // Issuer & Receiver signature boxes
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;border-top:2px solid ${bc};padding-top:12px">
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--surface)">
+      <div style="font-size:11px;font-weight:700;color:${bc};text-transform:uppercase;margin-bottom:6px">Issuer</div>
+      <div style="font-size:12px;font-weight:600">${p.IssuerName||'(Pending Approval)'}</div>
+      <div style="font-size:11px;color:var(--text2)">${p.IssuerDesignation||''}</div>
+      ${p.IssuedAt&&p.IssuedAt!=='-'?`<div style="font-size:10px;color:var(--text2);margin-top:4px">Approved: ${cleanDate(p.IssuedAt)}</div>`:''}
+    </div>
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--surface)">
+      <div style="font-size:11px;font-weight:700;color:${bc};text-transform:uppercase;margin-bottom:6px">Receiver</div>
+      <div style="font-size:12px;font-weight:600">${p.ReceiverName||'-'}</div>
+      <div style="font-size:11px;color:var(--text2)">${p.ReceiverDesignation||''}</div>
+    </div>
+  </div>`;
+
+  if (p.ClosedAt && p.ClosedAt!=='-' && p.ClosedAt!=='undefined') {
+    html += `<div style="margin-top:10px;padding:8px;border-radius:6px;background:rgba(6,214,160,.08);border:1px solid var(--accent);text-align:center;font-size:12px;color:var(--accent)">✅ Permit Closed on ${cleanDate(p.ClosedAt)}</div>`;
+  }
+
+  html += '</div>';
+  document.getElementById('wpDetailContent').innerHTML = html;
+  panel.scrollIntoView({ behavior:'smooth' });
 }
 
 async function approvePermit(id) {
   if (!confirm('Approve this permit as Issuer? This will mark it as ISSUED.')) return;
-  const issuer = prompt('Enter Issuer Name & Designation:');
-  if (!issuer) return;
   try {
-    const url = API_URL + '?' + new URLSearchParams({ action:'updatePermitStatus', permitId:id, status:'Issued', issuerName:issuer }).toString();
+    const url = API_URL + '?' + new URLSearchParams({ action:'updatePermitStatus', permitId:id, status:'Issued' }).toString();
     const r = await fetch(url, { redirect:'follow' });
     const d = JSON.parse(await r.text());
     if (d.success) { alert('✅ Permit approved and issued!'); filterPermits(); }
-    else alert('Error: ' + (d.error || 'Failed'));
-  } catch(e) { alert('Error: ' + e.message); }
+    else alert('Error: '+(d.error||'Failed'));
+  } catch(e) { alert('Error: '+e.message); }
 }
 
 async function requestClosure(id) {
-  if (!confirm('Request closure as Receiver? Certify that work is completed and area cleared.')) return;
+  if (!confirm('Request closure? Certify work completed and area cleared.')) return;
   try {
     const url = API_URL + '?' + new URLSearchParams({ action:'updatePermitStatus', permitId:id, status:'ClosureRequested' }).toString();
     const r = await fetch(url, { redirect:'follow' });
     const d = JSON.parse(await r.text());
     if (d.success) { alert('🔒 Closure requested. Issuer must confirm.'); filterPermits(); }
-    else alert('Error: ' + (d.error || 'Failed'));
-  } catch(e) { alert('Error: ' + e.message); }
+    else alert('Error: '+(d.error||'Failed'));
+  } catch(e) { alert('Error: '+e.message); }
 }
 
 async function confirmClosure(id) {
@@ -2421,9 +2522,9 @@ async function confirmClosure(id) {
     const url = API_URL + '?' + new URLSearchParams({ action:'updatePermitStatus', permitId:id, status:'Closed' }).toString();
     const r = await fetch(url, { redirect:'follow' });
     const d = JSON.parse(await r.text());
-    if (d.success) { alert('✅ Permit closed successfully!'); filterPermits(); }
-    else alert('Error: ' + (d.error || 'Failed'));
-  } catch(e) { alert('Error: ' + e.message); }
+    if (d.success) { alert('✅ Permit closed!'); filterPermits(); }
+    else alert('Error: '+(d.error||'Failed'));
+  } catch(e) { alert('Error: '+e.message); }
 }
 
 // ============================================================
@@ -2431,154 +2532,103 @@ async function confirmClosure(id) {
 // ============================================================
 function exportPermitPDF(id) {
   const p = currentPermits.find(x => x.PermitID === id);
-  if (!p) { alert('Permit not found'); return; }
-  if (!window.jspdf) { alert('PDF library not loaded. Please wait and try again.'); return; }
+  if (!p) return alert('Permit not found');
 
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF('p', 'mm', 'a4');
-  const W = 210, H = 297;
-  const isHot = p.PermitTypeKey === 'hot' || p.PermitTypeKey === 'comp';
+  let JsPDF;
+  if (window.jspdf && window.jspdf.jsPDF) JsPDF = window.jspdf.jsPDF;
+  else if (window.jsPDF) JsPDF = window.jsPDF;
+  else return alert('PDF library loading. Wait a moment and retry.');
 
-  // Background color
-  if (isHot) {
-    doc.setFillColor(255, 235, 235); // Light red
-  } else {
-    doc.setFillColor(255, 252, 235); // Light yellow
-  }
-  doc.rect(0, 0, W, H, 'F');
+  const doc = new JsPDF('p','mm','a4');
+  const W=210, H=297, LM=12;
+  const isHot = p.PermitTypeKey==='hot'||p.PermitTypeKey==='comp';
+  const R=isHot?255:255, G=isHot?230:250, B=isHot?230:230;
+  const bc = isHot?[220,38,38]:[180,130,4];
 
-  // Border
-  const bc = isHot ? [220, 38, 38] : [202, 138, 4];
-  doc.setDrawColor(...bc);
-  doc.setLineWidth(1.5);
-  doc.rect(5, 5, W-10, H-10);
-  doc.rect(7, 7, W-14, H-14);
+  doc.setFillColor(R,G,B); doc.rect(0,0,W,H,'F');
+  doc.setDrawColor(...bc); doc.setLineWidth(1.5); doc.rect(5,5,W-10,H-10);
 
-  let y = 18;
+  let y=16;
+  const addPage = () => { doc.addPage(); y=15; doc.setFillColor(R,G,B); doc.rect(0,0,W,H,'F'); doc.setDrawColor(...bc); doc.setLineWidth(1); doc.rect(5,5,W-10,H-10); };
+  const chk = () => { if(y>272) addPage(); };
 
-  // Header
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
   doc.setTextColor(0);
-  doc.text('INDIAN OIL CORPORATION LIMITED', W/2, y, { align: 'center' }); y += 5;
+  doc.setFontSize(11); doc.setFont('helvetica','bold');
+  doc.text('INDIAN OIL CORPORATION LIMITED', W/2, y, {align:'center'}); y+=5;
   doc.setFontSize(9);
-  doc.text('EASTERN REGION PIPELINES — HSE DEPT.', W/2, y, { align: 'center' }); y += 5;
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Doc No.: ERPL/HS&E/25-26 | Issue: 01 | Date: 01.09.2025 | Rev: 00', W/2, y, { align: 'center' }); y += 7;
+  doc.text('EASTERN REGION PIPELINES — HSE DEPT.', W/2, y, {align:'center'}); y+=4;
+  doc.setFontSize(7); doc.setFont('helvetica','normal');
+  doc.text('Doc No.: ERPL/HS&E/25-26 | Issue: 01 | Date: 01.09.2025 | Rev: 00', W/2, y, {align:'center'}); y+=6;
 
-  // Permit Type Banner
-  doc.setFillColor(...bc);
-  doc.rect(10, y, W-20, 8, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text(p.PermitType.toUpperCase() + ' PERMIT', W/2, y+6, { align: 'center' });
-  doc.setTextColor(0);
-  y += 13;
+  doc.setFillColor(...bc); doc.rect(LM, y, W-2*LM, 8, 'F');
+  doc.setTextColor(255); doc.setFontSize(11); doc.setFont('helvetica','bold');
+  doc.text(p.PermitType.toUpperCase()+' PERMIT', W/2, y+6, {align:'center'});
+  doc.setTextColor(0); y+=12;
 
-  // Permit ID and Status
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Permit ID: ' + p.PermitID, 12, y);
-  doc.text('Sl. No: ___________', W-60, y);
-  doc.text('Status: ' + p.Status, W/2-10, y);
-  y += 7;
+  doc.setFontSize(8); doc.setFont('helvetica','bold');
+  doc.text('Permit ID: '+p.PermitID, LM, y);
+  doc.text('Status: '+p.Status, W/2, y); y+=7;
 
-  // Fields
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  const df=cleanDate(p.DateFrom),tf=cleanTime(p.TimeFrom),dt=cleanDate(p.DateTo),tt=cleanTime(p.TimeTo);
 
-  const addField = (label, value, indent) => {
-    indent = indent || 12;
-    if (y > 272) { doc.addPage(); y = 15; doc.setFillColor(isHot ? 255 : 255, isHot ? 235 : 252, 235); doc.rect(0,0,W,H,'F'); doc.setDrawColor(...bc); doc.setLineWidth(1); doc.rect(5,5,W-10,H-10); }
-    doc.setFont('helvetica', 'bold');
-    doc.text(label + ':', indent, y);
-    doc.setFont('helvetica', 'normal');
-    const lines = doc.splitTextToSize(String(value || '-'), W - 90);
-    doc.text(lines, 75, y);
-    y += Math.max(lines.length * 4, 5);
-  };
+  const addRow = (lbl,val) => { chk(); doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text(lbl, LM, y); doc.setFont('helvetica','normal'); const ln=doc.splitTextToSize(String(val||'-'),W-85); doc.text(ln,72,y); y+=Math.max(ln.length*4,5.5); };
 
-  addField('Work Clearance', p.DateFrom + ' ' + p.TimeFrom + '  To  ' + p.DateTo + ' ' + p.TimeTo);
-  addField('Issued To', p.IssuedTo);
-  addField('Exact Location', p.ExactLocation);
-  addField('Description', p.Description);
-  addField('Site Person', p.SitePerson);
-  addField('Security Guard', p.SecurityGuard || '-');
-  addField('JSA Ref No.', p.JSARef || '-');
-  addField('Cross-Ref', p.CrossRef || '-');
-  addField('Emergency Contact', p.EmergencyContact);
-  addField('Fire Station/Hospital', p.FireStation || '-');
-  y += 3;
+  addRow('Work Clearance:', df+' '+tf+'  To  '+dt+' '+tt);
+  addRow('Issued To:', p.IssuedTo);
+  addRow('Location:', p.Location+' — '+p.ExactLocation);
+  addRow('Description:', p.Description);
+  addRow('Site Person:', p.SitePerson);
+  addRow('Security Guard:', p.SecurityGuard||'-');
+  addRow('JSA Ref No.:', p.JSARef||'-');
+  addRow('Cross-Reference:', p.CrossRef||'-');
+  addRow('Emergency Contact:', p.EmergencyContact);
+  addRow('Fire Station:', p.FireStation||'-');
+  y+=2;
 
-  // Gas Test
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.text('GAS TEST:', 12, y); y += 5;
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.text('HCs = ' + (p.GasHC || '___') + '% LEL    Toxic Gas = ' + (p.GasToxic || '___') + ' PPM    O₂ = ' + (p.GasO2 || '___') + '%', 12, y);
-  y += 7;
+  doc.setDrawColor(...bc); doc.setLineWidth(0.3); doc.line(LM,y,W-LM,y); y+=4;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.text('GAS TEST:', LM, y); y+=5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  doc.text('HCs = '+(p.GasHC||'___')+'% LEL     Toxic Gas = '+(p.GasToxic||'___')+' PPM     O2 = '+(p.GasO2||'___')+'%', LM, y); y+=6;
 
-  // Checklist summary
   try {
-    const cl = typeof p.Checklist === 'string' ? JSON.parse(p.Checklist) : (p.Checklist || {});
+    const cl = typeof p.Checklist==='string'?JSON.parse(p.Checklist):{};
     const items = Object.entries(cl);
     if (items.length) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.text('CHECKLIST ITEMS:', 12, y); y += 5;
-      doc.setFontSize(7);
-      doc.setFont('helvetica', 'normal');
-      items.forEach(([k, v]) => {
-        if (y > 275) { doc.addPage(); y = 15; doc.setFillColor(isHot?255:255,isHot?235:252,235); doc.rect(0,0,W,H,'F'); }
-        doc.text(k + ': ' + v, 14, y);
-        y += 3.5;
-      });
-      y += 3;
+      doc.line(LM,y,W-LM,y); y+=4;
+      doc.setFont('helvetica','bold'); doc.setFontSize(9);
+      doc.text('SAFETY CHECKLIST:', LM, y); y+=5;
+      doc.setFontSize(7); doc.setFont('helvetica','normal');
+      for (const [k,v] of items) { chk(); doc.text(k+': '+v, LM+2, y); y+=3.5; }
+      y+=2;
     }
-  } catch(e) {}
+  } catch(e){}
 
-  // Signatures section
-  if (y > 245) { doc.addPage(); y = 15; doc.setFillColor(isHot?255:255,isHot?235:252,235); doc.rect(0,0,W,H,'F'); doc.setDrawColor(...bc); doc.setLineWidth(1); doc.rect(5,5,W-10,H-10); }
+  try { const hz=JSON.parse(p.Hazards||'[]'); if(hz.length) addRow('Residual Hazards:',hz.join(', ')); } catch(e){}
+  try { const pp=JSON.parse(p.PPE||'[]'); if(pp.length) addRow('Additional PPE:',pp.join(', ')); } catch(e){}
+  if (p.Precautions) addRow('Precautions:',p.Precautions);
 
-  y += 5;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.text('ISSUER', 35, y, { align: 'center' });
-  doc.text('RECEIVER', W - 55, y, { align: 'center' });
-  y += 5;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text('Name: ' + (p.IssuerName || '_______________'), 12, y);
-  doc.text('Name: ' + (p.ReceiverName || '_______________'), W/2 + 5, y);
-  y += 5;
-  doc.text('Designation: ' + (p.IssuerDesignation || '_______________'), 12, y);
-  doc.text('Designation: ' + (p.ReceiverDesignation || '_______________'), W/2 + 5, y);
-  y += 5;
-  doc.text('Signature: _______________', 12, y);
-  doc.text('Signature: _______________', W/2 + 5, y);
-  y += 10;
+  if(y>240) addPage();
+  y+=3; doc.setDrawColor(...bc); doc.setLineWidth(0.5); doc.line(LM,y,W-LM,y); y+=6;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.text('ISSUER',W/4,y,{align:'center'}); doc.text('RECEIVER',3*W/4,y,{align:'center'}); y+=5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  doc.text('Name: '+(p.IssuerName||'_______________'),LM,y); doc.text('Name: '+(p.ReceiverName||'_______________'),W/2+5,y); y+=5;
+  doc.text('Designation: '+(p.IssuerDesignation||'_______________'),LM,y); doc.text('Designation: '+(p.ReceiverDesignation||'_______________'),W/2+5,y); y+=5;
+  doc.text('Signature: _______________',LM,y); doc.text('Signature: _______________',W/2+5,y); y+=8;
 
-  // Closing section
-  doc.setDrawColor(...bc);
-  doc.setLineWidth(0.5);
-  doc.line(10, y, W-10, y); y += 5;
-  doc.setFont('helvetica', 'bold');
-  doc.text('CLOSING OF WORK PERMIT', W/2, y, { align: 'center' }); y += 5;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.text('Receiver: Certified that the work has been completed/stopped and area cleared.', 12, y); y += 4;
-  doc.text('Issuer: Verified that the job has been completed and area is safe from any hazard.', 12, y); y += 4;
-  if (p.ClosedAt) { doc.text('Closed At: ' + p.ClosedAt, 12, y); y += 4; }
+  doc.line(LM,y,W-LM,y); y+=5;
+  doc.setFont('helvetica','bold');
+  doc.text('CLOSING OF WORK PERMIT',W/2,y,{align:'center'}); y+=5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.text('Receiver: Certified that the work has been completed/stopped and area cleared.',LM,y); y+=4;
+  doc.text('Issuer: Verified that the job has been completed and area is safe from any hazard.',LM,y); y+=4;
+  const ca = cleanDate(p.ClosedAt);
+  if(ca && ca!=='-') { doc.text('Closed At: '+ca,LM,y); y+=4; }
 
-  // Footer
-  doc.setFontSize(6);
-  doc.setTextColor(128);
-  doc.text('Generated from AttendX Work Permit System | ' + new Date().toLocaleString(), W/2, H - 8, { align: 'center' });
-
-  doc.save('WorkPermit_' + p.PermitID + '.pdf');
+  doc.setFontSize(6); doc.setTextColor(128);
+  doc.text('Generated from AttendX Work Permit System | '+new Date().toLocaleString(),W/2,H-8,{align:'center'});
+  doc.save('WorkPermit_'+p.PermitID+'.pdf');
 }
 
 </script>
