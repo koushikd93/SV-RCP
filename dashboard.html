@@ -1004,7 +1004,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycby62RPYvYMwBTSlbJLQoHPxrMJ9nJfgy4SM56OAxlQjy2I8x0TPDQ5a9PSoNtOSd6rzGg/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbyPe33BFetFwfecW6h7OoNHdVMkZQv2wtsUSEQ-_0WmMsHwB8Gcv-udCEfWVFZBs5mNew/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -2298,8 +2298,6 @@ function exportEquipmentCSV() {
   a.click();
 }
 
-
-
 // ============================================================
 // WORK PERMITS MODULE
 // ============================================================
@@ -2324,6 +2322,18 @@ function cleanTime(v) {
   if (m) return m[1].padStart(2,'0')+':'+m[2];
   try { const d=new Date(s); if(!isNaN(d)){const h=d.getHours(),mn=d.getMinutes();if(h||mn) return String(h).padStart(2,'0')+':'+String(mn).padStart(2,'0');} } catch(e){}
   return s.substring(0,5);
+}
+
+// Draw a visible tick mark in PDF
+function drawTick(doc, x, y, size) {
+  size = size || 3;
+  doc.setDrawColor(0, 150, 0);
+  doc.setLineWidth(0.6);
+  // Draw V-shape tick
+  doc.line(x, y, x + size*0.35, y + size*0.5);
+  doc.line(x + size*0.35, y + size*0.5, x + size, y - size*0.3);
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.2);
 }
 
 // ============================================================
@@ -2407,7 +2417,7 @@ async function filterPermits() {
     const data = JSON.parse(await r.text());
 
     if (data.error && data.error.includes('Invalid action')) {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--danger)">❌ API needs update. Add work permit GAS code and redeploy.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--danger)">API needs update. Add work permit GAS code and redeploy.</td></tr>';
       return;
     }
 
@@ -2423,10 +2433,10 @@ async function filterPermits() {
         let actions = `<button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="viewPermitDetail('${p.PermitID}')">👁 View</button>`;
         if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.15);color:var(--accent)" onclick="startOTPApproval('${p.PermitID}')">🔐 Approve</button>`;
         if (p.Status === 'Issued') {
-          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(255,209,102,.15);color:var(--warn)" onclick="requestClosure('${p.PermitID}')">🔒 Close</button>`;
+          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(255,209,102,.15);color:var(--warn)" onclick="startClosureOTP('${p.PermitID}')">🔒 Close</button>`;
           actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="exportPermitPDF('${p.PermitID}')">📄 PDF</button>`;
         }
-        if (p.Status === 'ClosureRequested') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.15);color:var(--accent)" onclick="confirmClosure('${p.PermitID}')">✓ Confirm Close</button>`;
+        if (p.Status === 'ClosureRequested') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.15);color:var(--accent)" onclick="startClosureOTP('${p.PermitID}')">🔐 Verify Close</button>`;
         if (p.Status === 'Closed') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="exportPermitPDF('${p.PermitID}')">📄 PDF</button>`;
 
         return `<tr>
@@ -2458,7 +2468,7 @@ function viewPermitDetail(id) {
   const isHot = p.PermitTypeKey==='hot'||p.PermitTypeKey==='comp';
   const bc = isHot?'#dc2626':'#ca8a04';
   const bg = isHot?'rgba(220,38,38,.04)':'rgba(255,209,102,.04)';
-  document.getElementById('wpDetailTitle').textContent = '📋 '+p.PermitType+' — '+p.PermitID;
+  document.getElementById('wpDetailTitle').textContent = p.PermitType+' — '+p.PermitID;
 
   const df=cleanDate(p.DateFrom),tf=cleanTime(p.TimeFrom),dt=cleanDate(p.DateTo),tt=cleanTime(p.TimeTo);
   const row = (l,v) => `<div style="display:flex;border-bottom:1px solid var(--border);padding:7px 0;font-size:12px"><div style="color:var(--text2);min-width:170px;flex-shrink:0">${l}</div><div style="flex:1;text-align:right;font-weight:500;word-break:break-word">${v||'-'}</div></div>`;
@@ -2475,12 +2485,9 @@ function viewPermitDetail(id) {
   html += `<div style="text-align:center;margin-bottom:14px"><span style="padding:3px 12px;border-radius:6px;border:2px solid ${stColor};color:${stColor};font-size:11px;font-weight:700">${p.Status.toUpperCase()}</span></div>`;
   html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;background:var(--surface)">
     <div style="font-size:11px;font-weight:600;color:${bc};text-transform:uppercase;margin-bottom:6px">Work Clearance Period (Valid for the shift unless renewed)</div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600">
-      <div>From: <span style="font-family:monospace">${df} ${tf}</span></div>
-      <div>To: <span style="font-family:monospace">${dt} ${tt}</span></div>
-    </div></div>`;
+    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><div>From: <span style="font-family:monospace">${df} ${tf}</span></div><div>To: <span style="font-family:monospace">${dt} ${tt}</span></div></div></div>`;
   html += row('Issued To (Dept/Section/Contractor)', p.IssuedTo);
-  html += row('Exact Location of Work', p.ExactLocation + ' — ' + p.Location);
+  html += row('Exact Location of Work', p.ExactLocation+' — '+p.Location);
   html += row('Description of Work', p.Description);
   html += row('Person from Contractor/Dept at Site', p.SitePerson);
   html += row('Patrolling/Security Guard at Site', p.SecurityGuard);
@@ -2489,12 +2496,10 @@ function viewPermitDetail(id) {
   html += row('Emergency Contact', p.EmergencyContact);
   html += row('Nearest Fire Station & Hospital', p.FireStation);
 
-  // Gas test
   html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin:12px 0;background:var(--surface)">
     <div style="font-size:11px;font-weight:600;color:${bc};text-transform:uppercase;margin-bottom:6px">Gas Test Results</div>
-    <div style="display:flex;gap:20px;font-size:13px"><div>HCs = <b>${p.GasHC||'___'}% LEL</b></div><div>Toxic Gas = <b>${p.GasToxic||'___'} PPM</b></div><div>O₂ = <b>${p.GasO2||'___'}%</b></div></div></div>`;
+    <div style="display:flex;gap:20px;font-size:13px"><div>HCs = <b>${p.GasHC||'___'}% LEL</b></div><div>Toxic Gas = <b>${p.GasToxic||'___'} PPM</b></div><div>O2 = <b>${p.GasO2||'___'}%</b></div></div></div>`;
 
-  // Checklist
   let clHtml = '<span style="font-size:12px;color:var(--text2)">None</span>';
   try {
     const cl = typeof p.Checklist==='string'?JSON.parse(p.Checklist):(p.Checklist||{});
@@ -2529,7 +2534,7 @@ function viewPermitDetail(id) {
     </div></div>`;
 
   if (p.ClosedAt && p.ClosedAt!=='-' && p.ClosedAt!=='undefined')
-    html += `<div style="margin-top:10px;padding:8px;border-radius:6px;background:rgba(6,214,160,.08);border:1px solid var(--accent);text-align:center;font-size:12px;color:var(--accent)">✅ Permit Closed on ${cleanDate(p.ClosedAt)}</div>`;
+    html += `<div style="margin-top:10px;padding:8px;border-radius:6px;background:rgba(6,214,160,.08);border:1px solid var(--accent);text-align:center;font-size:12px;color:var(--accent)">Permit Closed on ${cleanDate(p.ClosedAt)}</div>`;
 
   html += '</div>';
   document.getElementById('wpDetailContent').innerHTML = html;
@@ -2537,21 +2542,20 @@ function viewPermitDetail(id) {
 }
 
 // ============================================================
-// OTP APPROVAL FLOW
+// OTP APPROVAL FLOW (Issuer only)
 // ============================================================
 async function startOTPApproval(id) {
   const p = currentPermits.find(x => x.PermitID === id);
   if (!p) return;
+  if (!confirm('Send approval OTP to Issuer (' + (p.IssuerName||'Unknown') + ')?\nOTP will be sent to their registered email.')) return;
 
-  if (!confirm('Send OTP to Issuer (' + (p.IssuerName||'Unknown') + ') for permit approval?\n\nAn email with a 6-digit OTP will be sent.')) return;
+  const panel = document.getElementById('wpDetailPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('wpDetailTitle').textContent = 'OTP Verification — ' + id;
+  document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Sending OTP to Issuer...</div>';
+  panel.scrollIntoView({ behavior:'smooth' });
 
   try {
-    const panel = document.getElementById('wpDetailPanel');
-    panel.classList.remove('hidden');
-    document.getElementById('wpDetailTitle').textContent = '🔐 OTP Verification — ' + id;
-    document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Sending OTP to Issuer...</div>';
-    panel.scrollIntoView({ behavior:'smooth' });
-
     const url = API_URL + '?' + new URLSearchParams({ action:'generatePermitOTP', permitId:id }).toString();
     const r = await fetch(url, { redirect:'follow' });
     const d = JSON.parse(await r.text());
@@ -2559,87 +2563,124 @@ async function startOTPApproval(id) {
     if (d.success) {
       document.getElementById('wpDetailContent').innerHTML = `
         <div style="text-align:center;padding:20px">
-          <div style="font-size:40px;margin-bottom:12px">📧</div>
-          <div style="font-size:14px;font-weight:600;color:var(--accent);margin-bottom:8px">OTP Sent Successfully!</div>
-          <div style="font-size:12px;color:var(--text2);margin-bottom:16px">OTP sent to <b>${d.maskedEmail}</b>. Valid for 30 minutes.</div>
+          <div style="font-size:40px;margin-bottom:10px">📧</div>
+          <div style="font-size:14px;font-weight:600;color:var(--accent);margin-bottom:8px">OTP Sent to Issuer!</div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:16px">Sent to <b>${d.maskedEmail}</b> — valid for 30 minutes.</div>
           <div style="max-width:300px;margin:0 auto">
             <input type="text" id="otpInput" maxlength="6" placeholder="Enter 6-digit OTP" style="text-align:center;font-size:20px;letter-spacing:8px;font-family:monospace;padding:14px;background:var(--surface2);border:2px solid var(--border);border-radius:10px;color:var(--text);width:100%;margin-bottom:12px">
-            <button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(6,214,160,.15);color:var(--accent);border:2px solid var(--accent)" onclick="verifyOTP('${id}')">✓ Verify OTP & Approve Permit</button>
-            <div style="margin-top:10px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="startOTPApproval('${id}')">🔄 Resend OTP</button></div>
+            <button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(6,214,160,.15);color:var(--accent);border:2px solid var(--accent)" onclick="verifyApprovalOTP('${id}')">Verify OTP & Approve Permit</button>
+            <div style="margin-top:10px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="startOTPApproval('${id}')">Resend OTP</button></div>
           </div>
           <div id="otpError" style="margin-top:10px;color:var(--danger);font-size:12px;display:none"></div>
         </div>`;
       setTimeout(() => document.getElementById('otpInput')?.focus(), 100);
     } else {
-      document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">❌ ${d.error || 'Failed to send OTP'}</div>`;
+      document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">${d.error||'Failed to send OTP'}</div>`;
     }
   } catch(e) {
-    document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">❌ Error: ${e.message}</div>`;
+    document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">Error: ${e.message}</div>`;
   }
 }
 
-async function verifyOTP(id) {
+async function verifyApprovalOTP(id) {
   const otp = document.getElementById('otpInput')?.value?.trim();
-  if (!otp || otp.length !== 6) {
-    const err = document.getElementById('otpError');
-    err.style.display = 'block';
-    err.textContent = 'Please enter a valid 6-digit OTP';
-    return;
-  }
+  if (!otp || otp.length !== 6) { const e = document.getElementById('otpError'); e.style.display='block'; e.textContent='Enter a valid 6-digit OTP'; return; }
+  try {
+    document.getElementById('otpError').style.display='none';
+    const url = API_URL + '?' + new URLSearchParams({ action:'verifyPermitOTP', permitId:id, otp:otp }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+    if (d.success) {
+      document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:50px;margin-bottom:10px">&#9989;</div><div style="font-size:16px;font-weight:700;color:var(--accent)">Permit Approved & Issued!</div><div style="font-size:12px;color:var(--text2);margin-top:6px">${d.message}</div></div>`;
+      setTimeout(() => filterPermits(), 1500);
+    } else { const e = document.getElementById('otpError'); e.style.display='block'; e.textContent=d.error||'Verification failed'; }
+  } catch(e) { const el = document.getElementById('otpError'); el.style.display='block'; el.textContent='Error: '+e.message; }
+}
+
+// ============================================================
+// CLOSURE OTP FLOW (Both Receiver + Issuer)
+// ============================================================
+async function startClosureOTP(id) {
+  const p = currentPermits.find(x => x.PermitID === id);
+  if (!p) return;
+  if (!confirm('Close permit ' + id + '?\n\nOTPs will be sent to both:\n• Receiver: ' + (p.ReceiverName||'-') + '\n• Issuer: ' + (p.IssuerName||'-') + '\n\nBoth must verify via registered email.')) return;
+
+  const panel = document.getElementById('wpDetailPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('wpDetailTitle').textContent = 'Permit Closure — ' + id;
+  document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Sending closure OTPs...</div>';
+  panel.scrollIntoView({ behavior:'smooth' });
 
   try {
-    document.getElementById('otpError').style.display = 'none';
-    const url = API_URL + '?' + new URLSearchParams({ action:'verifyPermitOTP', permitId:id, otp:otp }).toString();
+    const url = API_URL + '?' + new URLSearchParams({ action:'generateClosureOTP', permitId:id }).toString();
     const r = await fetch(url, { redirect:'follow' });
     const d = JSON.parse(await r.text());
 
     if (d.success) {
       document.getElementById('wpDetailContent').innerHTML = `
-        <div style="text-align:center;padding:30px">
-          <div style="font-size:50px;margin-bottom:12px">✅</div>
-          <div style="font-size:16px;font-weight:700;color:var(--accent);margin-bottom:8px">Permit Approved!</div>
-          <div style="font-size:12px;color:var(--text2)">${d.message}</div>
+        <div style="padding:20px">
+          <div style="text-align:center;margin-bottom:16px">
+            <div style="font-size:36px;margin-bottom:8px">🔒</div>
+            <div style="font-size:14px;font-weight:600;color:var(--warn)">Closure OTPs Sent!</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:4px">${d.details ? d.details.join(' | ') : ''}</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:500px;margin:0 auto">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+              <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;margin-bottom:8px">Receiver OTP</div>
+              <div style="font-size:10px;color:var(--text2);margin-bottom:8px">${d.receiverMasked||'N/A'}</div>
+              <input type="text" id="closureRecOtp" maxlength="6" placeholder="6-digit OTP" style="text-align:center;font-size:18px;letter-spacing:6px;font-family:monospace;padding:10px;background:var(--surface2);border:2px solid var(--border);border-radius:8px;color:var(--text);width:100%">
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+              <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;margin-bottom:8px">Issuer OTP</div>
+              <div style="font-size:10px;color:var(--text2);margin-bottom:8px">${d.issuerMasked||'N/A'}</div>
+              <input type="text" id="closureIssOtp" maxlength="6" placeholder="6-digit OTP" style="text-align:center;font-size:18px;letter-spacing:6px;font-family:monospace;padding:10px;background:var(--surface2);border:2px solid var(--border);border-radius:8px;color:var(--text);width:100%">
+            </div>
+          </div>
+          <div style="text-align:center;margin-top:14px">
+            <button class="refresh-btn" style="padding:12px 30px;font-size:14px;font-weight:700;background:rgba(220,38,38,.15);color:#dc2626;border:2px solid #dc2626" onclick="verifyClosureOTPs('${id}')">Verify Both OTPs & Close Permit</button>
+            <div style="margin-top:8px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="startClosureOTP('${id}')">Resend OTPs</button></div>
+          </div>
+          <div id="closureError" style="text-align:center;margin-top:10px;color:var(--danger);font-size:12px;display:none"></div>
         </div>`;
-      setTimeout(() => filterPermits(), 1500);
     } else {
-      const err = document.getElementById('otpError');
-      err.style.display = 'block';
-      err.textContent = d.error || 'OTP verification failed';
+      document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">${d.error||'Failed'}</div>`;
     }
   } catch(e) {
-    const err = document.getElementById('otpError');
-    err.style.display = 'block';
-    err.textContent = 'Error: ' + e.message;
+    document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">Error: ${e.message}</div>`;
   }
 }
 
-async function requestClosure(id) {
-  if (!confirm('Request closure? Certify work completed and area cleared.')) return;
-  try {
-    const url = API_URL + '?' + new URLSearchParams({ action:'updatePermitStatus', permitId:id, status:'ClosureRequested' }).toString();
-    const r = await fetch(url, { redirect:'follow' });
-    const d = JSON.parse(await r.text());
-    if (d.success) { alert('🔒 Closure requested. Issuer must confirm.'); filterPermits(); }
-    else alert('Error: '+(d.error||'Failed'));
-  } catch(e) { alert('Error: '+e.message); }
-}
+async function verifyClosureOTPs(id) {
+  const recOtp = document.getElementById('closureRecOtp')?.value?.trim();
+  const issOtp = document.getElementById('closureIssOtp')?.value?.trim();
+  const errEl = document.getElementById('closureError');
 
-async function confirmClosure(id) {
-  if (!confirm('Confirm closure as Issuer? Verify job completed and area safe.')) return;
+  if ((!recOtp || recOtp.length !== 6) && (!issOtp || issOtp.length !== 6)) {
+    errEl.style.display='block'; errEl.textContent='Enter at least one valid 6-digit OTP'; return;
+  }
+
   try {
-    const url = API_URL + '?' + new URLSearchParams({ action:'updatePermitStatus', permitId:id, status:'Closed' }).toString();
+    errEl.style.display='none';
+    const params = { action:'verifyClosureOTP', permitId:id };
+    if (recOtp && recOtp.length === 6) params.receiverOtp = recOtp;
+    if (issOtp && issOtp.length === 6) params.issuerOtp = issOtp;
+
+    const url = API_URL + '?' + new URLSearchParams(params).toString();
     const r = await fetch(url, { redirect:'follow' });
     const d = JSON.parse(await r.text());
-    if (d.success) { alert('✅ Permit closed!'); filterPermits(); }
-    else alert('Error: '+(d.error||'Failed'));
-  } catch(e) { alert('Error: '+e.message); }
+
+    if (d.success) {
+      document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:50px;margin-bottom:10px">&#9989;</div><div style="font-size:16px;font-weight:700;color:var(--accent)">Permit Closed!</div><div style="font-size:12px;color:var(--text2);margin-top:6px">${d.message}</div></div>`;
+      setTimeout(() => filterPermits(), 1500);
+    } else {
+      errEl.style.display='block'; errEl.textContent=d.error||'Verification failed';
+    }
+  } catch(e) { errEl.style.display='block'; errEl.textContent='Error: '+e.message; }
 }
 
 // ============================================================
 // FULL IOCL-FORMAT PDF EXPORT
 // ============================================================
-
-// Complete checklist items matching IOCL format (English only)
 const CHECKLIST_ITEMS_PDF = {
   A: { title: 'SECTION A — GENERAL POINTS', items: [
     ['A1', 'Equipment / Work Area inspected'],
@@ -2659,7 +2700,7 @@ const CHECKLIST_ITEMS_PDF = {
     ['A15', 'CCTV monitoring facility available at site.'],
     ['A16', 'Proper ventilation and Lighting provided.'],
   ]},
-  AR: { title: '(Right Column)', items: [
+  AR: { title: 'SECTION A (Contd.) — RIGHT COLUMN', items: [
     ['A4R', 'Shield provided against spark.'],
     ['A5R', 'Portable equipment nozzle properly grounded.'],
     ['A6R', 'Standby persons provided for entry to confined space.'],
@@ -2726,14 +2767,9 @@ function exportPermitPDF(id) {
   const BC = isHot?[220,38,38]:[180,130,4];
   let y = 0;
 
-  function newPage() {
-    doc.addPage(); y=0;
-    doc.setFillColor(...BG); doc.rect(0,0,W,H,'F');
-    doc.setDrawColor(...BC); doc.setLineWidth(1); doc.rect(5,5,W-10,H-10);
-    y = 14;
-  }
+  function newPage() { doc.addPage(); y=0; doc.setFillColor(...BG); doc.rect(0,0,W,H,'F'); doc.setDrawColor(...BC); doc.setLineWidth(1); doc.rect(5,5,W-10,H-10); y=14; }
   function bg() { doc.setFillColor(...BG); doc.rect(0,0,W,H,'F'); doc.setDrawColor(...BC); doc.setLineWidth(1.5); doc.rect(5,5,W-10,H-10); }
-  function chk(need) { if (y + (need||8) > 280) newPage(); }
+  function chk(need) { if (y+(need||8)>280) newPage(); }
 
   function header() {
     doc.setTextColor(0); doc.setFontSize(11); doc.setFont('helvetica','bold');
@@ -2741,10 +2777,8 @@ function exportPermitPDF(id) {
     doc.setFontSize(9); doc.text('EASTERN REGION PIPELINES', W/2, y, {align:'center'}); y+=4;
     doc.text('HSE DEPT.', W/2, y, {align:'center'}); y+=5;
   }
-
   function titleBlock() {
-    doc.setFontSize(7); doc.setFont('helvetica','normal');
-    doc.setDrawColor(...BC); doc.setLineWidth(0.3);
+    doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setDrawColor(...BC); doc.setLineWidth(0.3);
     doc.rect(LM, y, CW, 14);
     doc.setFont('helvetica','bold'); doc.setFontSize(7);
     doc.text('TITLE: COMPOSITE WORK / COLD WORK / HOT WORK / ENTRY TO CONFINED', LM+2, y+4);
@@ -2756,36 +2790,22 @@ function exportPermitPDF(id) {
     y += 17;
   }
 
-  // ====== PAGE 1: Work Details ======
-  bg(); y = 14;
-  header(); titleBlock();
-
-  // Permit type banner
+  // PAGE 1: Work Details
+  bg(); y=14; header(); titleBlock();
   doc.setFillColor(...BC); doc.rect(LM, y, CW, 8, 'F');
   doc.setTextColor(255); doc.setFontSize(11); doc.setFont('helvetica','bold');
   doc.text(p.PermitType.toUpperCase()+' PERMIT', W/2, y+6, {align:'center'});
   doc.setTextColor(0); y+=12;
 
   doc.setFontSize(8); doc.setFont('helvetica','bold');
-  doc.text('Permit ID: '+p.PermitID, LM, y);
-  doc.text('Sl. No: '+p.PermitID.split('-').pop(), RM, y, {align:'right'}); y+=6;
+  doc.text('Permit ID: '+p.PermitID, LM, y); doc.text('Sl. No: '+p.PermitID.split('-').pop(), RM, y, {align:'right'}); y+=6;
   doc.text('Status: '+p.Status, LM, y); y+=6;
 
   const df=cleanDate(p.DateFrom),tf=cleanTime(p.TimeFrom),dt=cleanDate(p.DateTo),tt=cleanTime(p.TimeTo);
-  const addRow = (lbl,val,fs) => {
-    chk(8);
-    doc.setFont('helvetica','bold'); doc.setFontSize(fs||8);
-    doc.text(lbl, LM, y);
-    doc.setFont('helvetica','normal');
-    const lines = doc.splitTextToSize(String(val||'-'), W-85);
-    doc.text(lines, 72, y);
-    y += Math.max(lines.length*4, 5.5);
-  };
+  const addRow = (lbl,val) => { chk(8); doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text(lbl, LM, y); doc.setFont('helvetica','normal'); const ln=doc.splitTextToSize(String(val||'-'),W-85); doc.text(ln,72,y); y+=Math.max(ln.length*4,5.5); };
 
   addRow('Work clearance from:', df+' '+tf+' hrs  To  '+dt+' '+tt+' hrs');
-  doc.setFontSize(6); doc.setFont('helvetica','italic');
-  doc.text('(Valid for the shift unless renewed)', LM, y); y+=4;
-  doc.setFont('helvetica','normal');
+  doc.setFontSize(6); doc.setFont('helvetica','italic'); doc.text('(Valid for the shift unless renewed)', LM, y); y+=4;
   addRow('Issued to (Dept/Section/Contractor):', p.IssuedTo);
   addRow('Exact Location of Work:', p.ExactLocation+' — '+p.Location);
   addRow('Description of Work:', p.Description);
@@ -2793,41 +2813,31 @@ function exportPermitPDF(id) {
   addRow('Patrolling/Security Guard at Site:', p.SecurityGuard||'-');
   addRow('JSA Ref. No.:', p.JSARef||'-');
   addRow('Cross-Reference of other permits:', p.CrossRef||'-');
-  addRow('Name & Contact in case of emergency:', p.EmergencyContact);
+  addRow('Emergency Contact:', p.EmergencyContact);
   addRow('Nearest Fire Station and Hospital:', p.FireStation||'-');
   y+=3;
-
   doc.setFont('helvetica','bold'); doc.setFontSize(8);
   doc.text('THE FOLLOWING ITEMS SHALL BE CHECKED BEFORE ISSUING THE PERMIT:', LM, y); y+=6;
 
-  // ====== PAGE 2+: CHECKLIST TABLE ======
+  // CHECKLIST PAGES
   let checklist = {};
   try { checklist = typeof p.Checklist==='string'?JSON.parse(p.Checklist):(p.Checklist||{}); } catch(e){}
 
   function drawChecklistSection(section) {
-    chk(12);
-    // Section header
+    chk(14);
     doc.setFillColor(...BC); doc.setTextColor(255);
     doc.rect(LM, y, CW, 6, 'F');
     doc.setFontSize(7); doc.setFont('helvetica','bold');
     doc.text(section.title, LM+2, y+4.5);
     doc.setTextColor(0); y+=8;
 
-    // Table header
     doc.setDrawColor(...BC); doc.setLineWidth(0.2);
     doc.setFillColor(240,240,240);
-    doc.rect(LM, y, 10, 6, 'FD');
-    doc.rect(LM+10, y, CW-50, 6, 'FD');
-    doc.rect(RM-40, y, 20, 6, 'FD');
-    doc.rect(RM-20, y, 20, 6, 'FD');
+    doc.rect(LM, y, 10, 6, 'FD'); doc.rect(LM+10, y, CW-50, 6, 'FD'); doc.rect(RM-40, y, 20, 6, 'FD'); doc.rect(RM-20, y, 20, 6, 'FD');
     doc.setFontSize(6); doc.setFont('helvetica','bold');
-    doc.text('Sl.No.', LM+2, y+4);
-    doc.text('Item', LM+12, y+4);
-    doc.text('Done', RM-35, y+4);
-    doc.text('Not Reqd.', RM-18, y+4);
+    doc.text('Sl.No.', LM+2, y+4); doc.text('Item', LM+12, y+4); doc.text('Done', RM-35, y+4); doc.text('Not Reqd.', RM-18, y+4);
     y+=7;
 
-    // Items
     section.items.forEach(([code, text]) => {
       const val = checklist[code] || '';
       const lines = doc.splitTextToSize(text, CW-52);
@@ -2835,25 +2845,23 @@ function exportPermitPDF(id) {
       chk(rh+2);
 
       doc.setDrawColor(180); doc.setLineWidth(0.1);
-      doc.rect(LM, y-1, 10, rh+2);
-      doc.rect(LM+10, y-1, CW-50, rh+2);
-      doc.rect(RM-40, y-1, 20, rh+2);
-      doc.rect(RM-20, y-1, 20, rh+2);
+      doc.rect(LM, y-1, 10, rh+2); doc.rect(LM+10, y-1, CW-50, rh+2); doc.rect(RM-40, y-1, 20, rh+2); doc.rect(RM-20, y-1, 20, rh+2);
 
       doc.setFont('helvetica','bold'); doc.setFontSize(6);
       doc.text(code.replace('R',''), LM+2, y+2);
       doc.setFont('helvetica','normal'); doc.setFontSize(6);
       doc.text(lines, LM+12, y+2);
 
-      if (val === 'Done') { doc.setFont('helvetica','bold'); doc.text('✓', RM-32, y+2); }
-      if (val === 'N/A') { doc.setFont('helvetica','bold'); doc.text('✓', RM-12, y+2); }
+      // TICK MARKS — clearly visible green V-shape
+      if (val === 'Done') { drawTick(doc, RM-34, y+1, 3.5); }
+      if (val === 'N/A') { drawTick(doc, RM-14, y+1, 3.5); }
+
       doc.setFont('helvetica','normal');
       y += rh+2;
     });
     y+=3;
   }
 
-  // Draw all checklist sections
   newPage(); header(); titleBlock();
   drawChecklistSection(CHECKLIST_ITEMS_PDF.A);
   drawChecklistSection(CHECKLIST_ITEMS_PDF.AR);
@@ -2861,161 +2869,94 @@ function exportPermitPDF(id) {
   drawChecklistSection(CHECKLIST_ITEMS_PDF.C);
   drawChecklistSection(CHECKLIST_ITEMS_PDF.D);
 
-  // ====== REMARKS SECTION ======
-  chk(40);
-  y+=3;
-  doc.setFont('helvetica','bold'); doc.setFontSize(9);
-  doc.text('Remarks:', LM, y); y+=5;
-
+  // REMARKS
+  chk(40); y+=3;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('Remarks:', LM, y); y+=5;
   doc.setFont('helvetica','normal'); doc.setFontSize(7);
-  let hazards = [];
-  try { hazards = JSON.parse(p.Hazards||'[]'); } catch(e){}
-  doc.setFont('helvetica','bold');
-  doc.text('1. Residual Hazards: ', LM, y);
-  doc.setFont('helvetica','normal');
-  const hazText = hazards.length ? hazards.join(' / ') : 'NIL';
-  doc.text(hazText, LM+35, y); y+=5;
+  let hazards = []; try { hazards = JSON.parse(p.Hazards||'[]'); } catch(e){}
+  doc.setFont('helvetica','bold'); doc.text('1. Residual Hazards: ', LM, y); doc.setFont('helvetica','normal');
+  doc.text(hazards.length?hazards.join(' / '):'NIL', LM+35, y); y+=5;
 
-  let ppeList = [];
-  try { ppeList = JSON.parse(p.PPE||'[]'); } catch(e){}
-  doc.setFont('helvetica','bold');
-  doc.text('2. Additional PPE (beyond Helmet, Safety Shoes, Gloves, Boiler Suit):', LM, y); y+=4;
-  doc.setFont('helvetica','normal');
-  doc.text(ppeList.length ? ppeList.join(' / ') : 'Standard PPE only', LM+3, y); y+=5;
+  let ppeList = []; try { ppeList = JSON.parse(p.PPE||'[]'); } catch(e){}
+  doc.setFont('helvetica','bold'); doc.text('2. Additional PPE (beyond Helmet, Safety Shoes, Gloves, Boiler Suit):', LM, y); y+=4;
+  doc.setFont('helvetica','normal'); doc.text(ppeList.length?ppeList.join(' / '):'Standard PPE only', LM+3, y); y+=5;
 
-  doc.setFont('helvetica','bold');
-  doc.text('3. Additional Precautions:', LM, y);
-  doc.setFont('helvetica','normal');
-  doc.text(p.Precautions || 'NIL', LM+38, y); y+=5;
+  doc.setFont('helvetica','bold'); doc.text('3. Additional Precautions:', LM, y); doc.setFont('helvetica','normal');
+  doc.text(p.Precautions||'NIL', LM+38, y); y+=5;
 
-  // Gas test values
-  doc.setFont('helvetica','bold');
-  doc.text('Gas Test Values:', LM, y);
-  doc.setFont('helvetica','normal');
+  doc.setFont('helvetica','bold'); doc.text('Gas Test Values:', LM, y); doc.setFont('helvetica','normal');
   doc.text('HCs = '+(p.GasHC||'___')+'% LEL    Toxic Gas = '+(p.GasToxic||'___')+' PPM    O2 = '+(p.GasO2||'___')+'%', LM+28, y); y+=7;
 
-  // ====== ISSUER / RECEIVER SIGNATURES ======
-  chk(35);
-  doc.setDrawColor(...BC); doc.setLineWidth(0.5);
-  doc.line(LM, y, RM, y); y+=5;
-  const hw = CW/2;
-
+  // SIGNATURES
+  chk(35); doc.setDrawColor(...BC); doc.setLineWidth(0.5); doc.line(LM,y,RM,y); y+=5;
+  const hw=CW/2;
   doc.setDrawColor(...BC); doc.setLineWidth(0.2);
-  // Issuer box
-  doc.rect(LM, y, hw-2, 22);
-  doc.setFont('helvetica','bold'); doc.setFontSize(8);
-  doc.text('Issuer Name & Designation', LM+2, y+5);
-  doc.setFont('helvetica','normal'); doc.setFontSize(7);
-  doc.text(p.IssuerName||'________________', LM+2, y+10);
-  doc.text(p.IssuerDesignation||'________________', LM+2, y+14);
-  doc.text('Signature: ________________', LM+2, y+19);
+  doc.rect(LM,y,hw-2,22); doc.setFont('helvetica','bold'); doc.setFontSize(8);
+  doc.text('Issuer Name & Designation',LM+2,y+5); doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.text(p.IssuerName||'________________',LM+2,y+10); doc.text(p.IssuerDesignation||'________________',LM+2,y+14);
+  doc.text('Signature: ________________',LM+2,y+19);
 
-  // Receiver box
-  doc.rect(LM+hw, y, hw, 22);
-  doc.setFont('helvetica','bold'); doc.setFontSize(8);
-  doc.text('Receiver Name & Designation', LM+hw+2, y+5);
-  doc.setFont('helvetica','normal'); doc.setFontSize(7);
-  doc.text(p.ReceiverName||'________________', LM+hw+2, y+10);
-  doc.text(p.ReceiverDesignation||'________________', LM+hw+2, y+14);
-  doc.text('Signature: ________________', LM+hw+2, y+19);
-  y += 25;
+  doc.rect(LM+hw,y,hw,22); doc.setFont('helvetica','bold'); doc.setFontSize(8);
+  doc.text('Receiver Name & Designation',LM+hw+2,y+5); doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.text(p.ReceiverName||'________________',LM+hw+2,y+10); doc.text(p.ReceiverDesignation||'________________',LM+hw+2,y+14);
+  doc.text('Signature: ________________',LM+hw+2,y+19);
+  y+=25;
 
-  // ====== CLEARANCE RENEWAL TABLE ======
-  chk(30);
-  doc.setFont('helvetica','bold'); doc.setFontSize(8);
-  doc.text('Clearance Renewal', LM, y); y+=5;
-
-  const cols = [25,20,30,35,35,35];
-  const hdrs = ['Date','Time\nFrom  /  To','Gas Test Values\nHCs, Toxic, O2','Additional\nPrecautions','Issuer Name,\nDesign. & Sign.','Receiver Name,\nDesign. & Sign.'];
-  let cx = LM;
-  doc.setFontSize(5); doc.setFont('helvetica','bold');
-  doc.setDrawColor(100); doc.setLineWidth(0.2);
-  hdrs.forEach((h,i) => {
-    doc.rect(cx, y, cols[i], 10);
-    const lines = h.split('\n');
-    lines.forEach((ln,li) => doc.text(ln, cx+1, y+3.5+li*3));
-    cx += cols[i];
-  });
+  // CLEARANCE RENEWAL
+  chk(30); doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('Clearance Renewal',LM,y); y+=5;
+  const cols=[25,20,30,35,35,35];
+  const hdrs=['Date','Time\nFrom / To','Gas Test Values\nHCs, Toxic, O2','Additional\nPrecautions','Issuer Name,\nDesign. & Sign.','Receiver Name,\nDesign. & Sign.'];
+  let cx=LM; doc.setFontSize(5); doc.setFont('helvetica','bold'); doc.setDrawColor(100); doc.setLineWidth(0.2);
+  hdrs.forEach((h,i)=>{doc.rect(cx,y,cols[i],10);h.split('\n').forEach((ln,li)=>doc.text(ln,cx+1,y+3.5+li*3));cx+=cols[i];});
   y+=10;
-  // Empty rows for daily renewal
-  for (let r=0; r<3; r++) {
-    cx = LM;
-    cols.forEach(c => { doc.rect(cx, y, c, 7); cx += c; });
-    y+=7;
-  }
+  for(let r=0;r<3;r++){cx=LM;cols.forEach(c=>{doc.rect(cx,y,c,7);cx+=c;});y+=7;}
   y+=5;
 
-  // ====== CLOSING OF WORK PERMIT ======
-  chk(40);
-  doc.setDrawColor(...BC); doc.setLineWidth(0.5);
-  doc.line(LM, y, RM, y); y+=5;
-  doc.setFont('helvetica','bold'); doc.setFontSize(9);
-  doc.text('Closing of the Work Permit', LM, y); y+=6;
-
+  // CLOSING
+  chk(40); doc.setDrawColor(...BC); doc.setLineWidth(0.5); doc.line(LM,y,RM,y); y+=5;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('Closing of the Work Permit',LM,y); y+=6;
   doc.setDrawColor(...BC); doc.setLineWidth(0.2);
-  // Receiver closing box
-  doc.rect(LM, y, hw-2, 16);
-  doc.setFont('helvetica','bold'); doc.setFontSize(6);
-  doc.text('Receiver:', LM+2, y+4);
-  doc.setFont('helvetica','normal');
-  const rcText = doc.splitTextToSize('Certified that the subject work has been completed/stopped and area cleared.', hw-8);
-  doc.text(rcText, LM+2, y+7);
+  doc.rect(LM,y,hw-2,16); doc.setFont('helvetica','bold'); doc.setFontSize(6);
+  doc.text('Receiver:',LM+2,y+4); doc.setFont('helvetica','normal');
+  doc.text(doc.splitTextToSize('Certified that the subject work has been completed/stopped and area cleared.',hw-8),LM+2,y+7);
+  doc.rect(LM+hw,y,hw,16); doc.setFont('helvetica','bold');
+  doc.text('Issuer:',LM+hw+2,y+4); doc.setFont('helvetica','normal');
+  doc.text(doc.splitTextToSize('Verified that the job has been completed and area cleared and is safe from any hazard.',hw-6),LM+hw+2,y+7);
+  y+=19;
 
-  // Issuer closing box
-  doc.rect(LM+hw, y, hw, 16);
-  doc.setFont('helvetica','bold');
-  doc.text('Issuer:', LM+hw+2, y+4);
-  doc.setFont('helvetica','normal');
-  const icText = doc.splitTextToSize('Verified that the job has been completed and area cleared and is safe from any hazard.', hw-6);
-  doc.text(icText, LM+hw+2, y+7);
-  y += 19;
-
-  // Closing signature table
   chk(20);
-  const chw = CW/2;
-  ['Receiver','Issuer'].forEach((role,ri) => {
-    const bx = LM + ri*chw;
-    doc.rect(bx, y, 30, 10); doc.rect(bx+30, y, chw-50, 10); doc.rect(bx+chw-20, y, 20, 10);
-    doc.setFontSize(5); doc.setFont('helvetica','bold');
-    doc.text('Date & Time', bx+1, y+4);
-    doc.text('Name & Designation', bx+32, y+4);
-    doc.text('Signature', bx+chw-18, y+4);
+  const chw=CW/2;
+  ['Receiver','Issuer'].forEach((role,ri)=>{
+    const bx=LM+ri*chw;
+    doc.rect(bx,y,30,10);doc.rect(bx+30,y,chw-50,10);doc.rect(bx+chw-20,y,20,10);
+    doc.setFontSize(5);doc.setFont('helvetica','bold');
+    doc.text('Date & Time',bx+1,y+4);doc.text('Name & Designation',bx+32,y+4);doc.text('Signature',bx+chw-18,y+4);
   });
   y+=10;
-  // Empty row
-  ['Receiver','Issuer'].forEach((role,ri) => {
-    const bx = LM + ri*chw;
-    doc.rect(bx, y, 30, 8); doc.rect(bx+30, y, chw-50, 8); doc.rect(bx+chw-20, y, 20, 8);
-    if (p.ClosedAt && p.ClosedAt!=='-') {
-      doc.setFontSize(5); doc.setFont('helvetica','normal');
-      doc.text(cleanDate(p.ClosedAt), bx+2, y+5);
-    }
+  ['Receiver','Issuer'].forEach((role,ri)=>{
+    const bx=LM+ri*chw;
+    doc.rect(bx,y,30,8);doc.rect(bx+30,y,chw-50,8);doc.rect(bx+chw-20,y,20,8);
+    if(p.ClosedAt&&p.ClosedAt!=='-'){doc.setFontSize(5);doc.setFont('helvetica','normal');doc.text(cleanDate(p.ClosedAt),bx+2,y+5);}
   });
   y+=12;
 
-  // ====== GENERAL INSTRUCTIONS ======
+  // GENERAL INSTRUCTIONS
   newPage(); header(); titleBlock();
-  doc.setFont('helvetica','bold'); doc.setFontSize(9);
-  doc.text('General Instructions:', LM, y); y+=6;
-
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('General Instructions:',LM,y); y+=6;
   doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
-  GENERAL_INSTRUCTIONS_PDF.forEach((inst, i) => {
+  GENERAL_INSTRUCTIONS_PDF.forEach((inst,i)=>{
     chk(12);
-    const num = String(i+1)+'. ';
-    const lines = doc.splitTextToSize(num + inst, CW-4);
-    doc.text(lines, LM+2, y);
-    y += lines.length * 3.2 + 2;
+    const lines=doc.splitTextToSize((i+1)+'. '+inst,CW-4);
+    doc.text(lines,LM+2,y);y+=lines.length*3.2+2;
   });
 
-  // Footer on each page
-  const pages = doc.internal.getNumberOfPages();
-  for (let pg=1; pg<=pages; pg++) {
-    doc.setPage(pg);
-    doc.setFontSize(5); doc.setTextColor(128);
-    doc.text('Page '+pg+' of '+pages+' | Generated from AttendX Work Permit System | '+new Date().toLocaleString(), W/2, H-7, {align:'center'});
+  // Page numbers
+  const pages=doc.internal.getNumberOfPages();
+  for(let pg=1;pg<=pages;pg++){
+    doc.setPage(pg);doc.setFontSize(5);doc.setTextColor(128);
+    doc.text('Page '+pg+' of '+pages+' | Generated from AttendX Work Permit System | '+new Date().toLocaleString(),W/2,H-7,{align:'center'});
     doc.setTextColor(0);
   }
-
   doc.save('WorkPermit_'+p.PermitID+'.pdf');
 }
 
