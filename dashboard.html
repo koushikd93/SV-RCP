@@ -856,7 +856,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbwiMtWWExdxpW4v4gijozrx7cc3VaieMmGV8ffqPiPm8Qwr7gTJeJANaCASmdVCuayE2A/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbwmixJuXy3K-zuDS3b27T9a6PBh_fKFMPt0CcORCrKMbdydI2Kq25nV9ZfWhLhcewcIOg/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -2290,6 +2290,7 @@ async function filterPermits() {
         let actions = `<button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="viewPermitDetail('${p.PermitID}')">👁 View</button>`;
         if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.15);color:var(--accent)" onclick="startOTPApproval('${p.PermitID}')">🔐 Approve</button>`;
         if (p.Status === 'Issued') {
+          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(232,115,14,.12);color:#e8730e" onclick="startRenewal('${p.PermitID}')">🔄 Renew</button>`;
           actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(255,209,102,.15);color:var(--warn)" onclick="startClosureOTP('${p.PermitID}')">🔒 Close</button>`;
           actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="exportPermitPDF('${p.PermitID}')">📄 PDF</button>`;
         }
@@ -2536,76 +2537,250 @@ async function verifyClosureOTPs(id) {
 }
 
 // ============================================================
-// FULL IOCL-FORMAT PDF EXPORT
+// CLEARANCE RENEWAL SYSTEM
+// ============================================================
+async function startRenewal(id) {
+  const p = currentPermits.find(x => x.PermitID === id);
+  if (!p) return alert('Permit not found');
+  if (p.Status !== 'Issued') return alert('Only Issued permits can be renewed');
+
+  const panel = document.getElementById('wpDetailPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('wpDetailTitle').textContent = 'Clearance Renewal — ' + p.PermitID;
+
+  // Calculate default 8-hour window from now, within permit validity
+  const now = new Date();
+  const defFrom = now.toISOString().slice(0,10);
+  const defFromTime = now.toTimeString().slice(0,5);
+  const endTime = new Date(now.getTime() + 8*60*60*1000);
+  const defTo = endTime.toISOString().slice(0,10);
+  const defToTime = endTime.toTimeString().slice(0,5);
+  const maxDate = cleanDate(p.DateTo);
+
+  // Build issuer dropdown from employees (reuse from work permit)
+  let issuerOptions = '';
+  try {
+    const resp = await fetch(GAS_URL+'?action=getEmployees');
+    const d = await resp.json();
+    if (d.employees) {
+      d.employees.forEach(e => {
+        const optVal = e.Name + ' (' + e.EmployeeID + ')';
+        const sel = (optVal === p.IssuerName) ? ' selected' : '';
+        issuerOptions += '<option value="'+optVal+'"'+sel+'>'+e.Name+' — '+e.EmployeeID+'</option>';
+      });
+    }
+  } catch(e) { console.error('Failed to load employees', e); }
+
+  let html = `<div style="border:2px solid #e8730e;border-radius:12px;padding:16px;background:rgba(232,115,14,0.04)">
+    <div style="text-align:center;margin-bottom:12px">
+      <div style="font-size:14px;font-weight:700;color:#e8730e">🔄 Clearance Renewal</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px">Permit: ${p.PermitID} | ${p.PermitType}</div>
+      <div style="font-size:11px;color:var(--text2)">Permit Validity: ${cleanDate(p.DateFrom)} ${cleanTime(p.TimeFrom)} to ${cleanDate(p.DateTo)} ${cleanTime(p.TimeTo)}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">Renewal From Date</label>
+        <input type="date" id="rnwDateFrom" value="${defFrom}" min="${cleanDate(p.DateFrom)}" max="${maxDate}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
+      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">Renewal From Time</label>
+        <input type="time" id="rnwTimeFrom" value="${defFromTime}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
+      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">Renewal To Date</label>
+        <input type="date" id="rnwDateTo" value="${defTo}" min="${cleanDate(p.DateFrom)}" max="${maxDate}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
+      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">Renewal To Time</label>
+        <input type="time" id="rnwTimeTo" value="${defToTime}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">HCs (% LEL)</label>
+        <input type="text" id="rnwGasHC" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
+      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">Toxic Gas (PPM)</label>
+        <input type="text" id="rnwGasToxic" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
+      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">O2 (%)</label>
+        <input type="text" id="rnwGasO2" placeholder="20.8" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;font-weight:600;color:var(--text2)">Additional Precautions (if any, otherwise "NIL")</label>
+      <input type="text" id="rnwPrecautions" value="NIL" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)">
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;font-weight:600;color:var(--text2)">Select Issuer for Renewal (OTP will be sent) / जारीकर्ता का चयन करें</label>
+      <select id="rnwIssuer" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)">
+        <option value="">-- Select Issuer --</option>
+        ${issuerOptions}
+      </select>
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:10px;padding:8px;background:rgba(232,115,14,0.06);border-radius:6px;border:1px solid rgba(232,115,14,0.15)">
+      ⚠️ Clearance is for 8 hours maximum and must be within permit validity period. OTP verification from the selected issuer is required.
+      <br>⚠️ क्लियरेंस अधिकतम 8 घंटे के लिए है और परमिट वैधता अवधि के भीतर होना चाहिए। चयनित जारीकर्ता से OTP सत्यापन आवश्यक है।
+    </div>
+    <div id="rnwError" style="display:none;padding:8px;border-radius:6px;background:rgba(211,47,47,.1);color:#d32f2f;font-size:12px;margin-bottom:10px"></div>
+    <div id="rnwOtpSection" style="display:none"></div>
+    <button class="refresh-btn" id="rnwSendOTPBtn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(232,115,14,.12);color:#e8730e;border:2px solid #e8730e" onclick="sendRenewalOTP('${id}')">📧 Send OTP to Issuer & Initiate Renewal</button>
+  </div>`;
+  document.getElementById('wpDetailContent').innerHTML = html;
+  panel.scrollIntoView({ behavior:'smooth' });
+}
+
+async function sendRenewalOTP(id) {
+  const errEl = document.getElementById('rnwError');
+  errEl.style.display='none';
+  const issuer = document.getElementById('rnwIssuer').value;
+  if (!issuer) { errEl.style.display='block'; errEl.textContent='Please select an issuer'; return; }
+
+  const dateFrom = document.getElementById('rnwDateFrom').value;
+  const timeFrom = document.getElementById('rnwTimeFrom').value;
+  const dateTo = document.getElementById('rnwDateTo').value;
+  const timeTo = document.getElementById('rnwTimeTo').value;
+
+  // Validate 8-hour max
+  const from = new Date(dateFrom+'T'+timeFrom);
+  const to = new Date(dateTo+'T'+timeTo);
+  const diffHrs = (to - from) / (1000*60*60);
+  if (diffHrs <= 0) { errEl.style.display='block'; errEl.textContent='To time must be after From time'; return; }
+  if (diffHrs > 8) { errEl.style.display='block'; errEl.textContent='Clearance renewal cannot exceed 8 hours. Current: '+diffHrs.toFixed(1)+' hrs'; return; }
+
+  document.getElementById('rnwSendOTPBtn').disabled = true;
+  document.getElementById('rnwSendOTPBtn').textContent = '⏳ Sending OTP...';
+
+  try {
+    const resp = await fetch(GAS_URL+'?action=generateRenewalOTP&permitId='+encodeURIComponent(id)+
+      '&issuerName='+encodeURIComponent(issuer)+
+      '&renewDateFrom='+encodeURIComponent(dateFrom)+
+      '&renewTimeFrom='+encodeURIComponent(timeFrom)+
+      '&renewDateTo='+encodeURIComponent(dateTo)+
+      '&renewTimeTo='+encodeURIComponent(timeTo));
+    const d = await resp.json();
+    if (d.success) {
+      document.getElementById('rnwOtpSection').style.display='block';
+      document.getElementById('rnwOtpSection').innerHTML = `
+        <div style="padding:12px;border-radius:8px;background:rgba(46,125,50,0.08);border:1px solid rgba(46,125,50,0.2);margin-bottom:12px">
+          <div style="font-size:12px;font-weight:600;color:#2e7d32">OTP sent to Issuer: ${d.maskedEmail}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:4px">Valid for 30 minutes. Enter OTP below to complete renewal.</div>
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="font-size:11px;font-weight:600;color:var(--text2)">Enter Issuer OTP / जारीकर्ता OTP दर्ज करें</label>
+          <input type="text" id="rnwOtpInput" maxlength="6" placeholder="6-digit OTP" style="width:100%;padding:10px;border:2px solid #e8730e;border-radius:6px;background:var(--surface);font-size:16px;font-family:monospace;text-align:center;color:var(--text);letter-spacing:6px">
+        </div>
+        <div id="rnwOtpError" style="display:none;padding:8px;border-radius:6px;background:rgba(211,47,47,.1);color:#d32f2f;font-size:12px;margin-bottom:10px"></div>
+        <button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(46,125,50,.12);color:#2e7d32;border:2px solid #2e7d32" onclick="verifyRenewalOTP('${id}')">✅ Verify OTP & Complete Renewal</button>
+        <div style="margin-top:8px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="sendRenewalOTP('${id}')">Resend OTP</button></div>`;
+      document.getElementById('rnwSendOTPBtn').style.display='none';
+    } else {
+      errEl.style.display='block'; errEl.textContent=d.error||'Failed to send OTP';
+      document.getElementById('rnwSendOTPBtn').disabled = false;
+      document.getElementById('rnwSendOTPBtn').textContent = '📧 Send OTP to Issuer & Initiate Renewal';
+    }
+  } catch(e) {
+    errEl.style.display='block'; errEl.textContent='Error: '+e.message;
+    document.getElementById('rnwSendOTPBtn').disabled = false;
+    document.getElementById('rnwSendOTPBtn').textContent = '📧 Send OTP to Issuer & Initiate Renewal';
+  }
+}
+
+async function verifyRenewalOTP(id) {
+  const errEl = document.getElementById('rnwOtpError');
+  errEl.style.display='none';
+  const otp = document.getElementById('rnwOtpInput').value.trim();
+  if (!otp || otp.length !== 6) { errEl.style.display='block'; errEl.textContent='Please enter a valid 6-digit OTP'; return; }
+
+  const p = currentPermits.find(x => x.PermitID === id);
+  try {
+    const resp = await fetch(GAS_URL+'?action=verifyRenewalOTP&permitId='+encodeURIComponent(id)+
+      '&otp='+encodeURIComponent(otp)+
+      '&renewDateFrom='+encodeURIComponent(document.getElementById('rnwDateFrom').value)+
+      '&renewTimeFrom='+encodeURIComponent(document.getElementById('rnwTimeFrom').value)+
+      '&renewDateTo='+encodeURIComponent(document.getElementById('rnwDateTo').value)+
+      '&renewTimeTo='+encodeURIComponent(document.getElementById('rnwTimeTo').value)+
+      '&gasHC='+encodeURIComponent(document.getElementById('rnwGasHC').value||'0')+
+      '&gasToxic='+encodeURIComponent(document.getElementById('rnwGasToxic').value||'0')+
+      '&gasO2='+encodeURIComponent(document.getElementById('rnwGasO2').value||'20.8')+
+      '&precautions='+encodeURIComponent(document.getElementById('rnwPrecautions').value||'NIL')+
+      '&issuerName='+encodeURIComponent(document.getElementById('rnwIssuer').value)+
+      '&receiverName='+encodeURIComponent(p?p.ReceiverName:'')+
+      '&receiverDesignation='+encodeURIComponent(p?p.ReceiverDesignation:''));
+    const d = await resp.json();
+    if (d.success) {
+      document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px">
+        <div style="font-size:50px;margin-bottom:10px">🔄✅</div>
+        <div style="font-size:16px;font-weight:700;color:#2e7d32">Clearance Renewed!</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:6px">${d.message}</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px">Renewal ID: ${d.renewalId||''}</div>
+      </div>`;
+      setTimeout(() => filterPermits(), 1500);
+    } else {
+      errEl.style.display='block'; errEl.textContent=d.error||'Verification failed';
+    }
+  } catch(e) { errEl.style.display='block'; errEl.textContent='Error: '+e.message; }
+}
+
+// ============================================================
+// FULL IOCL-FORMAT PDF EXPORT (Bilingual)
 // ============================================================
 const CHECKLIST_ITEMS_PDF = {
-  A: { title: 'SECTION A — GENERAL POINTS', items: [
-    ['A1', 'Equipment / Work Area inspected'],
-    ['A2', 'Surrounding area checked, cleaned and covered. Oil/Rags/Grass etc. removed.'],
-    ['A3', 'Sewers, Manholes, CBD etc. and hot surface nearby covered'],
-    ['A4', 'Considered hazards from other routine, non-routine operations and concerned person alerted.'],
-    ['A5', 'Equipment blinded / disconnected / closed / isolated / wedge opened.'],
-    ['A6', 'Equipment properly drained and depressurized.'],
-    ['A7', 'Equipment properly steamed / purged.'],
-    ['A8', 'Equipment water flushed.'],
-    ['A9', 'Free access for approach of Fire Tender.'],
-    ['A10', 'Iron Sulfide removed / kept wet.'],
-    ['A11', 'Equipment electrically isolated and tagged vide Permit No.'],
-    ['A12', 'Gas Test: HCs = ___% LEL, Toxic Gas = ___ PPM, O2 = ___%'],
-    ['A13', 'Running water hose / Fire extinguisher provided. Fire water system available.'],
-    ['A14', 'Area cordoned off and Precautionary tag/Board provided.'],
-    ['A15', 'CCTV monitoring facility available at site.'],
-    ['A16', 'Proper ventilation and Lighting provided.'],
+  A: { title: 'SECTION A — GENERAL POINTS / सामान्य बिंदु', items: [
+    ['A1', 'Equipment / Work Area inspected\nउपकरण / कार्य क्षेत्र का निरीक्षण किया गया।'],
+    ['A2', 'Surrounding area checked, cleaned and covered. Oil/Rags/Grass etc. removed.\nआसपास के कार्य क्षेत्र की जाँच की गई, साफ़-सुथरा कर ढक दिया गया, तेल/लत्ता/घास आदि हटाये गये।'],
+    ['A3', 'Sewers, Manholes, CBD etc. and hot surface nearby covered\nसीवर, मैनहोल, सी बी डी आदि और गर्म सतह को ढक दिया गया।'],
+    ['A4', 'Considered hazards from other routine, non-routine operations and concerned person alerted.\nअन्य रूटीन/नॉन रूटीन संचालन के खतरे की जाँच की गई और कार्य से संबंधित व्यक्ति को सचेत किया गया।'],
+    ['A5', 'Equipment blinded / disconnected / closed / isolated / wedge opened.\nउपकरण ब्लाइंड कर दिया / डिस्कनेक्ट कर दिया / बंद कर दिया / अलग कर दिया / वेज खोल दिया गया।'],
+    ['A6', 'Equipment properly drained and depressurized.\nउपकरणों को पूरी तरह से ट्रेन और डी-प्रेशराइज कर दिया गया।'],
+    ['A7', 'Equipment properly steamed / purged.\nउपकरणों को पूरी तरह से स्टीम्ड / पर्ज कर दिया गया।'],
+    ['A8', 'Equipment water flushed.\nउपकरण को पानी से फ्लश किया गया।'],
+    ['A9', 'Free access for approach of Fire Tender.\nफायर टेंडर के प्रवेश केरास्ते को खुला रखा गया।'],
+    ['A10', 'Iron Sulfide removed / Kept wet.\nआयरन सल्फाइड हटाए गए / गीला कर दिया गया।'],
+    ['A11', 'Equipment electrically isolated and tagged vide Permit No.\nउपकरण की विद्युत को बंद कर परमिट संख्या के अनुसार टैग लगा दिया गया।'],
+    ['A12', 'Gas Test: HCs = ___% LEL, Toxic Gas = ___ PPM, O2 = ___%\nगैस परीक्षण: हाइड्रोकार्बन (% एल ई एल), विषैली गैस (पी पी एम), ऑक्सीजन (%)'],
+    ['A13', 'Running water hose / Fire extinguisher provided. Fire water system available.\nरनिंग वाटर होज़ / अग्निशामक रखे गए, फायर वाटर सिस्टम उपलब्ध है।'],
+    ['A14', 'Area cordoned off and Precautionary tag/Board provided.\nकार्य क्षेत्र की घेराबंदी कर सावधानी टैग बोर्ड लगा दिए गए।'],
+    ['A15', 'CCTV monitoring facility available at site.\nसाइट पर सीसीटीवी निगरानी सुविधा उपलब्ध है।'],
+    ['A16', 'Proper ventilation and Lighting provided.\nहवा के आवागमन और रोशनी की व्यवस्था सही तरीके से की गयी।'],
   ]},
-  AR: { title: 'SECTION A (Contd.) — RIGHT COLUMN', items: [
-    ['A4R', 'Shield provided against spark.'],
-    ['A5R', 'Portable equipment nozzle properly grounded.'],
-    ['A6R', 'Standby persons provided for entry to confined space.'],
-    ['A7R', 'Adequate Communication Provided to Stand by Person.'],
-    ['A8R', 'Trained Attendant Provided With Rescue Equipment/SCBA.'],
-    ['A9R', 'Space Adequately Cooled for Safe Entry Of Person.'],
-    ['A10R', 'Continuous Inert Gas Flow Arranged.'],
-    ['A11R', 'Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.'],
-    ['A12R', 'Gas Cylinders are kept outside the confined Space.'],
-    ['A13R', 'Checked Spark arrestor on mobile Equipments.'],
-    ['A14R', 'Welding Machine Checked for Safe Location.'],
-    ['A15R', 'Permit taken for working at height Vide Permit No.'],
+  AR: { title: 'SECTION A (Contd.) — RIGHT COLUMN / दायाँ स्तंभ', items: [
+    ['A4R', 'Shield provided against spark.\nचिंगारी के विरूद्ध मुरक्षा कवच लगाया गया।'],
+    ['A5R', 'Portable equipment nozzle properly grounded.\nपोर्टेबल उपकरणों / नोजल को महीं तरीके से अर्थ किया गया।'],
+    ['A6R', 'Standby persons provided for entry to confined space.\nकॉन्फाइंड स्थान के रास्ते में अटेंडेंट (2) खड़े किये गए।'],
+    ['A7R', 'Adequate Communication Provided to Stand by Person.\nस्टैंडबाय व्यक्ति को उचित सूचना दी गई।'],
+    ['A8R', 'Trained Attendant Provided With Rescue Equipment/SCBA.\nबचाव उपकरण/एस सी बी ए से प्रशिक्षित व्यक्ति को कार्यस्थल पर खड़ा किया।'],
+    ['A9R', 'Space Adequately Cooled for Safe Entry Of Person.\nव्यक्ति के प्रवेश के लिए कार्य स्थल में तापमान पर्याप्त रूप से ठंडा किया गया।'],
+    ['A10R', 'Continuous Inert Gas Flow Arranged.\nनिष्क्रिय (इनर्ट) गैस के लगातार प्रवाह की व्यवस्था की गयी।'],
+    ['A11R', 'Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.\nवेल्डिंग के लिए अस्थायी विद्युत कनेक्शन की अर्थिंग एल सी बी की जाँच की गयी।'],
+    ['A12R', 'Gas Cylinders are kept outside the confined Space.\nगैस सिलिंडर कॉन्फाइंड स्थान के बाहर रखे गए हैं।'],
+    ['A13R', 'Checked Spark arrestor on mobile Equipments.\nचल उपकरणों पर स्पार्क अरस्टेर की जाँच की गयी।'],
+    ['A14R', 'Welding Machine Checked for Safe Location.\nवेल्डिंग मशीन को सुरक्षित जगह पर रखा गया है।'],
+    ['A15R', 'Permit taken for working at height Vide Permit No.\nऊँचाई पर काम करने के लिए परमिट संख्या के अंतर्गत परमिट लिया गया।'],
   ]},
-  B: { title: 'SECTION B — FOR HOT WORK / ENTRY TO CONFINED SPACE', items: [
-    ['B1', 'Proper means of exit / escape provided.'],
-    ['B2', 'Standby personnel provided from Mainline / Maintenance / Contractor / HSE.'],
-    ['B3', 'Checked for oil and Gas trapped behind the lining in equipment.'],
+  B: { title: 'SECTION B — FOR HOT WORK / ENTRY TO CONFINED SPACE / गर्म कार्य / सीमित स्थान में प्रवेश के लिए', items: [
+    ['B1', 'Proper means of exit / escape provided.\nहवा के आवागमन और रोशनी की व्यवस्था सही तरीके से की गयी।'],
+    ['B2', 'Standby personnel provided from Mainline / Maint. / Contractor / HSE.\nप्रक्रिया / अनुरक्षण / कट्रैक्टर / अग्नि और सुरक्षा विभाग से व्यक्ति कार्यस्थल पर तैनात किये गए।'],
+    ['B3', 'Checked for oil and Gas trapped behind the lining in equipment.\nचुने हुए उपकरण में जमे हुए मशीनी तरह के तेल और गैस की उपस्थिति की सही तरह से जाँच की गई।'],
   ]},
-  C: { title: 'SECTION C — FOR VEHICLE ENTRY IN HAZARDOUS AREA', items: [
-    ['C1', 'PESO approved spark elimination system provided on the mobile equipment / vehicle.'],
+  C: { title: 'SECTION C — FOR VEHICLE ENTRY IN HAZARDOUS AREA / वाहन प्रवेश के लिए', items: [
+    ['C1', 'PESO approved spark elimination system provided on the mobile equipment / vehicle.\nचल उपकरणों / वाहनों पर अनुमोदित स्पार्क अरस्टेर लगा दिये गये।'],
   ]},
-  D: { title: 'SECTION D — FOR EXCAVATION WORK', items: [
-    ['D1', 'For excavated trench/pit proper slop/shoring/shuttering provided to prevent soil collapse.'],
-    ['D2', 'Excavated soil kept at safe distance from trench/pit edge (min. pit depth).'],
-    ['D3', 'Safe means of access provided inside trench/pit.'],
-    ['D4', 'Movement of heavy vehicle prohibited.'],
+  D: { title: 'SECTION D — FOR EXCAVATION WORK / खुदाई के काम के लिए', items: [
+    ['D1', 'For excavated trench/pit proper slop/shoring/shuttering provided to prevent soil collapse.\nखोदी गई खाई/गड्डे के लिए मिट्टी के ढहने से बचाने के लिए उचित ढलान/तटबंध/शटरिंग की व्यवस्था की गई है।'],
+    ['D2', 'Excavated soil kept at safe distance from trench/pit edge (min. pit depth).\nखोदी गई मिट्टी को खाई/गड्डे के किनारे से सुरक्षित दूरी पर रखी गई है।'],
+    ['D3', 'Safe means of access provided inside trench/pit.\nखाई/गड्डे के अंदर पहुंच के सुरक्षित साधन उपलब्ध कराए गए है।'],
+    ['D4', 'Movement of heavy vehicle prohibited.\nभारी वाहनों का आवागमन प्रतिबंधित कराए गए है।'],
   ]},
 };
 
 const GENERAL_INSTRUCTIONS_PDF = [
-  'The work permit shall be filled up carefully and accurately ensuring that complete information is provided in all sections/subsections and none of the columns is left blank.',
-  'Appropriate safeguards and required personal protective equipment shall be determined by a careful analysis of the potential hazards and the operations to be performed prior to starting the work.',
-  'Requirement of standby personnel from Process/Maintenance/Contractor/Fire/contractor etc. if any shall be mentioned in the additional requirement.',
-  'There shall be means of communication in case of an emergency at the worksite. In case of fire alarm/siren, all work must immediately be stopped.',
-  'Shift-wise communication to Main Control Room / Operation Room to be provided.',
-  'Only certified vehicles/engines and permitted types of electrical equipment and tools are allowed in operating/working areas.',
-  'Welding machines shall be placed in ventilated areas at a safe distance.',
-  'No hot work shall be permitted unless the explosive meter reading is Zero.',
-  'When a person is entering the confined space/excavated trench, a minimum one standby designated person shall always be available at the entry point. If a standby person has to enter, a substitute standby person shall be ensured.',
-  'Compressed gas cylinders shall not be allowed to be kept in confined spaces/excavated trench.',
-  'While filling the excavated trench, man & equipment must be at outside the trench and job to be carried out cautiously.',
-  'For renewal of work clearance, the issuer shall ensure that conditions are satisfactory. If conditions have changed, a new permit may be necessary.',
-  'This clearance on the same permit can be renewed/extended up to a maximum of seven calendar days.',
-  'This permit must be always available at the work site in printed hard copy or viewable in electronic form.',
-  'On completion of the work, the permit must be closed and kept as a record.',
-  'For trenching and excavation, the latest SOP for Trenching & Excavation as issued by PLHO to be followed.',
-  'CCTV and gas monitoring devices should be utilized to monitor the site conditions continuously when work is being carried out.',
-  'Additional Guideline on Work Permit System for mainline work issued by PLHO vide ref: PL/HO/HSE/18/2025-26/01, Rev 0 may be referred.',
+  {en:'The work permit shall be filled up carefully and accurately ensuring that complete information is provided in all sections/subsections and none of the columns is left blank.', hi:'वर्क परमिट को ध्यानपूर्वक और सही तरीके से साफ लिखावट में भरना चाहिए, यह सुनिश्चित करते हुए कि सभी अनुभागों/उप-अनुभागों में पूरी जानकारी दी गई है और कोई भी कॉलम खाली नहीं छोड़ा गया है।'},
+  {en:'Appropriate safeguards and required personal protective equipment shall be determined by a careful analysis of the potential hazards and the operations to be performed prior to starting the work.', hi:'कार्य शुरू करने से पहले संभावित खतरों और किए जाने वाले कार्यों के सावधानीपूर्वक विश्लेषण के बाद उपयुक्त सुरक्षात्मक व्यक्तिगत सुरक्षात्मक उपकरण निर्धारित किए जाने चाहिए।'},
+  {en:'Requirement of standby personnel from Process/Maintenance/Contractor/Fire/contractor etc. if any shall be mentioned in the additional requirement.', hi:'प्रक्रिया/ रखरखाव/ ठेकेदार/ अग्निशमन/ ठेकेदार आदि से स्टैंडबाय कार्मिकों की आवश्यकता, यदि कोई हो, उसका उल्लेख अतिरिक्त आवश्यकता में किया जाएगा।'},
+  {en:'There shall be means of communication in case of an emergency at the worksite. In case of fire alarm/siren, all work must immediately be stopped.', hi:'कार्यस्थल पर आपातकालीन स्थिति के लिए संचार के साधन उपलब्ध होने चाहिए। आग लगने की स्थिति में अलार्म/सायरन बजने पर तुरंत सारा काम रोक देना चाहिए।'},
+  {en:'Shift-wise communication to Main Control Room / Operation Room to be provided.', hi:'मुख्य नियंत्रण कक्ष/संचालन कक्ष को शिफ्टवाइज संचार उपलब्ध कराया जाएगा।'},
+  {en:'Only certified vehicles/engines and permitted types of electrical equipment and tools are allowed in operating/working areas.', hi:'परिचालन/कार्य क्षेत्र में केवल प्रमाणित वाहन/इंजन और स्वीकृत प्रकार के विद्युत उपकरण और औजारों को ही अनुमति दी जाएगी।'},
+  {en:'Welding machines shall be placed in ventilated areas at a safe distance.', hi:'वेल्डिंग मशीनों को सुरक्षित दूरी पर हवादार क्षेत्र में रखा जाएगा।'},
+  {en:'No hot work shall be permitted unless the explosive meter reading is Zero.', hi:'जब तक एक्सप्लोसिव मीटर की रीडिंग शून्य न हो, तब तक किसी भी प्रकार के गर्म कार्य की अनुमति नहीं दी जाएगी।'},
+  {en:'When a person is entering the confined space/excavated trench, a minimum one standby designated person shall always be available at the entry point. If a standby person has to enter, a substitute standby person shall be ensured.', hi:'जब कोई व्यक्ति सीमित स्थान/खुदाई की गई खाई में प्रवेश कर रहा हो, तो न्यूनतम एक स्टैंडबाय-नामित व्यक्ति हमेशा मैनहोल या प्रवेश बिंदु पर या खुदाई की गई खाई के बाहर उपलब्ध रहेगा।'},
+  {en:'Compressed gas cylinders shall not be allowed to be kept in confined spaces/excavated trench.', hi:'संपीड़ित गैस सिलेंडरों को सीमित स्थानों/खुदाई की गई खाइयों में रखने की अनुमति नहीं दी जाएगी।'},
+  {en:'While filling the excavated trench, man & equipment must be at outside the trench and job to be carried out cautiously.', hi:'खोदी गई खाई को भरते समय, मनुष्य और उपकरण खाई के बाहर होने चाहिए और काम सावधानीपूर्वक किया जाना चाहिए।'},
+  {en:'For renewal of work clearance, the issuer shall ensure that conditions are satisfactory. If conditions have changed, a new permit may be necessary.', hi:'कार्य मंजूरी के नवीनीकरण के लिए, जारीकर्ता को यह सुनिश्चित करना होगा कि कार्य जारी रखने के लिए स्थितियाँ संतोषजनक हैं।'},
+  {en:'This clearance on the same permit can be renewed/extended up to a maximum of seven calendar days.', hi:'एक ही परमिट पर यह मंजूरी अधिकतम सात कैलेंडर दिनों तक नवीनीकृत/विस्तारित की जा सकती है।'},
+  {en:'This permit must be always available at the work site in printed hard copy or viewable in electronic form.', hi:'यह परमिट कार्य स्थल पर सदैव मुद्रित हार्ड कॉपी अथवा इलेक्ट्रॉनिक रूप में उपलब्ध होना चाहिए।'},
+  {en:'On completion of the work, the permit must be closed and kept as a record.', hi:'कार्य पूरा होने पर परमिट को बंद कर दिया जाना चाहिए तथा रिकार्ड के रूप में रखा जाना चाहिए।'},
+  {en:'For trenching and excavation, the latest SOP for Trenching & Excavation as issued by PLHO to be followed.', hi:'खाई खोदने और खुदाई के लिए, पीएलएचओ द्वारा जारी नवीनतम एसओपी का पालन किया जाना चाहिए।'},
+  {en:'CCTV and gas monitoring devices should be utilized to monitor the site conditions continuously when work is being carried out.', hi:'कार्य के दौरान साइट की स्थिति पर लगातार नजर रखने के लिए सीसीटीवी और गैस निगरानी उपकरणों का उपयोग किया जाना चाहिए।'},
+  {en:'Additional Guideline on Work Permit System for mainline work issued by PLHO vide ref: PL/HO/HSE/18/2025-26/01, Rev 0 may be referred.', hi:'अन्य निर्देशों के लिए पीएलएचओ द्वारा जारी पाइपलाइन डिवीजन में मेनलाइन कार्य के लिए वर्क परमिट सिस्टम पर अतिरिक्त दिशानिर्देश संदर्भ: पीएल/एचओ/एचएसई/18/2025-26/01, रेव 0 को संदर्भित किया जा सकता है।'},
 ];
 
 function exportPermitPDF(id) {
@@ -2620,198 +2795,254 @@ function exportPermitPDF(id) {
   const doc = new JsPDF('p','mm','a4');
   const W=210, H=297, LM=12, RM=W-12, CW=RM-LM;
   const isHot = p.PermitTypeKey==='hot'||p.PermitTypeKey==='comp';
-  const BG = isHot?[255,230,230]:[255,250,230];
-  const BC = isHot?[220,38,38]:[180,130,4];
   let y = 0;
 
-  function newPage() { doc.addPage(); y=0; doc.setFillColor(...BG); doc.rect(0,0,W,H,'F'); doc.setDrawColor(...BC); doc.setLineWidth(1); doc.rect(5,5,W-10,H-10); y=14; }
-  function bg() { doc.setFillColor(...BG); doc.rect(0,0,W,H,'F'); doc.setDrawColor(...BC); doc.setLineWidth(1.5); doc.rect(5,5,W-10,H-10); }
-  function chk(need) { if (y+(need||8)>280) newPage(); }
-
-  function header() {
-    doc.setTextColor(0); doc.setFontSize(11); doc.setFont('helvetica','bold');
-    doc.text('INDIAN OIL CORPORATION LIMITED', W/2, y, {align:'center'}); y+=5;
-    doc.setFontSize(9); doc.text('EASTERN REGION PIPELINES', W/2, y, {align:'center'}); y+=4;
-    doc.text('HSE DEPT.', W/2, y, {align:'center'}); y+=5;
+  // ===== IOCL LOGO DRAWING =====
+  function drawIOCLLogo(doc, cx, cy, r) {
+    doc.setFillColor(232,115,14); doc.circle(cx, cy, r, 'F');
+    doc.setDrawColor(27,40,86); doc.setLineWidth(r*0.08); doc.circle(cx, cy, r, 'S');
+    doc.setDrawColor(255,255,255); doc.setLineWidth(r*0.04); doc.circle(cx, cy, r*0.87, 'S');
+    doc.setFillColor(27,40,86); doc.rect(cx-r*0.85, cy-r*0.18, r*1.7, r*0.38, 'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(r*0.28); doc.setFont('helvetica','bold');
+    doc.text('IndianOil', cx, cy+r*0.08, {align:'center'});
+    doc.setTextColor(0);
   }
-  function titleBlock() {
-    doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setDrawColor(...BC); doc.setLineWidth(0.3);
-    doc.rect(LM, y, CW, 14);
-    doc.setFont('helvetica','bold'); doc.setFontSize(7);
+
+  // ===== PAGE HEADER with IOCL logo (every page) =====
+  function pageHeader() {
+    // IOCL Logo top-left
+    drawIOCLLogo(doc, LM+10, y+10, 8);
+    doc.setTextColor(0); doc.setFontSize(11); doc.setFont('helvetica','bold');
+    doc.text('INDIAN OIL CORPORATION LIMITED', W/2+5, y+5, {align:'center'});
+    doc.setFontSize(9); doc.text('EASTERN REGION PIPELINES', W/2+5, y+10, {align:'center'});
+    doc.text('HSE DEPT.', W/2+5, y+15, {align:'center'});
+    y+=20;
+    // Title block
+    doc.setDrawColor(0); doc.setLineWidth(0.3); doc.rect(LM, y, CW, 16);
+    doc.setFontSize(6.5); doc.setFont('helvetica','bold');
     doc.text('TITLE: COMPOSITE WORK / COLD WORK / HOT WORK / ENTRY TO CONFINED', LM+2, y+4);
     doc.text('SPACE / VEHICLE ENTRY / EXCAVATION WORK AT MAINLINE / RCP / SV', LM+2, y+8);
-    doc.text('Doc. No.: ERPL/HS&E/25-26', RM-2, y+4, {align:'right'});
+    doc.line(LM+CW*0.72, y, LM+CW*0.72, y+16);
+    doc.text('Doc. No.: ERPL/HS&E/25-26', LM+CW*0.73, y+4);
     doc.setFont('helvetica','normal'); doc.setFontSize(6);
-    doc.text('Issue No.: 01 | Issue Date: 01.09.2025 | Rev No.: 00', LM+2, y+12);
-    doc.text('Revision date: --', RM-2, y+12, {align:'right'});
-    y += 17;
+    doc.line(LM, y+10, LM+CW*0.72, y+10);
+    doc.text('Issue No.: 01 | Issue Date: 01.09.2025 | Rev No.: 00', LM+2, y+14);
+    doc.text('Revision date: --', LM+CW*0.73, y+14);
+    y += 19;
   }
+  function newPage() { doc.addPage(); y=10; doc.setDrawColor(0); doc.setLineWidth(0.5); doc.rect(5,5,W-10,H-10); pageHeader(); }
+  function bg() { doc.setDrawColor(0); doc.setLineWidth(0.5); doc.rect(5,5,W-10,H-10); }
+  function chk(need) { if (y+(need||8)>278) newPage(); }
 
   // PAGE 1: Work Details
-  bg(); y=14; header(); titleBlock();
-  doc.setFillColor(...BC); doc.rect(LM, y, CW, 8, 'F');
+  bg(); y=10; pageHeader();
+  // Permit Type Banner
+  doc.setFillColor(27,40,86); doc.rect(LM, y, CW, 8, 'F');
   doc.setTextColor(255); doc.setFontSize(11); doc.setFont('helvetica','bold');
   doc.text(p.PermitType.toUpperCase()+' PERMIT', W/2, y+6, {align:'center'});
   doc.setTextColor(0); y+=12;
 
   doc.setFontSize(8); doc.setFont('helvetica','bold');
-  doc.text('Permit ID: '+p.PermitID, LM, y); doc.text('Sl. No: '+p.PermitID.split('-').pop(), RM, y, {align:'right'}); y+=6;
-  doc.text('Status: '+p.Status, LM, y); y+=6;
+  doc.text('Permit ID: '+p.PermitID, LM, y); doc.text('Sl. No: '+p.PermitID.split('-').pop(), RM, y, {align:'right'}); y+=5;
+  doc.text('Status: '+p.Status, LM, y); y+=5;
 
   const df=cleanDate(p.DateFrom),tf=cleanTime(p.TimeFrom),dt=cleanDate(p.DateTo),tt=cleanTime(p.TimeTo);
-  const addRow = (lbl,val) => { chk(8); doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text(lbl, LM, y); doc.setFont('helvetica','normal'); const ln=doc.splitTextToSize(String(val||'-'),W-85); doc.text(ln,72,y); y+=Math.max(ln.length*4,5.5); };
+  const addRow = (lbl,lblHi,val) => {
+    chk(12); doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.text(lbl, LM, y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7);
+    const ln=doc.splitTextToSize(String(val||'-'),W-85); doc.text(ln,72,y); y+=Math.max(ln.length*3.5,4.5);
+    if(lblHi){ doc.setFontSize(5.5); doc.setTextColor(80); doc.text(lblHi, LM, y); doc.setTextColor(0); y+=3; }
+  };
 
-  addRow('Work clearance from:', df+' '+tf+' hrs  To  '+dt+' '+tt+' hrs');
-  doc.setFontSize(6); doc.setFont('helvetica','italic'); doc.text('(Valid for the shift unless renewed)', LM, y); y+=4;
-  addRow('Issued to (Dept/Section/Contractor):', p.IssuedTo);
-  addRow('Exact Location of Work:', p.ExactLocation+' — '+p.Location);
-  addRow('Description of Work:', p.Description);
-  addRow('Person from Contractor/Dept at Site:', p.SitePerson);
-  addRow('Patrolling/Security Guard at Site:', p.SecurityGuard||'-');
-  addRow('JSA Ref. No.:', p.JSARef||'-');
-  addRow('Cross-Reference of other permits:', p.CrossRef||'-');
-  addRow('Emergency Contact:', p.EmergencyContact);
-  addRow('Nearest Fire Station and Hospital:', p.FireStation||'-');
-  y+=3;
-  doc.setFont('helvetica','bold'); doc.setFontSize(8);
-  doc.text('THE FOLLOWING ITEMS SHALL BE CHECKED BEFORE ISSUING THE PERMIT:', LM, y); y+=6;
+  addRow('Work clearance from:', 'कार्य मंजूरी दिनांक से दिनांक तक (शिफ्ट के लिए वैध जब तक कि नवीकरण न किया जाए)', df+' '+tf+' hrs  To  '+dt+' '+tt+' hrs');
+  addRow('Issued to (Dept/Section/Contractor):', 'जारी किया गया (विभाग/अनुभाग/ठेकेदार)', p.IssuedTo);
+  addRow('Exact Location of Work:', 'कार्य का सटीक स्थान (क्षेत्र/आरसीपी/एसवी/चेनेज किमी. आदि)', p.ExactLocation+' — '+p.Location);
+  addRow('Description of Work:', 'कार्य का वर्णन', p.Description);
+  addRow('Person from Contractor/Dept at Site:', 'साइट पर ठेकेदार/विभाग से व्यक्ति (नाम और संपर्क नंबर)', p.SitePerson);
+  addRow('Patrolling/Security Guard at Site:', 'साइट पर गश्त/सुरक्षा गार्ड या चेनेज के लिए (नाम और संपर्क नंबर)', p.SecurityGuard||'-');
+  addRow('JSA Ref. No.:', 'जेएसए संदर्भ संख्या', p.JSARef||'-');
+  addRow('Cross-Reference of other permits:', 'अन्य परमिटों/कार्यों का क्रॉस-रेफरेंस', p.CrossRef||'-');
+  addRow('Emergency Contact:', 'आपातकालीन स्थिति में व्यक्ति का नाम एवं संपर्क नम्बर', p.EmergencyContact);
+  addRow('Nearest Fire Station and Hospital:', 'निकटतम अग्निशमन केंद्र और अस्पताल', p.FireStation||'-');
+  y+=2;
+  doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+  doc.text('THE FOLLOWING ITEMS SHALL BE CHECKED BEFORE ISSUING THE PERMIT:', LM, y); y+=4;
+  doc.setFontSize(5.5); doc.setTextColor(80);
+  doc.text('परमिट जारी करने से पहले निम्नलिखित वस्तुओं की जाँच की जाएगी:', LM, y);
+  doc.setTextColor(0); y+=4;
 
-  // CHECKLIST PAGES
+  // CHECKLIST PAGES (bilingual)
   let checklist = {};
   try { checklist = typeof p.Checklist==='string'?JSON.parse(p.Checklist):(p.Checklist||{}); } catch(e){}
 
   function drawChecklistSection(section) {
     chk(14);
-    doc.setFillColor(...BC); doc.setTextColor(255);
+    doc.setFillColor(27,40,86); doc.setTextColor(255);
     doc.rect(LM, y, CW, 6, 'F');
-    doc.setFontSize(7); doc.setFont('helvetica','bold');
+    doc.setFontSize(6.5); doc.setFont('helvetica','bold');
     doc.text(section.title, LM+2, y+4.5);
     doc.setTextColor(0); y+=8;
-
-    doc.setDrawColor(...BC); doc.setLineWidth(0.2);
-    doc.setFillColor(240,240,240);
+    // Table header
+    doc.setDrawColor(0); doc.setLineWidth(0.2); doc.setFillColor(230,230,235);
     doc.rect(LM, y, 10, 6, 'FD'); doc.rect(LM+10, y, CW-50, 6, 'FD'); doc.rect(RM-40, y, 20, 6, 'FD'); doc.rect(RM-20, y, 20, 6, 'FD');
-    doc.setFontSize(6); doc.setFont('helvetica','bold');
+    doc.setFontSize(5.5); doc.setFont('helvetica','bold');
     doc.text('Sl.No.', LM+2, y+4); doc.text('Item', LM+12, y+4); doc.text('Done', RM-35, y+4); doc.text('Not Reqd.', RM-18, y+4);
     y+=7;
 
     section.items.forEach(([code, text]) => {
       const val = checklist[code] || '';
       const lines = doc.splitTextToSize(text, CW-52);
-      const rh = Math.max(lines.length*3.5, 5);
+      const rh = Math.max(lines.length*3, 5);
       chk(rh+2);
-
-      doc.setDrawColor(180); doc.setLineWidth(0.1);
+      doc.setDrawColor(160); doc.setLineWidth(0.1);
       doc.rect(LM, y-1, 10, rh+2); doc.rect(LM+10, y-1, CW-50, rh+2); doc.rect(RM-40, y-1, 20, rh+2); doc.rect(RM-20, y-1, 20, rh+2);
-
-      doc.setFont('helvetica','bold'); doc.setFontSize(6);
+      doc.setFont('helvetica','bold'); doc.setFontSize(5.5);
       doc.text(code.replace('R',''), LM+2, y+2);
-      doc.setFont('helvetica','normal'); doc.setFontSize(6);
+      doc.setFont('helvetica','normal'); doc.setFontSize(5.5);
       doc.text(lines, LM+12, y+2);
-
-      // TICK MARKS — clearly visible green V-shape
       if (val === 'Done') { drawTick(doc, RM-34, y+1, 3.5); }
       if (val === 'N/A') { drawTick(doc, RM-14, y+1, 3.5); }
-
-      doc.setFont('helvetica','normal');
       y += rh+2;
     });
     y+=3;
   }
 
-  newPage(); header(); titleBlock();
+  newPage();
   drawChecklistSection(CHECKLIST_ITEMS_PDF.A);
   drawChecklistSection(CHECKLIST_ITEMS_PDF.AR);
   drawChecklistSection(CHECKLIST_ITEMS_PDF.B);
   drawChecklistSection(CHECKLIST_ITEMS_PDF.C);
   drawChecklistSection(CHECKLIST_ITEMS_PDF.D);
 
-  // REMARKS
-  chk(40); y+=3;
-  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('Remarks:', LM, y); y+=5;
-  doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  // REMARKS (bilingual)
+  chk(45); y+=3;
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('Remarks: / टिप्पणी:', LM, y); y+=5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
   let hazards = []; try { hazards = JSON.parse(p.Hazards||'[]'); } catch(e){}
-  doc.setFont('helvetica','bold'); doc.text('1. Residual Hazards: ', LM, y); doc.setFont('helvetica','normal');
-  doc.text(hazards.length?hazards.join(' / '):'NIL', LM+35, y); y+=5;
+  doc.setFont('helvetica','bold'); doc.text('1. Residual Hazards / अपेक्षित अवशिष्ट खतरे:', LM, y); doc.setFont('helvetica','normal');
+  doc.text(hazards.length?hazards.join(' / '):'NIL', LM+55, y); y+=5;
 
   let ppeList = []; try { ppeList = JSON.parse(p.PPE||'[]'); } catch(e){}
-  doc.setFont('helvetica','bold'); doc.text('2. Additional PPE (beyond Helmet, Safety Shoes, Gloves, Boiler Suit):', LM, y); y+=4;
+  doc.setFont('helvetica','bold'); doc.text('2. Additional PPE / अतिरिक्त व्यक्तिगत सुरक्षा उपकरणों:', LM, y); y+=4;
   doc.setFont('helvetica','normal'); doc.text(ppeList.length?ppeList.join(' / '):'Standard PPE only', LM+3, y); y+=5;
+  doc.setFont('helvetica','bold'); doc.text('3. Additional Precautions / अतिरिक्त सावधानी:', LM, y); doc.setFont('helvetica','normal');
+  doc.text(p.Precautions||'NIL', LM+50, y); y+=5;
+  doc.setFont('helvetica','bold'); doc.text('Gas Test Values / गैस परीक्षण मान:', LM, y); doc.setFont('helvetica','normal');
+  doc.text('HCs = '+(p.GasHC||'___')+'% LEL    Toxic Gas = '+(p.GasToxic||'___')+' PPM    O2 = '+(p.GasO2||'___')+'%', LM+38, y); y+=7;
 
-  doc.setFont('helvetica','bold'); doc.text('3. Additional Precautions:', LM, y); doc.setFont('helvetica','normal');
-  doc.text(p.Precautions||'NIL', LM+38, y); y+=5;
-
-  doc.setFont('helvetica','bold'); doc.text('Gas Test Values:', LM, y); doc.setFont('helvetica','normal');
-  doc.text('HCs = '+(p.GasHC||'___')+'% LEL    Toxic Gas = '+(p.GasToxic||'___')+' PPM    O2 = '+(p.GasO2||'___')+'%', LM+28, y); y+=7;
-
-  // SIGNATURES
-  chk(35); doc.setDrawColor(...BC); doc.setLineWidth(0.5); doc.line(LM,y,RM,y); y+=5;
+  // SIGNATURES with timestamps
+  chk(40); doc.setDrawColor(0); doc.setLineWidth(0.5); doc.line(LM,y,RM,y); y+=5;
   const hw=CW/2;
-  doc.setDrawColor(...BC); doc.setLineWidth(0.2);
-  doc.rect(LM,y,hw-2,22); doc.setFont('helvetica','bold'); doc.setFontSize(8);
-  doc.text('Issuer Name & Designation',LM+2,y+5); doc.setFont('helvetica','normal'); doc.setFontSize(7);
-  doc.text(p.IssuerName||'________________',LM+2,y+10); doc.text(p.IssuerDesignation||'________________',LM+2,y+14);
-  doc.text('Signature: ________________',LM+2,y+19);
+  doc.setDrawColor(0); doc.setLineWidth(0.2);
+  // Issuer box
+  doc.rect(LM,y,hw-2,28);
+  doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+  doc.text('Issuer Name & Designation',LM+2,y+5);
+  doc.setFontSize(6); doc.text('(जारीकर्ता का नाम और पदनाम)',LM+2,y+8.5);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.text(p.IssuerName||'________________',LM+2,y+13);
+  doc.text(p.IssuerDesignation||'________________',LM+2,y+17);
+  if(p.IssuedAt&&p.IssuedAt!=='-'&&p.IssuedAt!=='undefined'){
+    doc.setFontSize(6); doc.setFont('helvetica','bold'); doc.setTextColor(0,100,0);
+    doc.text('Approved: '+cleanDate(p.IssuedAt)+' '+cleanTime(p.IssuedAt),LM+2,y+21);
+    doc.setTextColor(0);
+  }
+  doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
+  doc.text('Signature / हस्ताक्षर: ________________',LM+2,y+25);
 
-  doc.rect(LM+hw,y,hw,22); doc.setFont('helvetica','bold'); doc.setFontSize(8);
-  doc.text('Receiver Name & Designation',LM+hw+2,y+5); doc.setFont('helvetica','normal'); doc.setFontSize(7);
-  doc.text(p.ReceiverName||'________________',LM+hw+2,y+10); doc.text(p.ReceiverDesignation||'________________',LM+hw+2,y+14);
-  doc.text('Signature: ________________',LM+hw+2,y+19);
-  y+=25;
+  // Receiver box
+  doc.rect(LM+hw,y,hw,28);
+  doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+  doc.text('Receiver Name & Designation',LM+hw+2,y+5);
+  doc.setFontSize(6); doc.text('(प्राप्तकर्ता का नाम और पदनाम)',LM+hw+2,y+8.5);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.text(p.ReceiverName||'________________',LM+hw+2,y+13);
+  doc.text(p.ReceiverDesignation||'________________',LM+hw+2,y+17);
+  if(p.CreatedAt&&p.CreatedAt!=='-'){
+    doc.setFontSize(6); doc.setFont('helvetica','bold'); doc.setTextColor(0,100,0);
+    doc.text('Initiated: '+cleanDate(p.CreatedAt)+' '+cleanTime(p.CreatedAt),LM+hw+2,y+21);
+    doc.setTextColor(0);
+  }
+  doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
+  doc.text('Signature / हस्ताक्षर: ________________',LM+hw+2,y+25);
+  y+=32;
 
-  // CLEARANCE RENEWAL
-  chk(30); doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('Clearance Renewal',LM,y); y+=5;
-  const cols=[25,20,30,35,35,35];
-  const hdrs=['Date','Time\nFrom / To','Gas Test Values\nHCs, Toxic, O2','Additional\nPrecautions','Issuer Name,\nDesign. & Sign.','Receiver Name,\nDesign. & Sign.'];
-  let cx=LM; doc.setFontSize(5); doc.setFont('helvetica','bold'); doc.setDrawColor(100); doc.setLineWidth(0.2);
-  hdrs.forEach((h,i)=>{doc.rect(cx,y,cols[i],10);h.split('\n').forEach((ln,li)=>doc.text(ln,cx+1,y+3.5+li*3));cx+=cols[i];});
-  y+=10;
-  for(let r=0;r<3;r++){cx=LM;cols.forEach(c=>{doc.rect(cx,y,c,7);cx+=c;});y+=7;}
+  // CLEARANCE RENEWAL TABLE (bilingual)
+  chk(35);
+  doc.setFont('helvetica','bold'); doc.setFontSize(8);
+  doc.text('Clearance Renewal / क्लियरेंस विवरण',LM,y); y+=5;
+  const cols=[22,14,14,28,30,35,35];
+  const hdrs=['Date\nदिनांक','Time\nFrom\n(कब से)','Time\nTo\n(कब तक)','Gas Test\nHCs, Toxic, O2\n(गैस परीक्षण)','Addl. Precautions\n(अतिरिक्त सावधानियाँ)','Issuer Name &\nSign.\n(जारीकर्ता)','Receiver Name &\nSign.\n(प्राप्तकर्ता)'];
+  let cx=LM; doc.setFontSize(4.5); doc.setFont('helvetica','bold'); doc.setDrawColor(0); doc.setLineWidth(0.2);
+  hdrs.forEach((h,i)=>{doc.rect(cx,y,cols[i],12);h.split('\n').forEach((ln,li)=>doc.text(ln,cx+1,y+3+li*2.5));cx+=cols[i];});
+  y+=12;
+  // Draw 3 empty rows (or fill with renewal data if available)
+  for(let r=0;r<3;r++){cx=LM;cols.forEach(c=>{doc.rect(cx,y,c,8);cx+=c;});y+=8;}
   y+=5;
 
-  // CLOSING
-  chk(40); doc.setDrawColor(...BC); doc.setLineWidth(0.5); doc.line(LM,y,RM,y); y+=5;
-  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('Closing of the Work Permit',LM,y); y+=6;
-  doc.setDrawColor(...BC); doc.setLineWidth(0.2);
-  doc.rect(LM,y,hw-2,16); doc.setFont('helvetica','bold'); doc.setFontSize(6);
-  doc.text('Receiver:',LM+2,y+4); doc.setFont('helvetica','normal');
-  doc.text(doc.splitTextToSize('Certified that the subject work has been completed/stopped and area cleared.',hw-8),LM+2,y+7);
-  doc.rect(LM+hw,y,hw,16); doc.setFont('helvetica','bold');
-  doc.text('Issuer:',LM+hw+2,y+4); doc.setFont('helvetica','normal');
-  doc.text(doc.splitTextToSize('Verified that the job has been completed and area cleared and is safe from any hazard.',hw-6),LM+hw+2,y+7);
-  y+=19;
+  // CLOSING SECTION (bilingual)
+  chk(45);
+  doc.setDrawColor(0); doc.setLineWidth(0.5); doc.line(LM,y,RM,y); y+=5;
+  doc.setFont('helvetica','bold'); doc.setFontSize(8);
+  doc.text('Closing of the Work Permit / कार्य परमिट का बंद करना',LM,y); y+=6;
+  doc.setDrawColor(0); doc.setLineWidth(0.2);
+  // Receiver closing
+  doc.rect(LM,y,hw-2,20);
+  doc.setFont('helvetica','bold'); doc.setFontSize(6.5);
+  doc.text('Receiver:',LM+2,y+4);
+  doc.setFont('helvetica','normal'); doc.setFontSize(5.5);
+  doc.text(doc.splitTextToSize('Certified that the subject work has been completed/stopped and area cleared.\n(प्राप्तकर्ता: प्रमाणित किया जाता है कि विषयगत कार्य पूरा हो गया है/सोप किया गया है तथा क्षेत्र साफ कर दिया गया है।)',hw-8),LM+2,y+8);
+  // Issuer closing
+  doc.rect(LM+hw,y,hw,20);
+  doc.setFont('helvetica','bold'); doc.setFontSize(6.5);
+  doc.text('Issuer:',LM+hw+2,y+4);
+  doc.setFont('helvetica','normal'); doc.setFontSize(5.5);
+  doc.text(doc.splitTextToSize('Verified that the job has been completed and area cleared and is safe from any hazard.\n(जारीकर्ता: सत्यापित किया गया है कि कार्य पूरा हो गया है और क्षेत्र साफ हो गया है तथा किसी भी खतरे से सुरक्षित है।)',hw-6),LM+hw+2,y+8);
+  y+=23;
 
   chk(20);
   const chw=CW/2;
-  ['Receiver','Issuer'].forEach((role,ri)=>{
+  ['Receiver / प्राप्तकर्ता','Issuer / जारीकर्ता'].forEach((role,ri)=>{
     const bx=LM+ri*chw;
     doc.rect(bx,y,30,10);doc.rect(bx+30,y,chw-50,10);doc.rect(bx+chw-20,y,20,10);
-    doc.setFontSize(5);doc.setFont('helvetica','bold');
-    doc.text('Date & Time',bx+1,y+4);doc.text('Name & Designation',bx+32,y+4);doc.text('Signature',bx+chw-18,y+4);
+    doc.setFontSize(4.5);doc.setFont('helvetica','bold');
+    doc.text('Date & Time\n(दिनांक एवं समय)',bx+1,y+3);
+    doc.text('Name & Designation\n(नाम एवं पदनाम)',bx+32,y+3);
+    doc.text('Signature\n(हस्ताक्षर)',bx+chw-18,y+3);
   });
   y+=10;
   ['Receiver','Issuer'].forEach((role,ri)=>{
     const bx=LM+ri*chw;
     doc.rect(bx,y,30,8);doc.rect(bx+30,y,chw-50,8);doc.rect(bx+chw-20,y,20,8);
-    if(p.ClosedAt&&p.ClosedAt!=='-'){doc.setFontSize(5);doc.setFont('helvetica','normal');doc.text(cleanDate(p.ClosedAt),bx+2,y+5);}
+    if(p.ClosedAt&&p.ClosedAt!=='-'&&p.ClosedAt!=='undefined'){
+      doc.setFontSize(5);doc.setFont('helvetica','normal');
+      doc.text(cleanDate(p.ClosedAt),bx+2,y+4);
+      doc.text(cleanTime(p.ClosedAt),bx+2,y+7);
+    }
   });
   y+=12;
 
-  // GENERAL INSTRUCTIONS
-  newPage(); header(); titleBlock();
-  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('General Instructions:',LM,y); y+=6;
-  doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
+  // GENERAL INSTRUCTIONS PAGE (bilingual)
+  newPage();
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.text('General Instructions: / सामान्य निर्देश:',LM,y); y+=6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(6);
   GENERAL_INSTRUCTIONS_PDF.forEach((inst,i)=>{
-    chk(12);
-    const lines=doc.splitTextToSize((i+1)+'. '+inst,CW-4);
-    doc.text(lines,LM+2,y);y+=lines.length*3.2+2;
+    chk(14);
+    const enLines=doc.splitTextToSize((i+1)+'. '+inst.en,CW-4);
+    doc.setFont('helvetica','normal'); doc.setFontSize(6);
+    doc.text(enLines,LM+2,y); y+=enLines.length*2.8+1;
+    const hiLines=doc.splitTextToSize(inst.hi,CW-6);
+    doc.setFontSize(5); doc.setTextColor(80);
+    doc.text(hiLines,LM+4,y); y+=hiLines.length*2.5+2;
+    doc.setTextColor(0);
   });
 
-  // Page numbers
+  // Page numbers on all pages
   const pages=doc.internal.getNumberOfPages();
   for(let pg=1;pg<=pages;pg++){
     doc.setPage(pg);doc.setFontSize(5);doc.setTextColor(128);
-    doc.text('Page '+pg+' of '+pages+' | Generated from AttendX Work Permit System | '+new Date().toLocaleString(),W/2,H-7,{align:'center'});
+    doc.text('Page '+pg+' of '+pages+' | Generated from AttendX Work Permit System — IOCL ERPL | '+new Date().toLocaleString(),W/2,H-7,{align:'center'});
     doc.setTextColor(0);
   }
   doc.save('WorkPermit_'+p.PermitID+'.pdf');
