@@ -494,9 +494,6 @@
       <div class="stats-grid" id="statsGrid">
         <div class="stat-card"><div class="stat-label">Total Employees</div><div class="stat-value" id="statTotal">--</div><div class="stat-sub">across all locations</div></div>
         <div class="stat-card"><div class="stat-label">Present Today</div><div class="stat-value" id="statPresent">--</div><div class="stat-sub" id="statRate">--% attendance</div></div>
-        <div class="stat-card"><div class="stat-label">Absent Today</div><div class="stat-value" id="statAbsent">--</div><div class="stat-sub">not checked in</div></div>
-        <!-- <div class="stat-card"><div class="stat-label">Late Arrivals</div><div class="stat-value" id="statLate">--</div><div class="stat-sub">after grace period</div></div>-->
-        <div class="stat-card"><div class="stat-label">Attendance %</div><div class="stat-value" id="statPercent">--%</div><div class="stat-sub">today's rate</div></div>
 
         <div class="stat-card">
           <div class="stat-label">Visitors Today</div>
@@ -550,19 +547,24 @@
         </div>
         <div class="panel">
           <div class="panel-header">
-            <div class="panel-title">⏰ Shift Breakdown</div>
-            <span class="panel-badge" style="background:var(--accent-dim);color:var(--accent)">Today</span>
+            <div class="panel-title">⚠️ Near Miss Reports — Last 7 Days</div>
           </div>
-          <div class="shift-grid" id="shiftGrid">
-            <div class="shift-card shift-a"><div class="shift-name">A Shift</div><div class="shift-count" id="shiftA">0</div><div class="shift-time">06:00-14:00</div></div>
-            <div class="shift-card shift-b"><div class="shift-name">B Shift</div><div class="shift-count" id="shiftB">0</div><div class="shift-time">14:00-22:00</div></div>
-            <div class="shift-card shift-c"><div class="shift-name">C Shift</div><div class="shift-count" id="shiftC">0</div><div class="shift-time">22:00-06:00</div></div>
-            <div class="shift-card shift-g"><div class="shift-name">General</div><div class="shift-count" id="shiftG">0</div><div class="shift-time">09:00-17:00</div></div>
+          <div class="chart-container"><canvas id="nearMissChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">⚡ DG Status — By Location</div>
           </div>
-          <div style="margin-top:16px">
-            <div class="panel-title" style="margin-bottom:12px"><span class="live-dot"></span> Live Status</div>
-            <div id="quickOccupancy"><div style="color:var(--text3);font-size:13px">Loading...</div></div>
+          <div class="chart-container"><canvas id="dgChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">🔌 MOV Status — By Location</div>
           </div>
+          <div class="chart-container"><canvas id="movChart"></canvas></div>
         </div>
       </div>
 
@@ -873,6 +875,9 @@ if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_UR
 let dashboardData = null;
 let allRecords = [];
 let weeklyChartInstance = null;
+let nearMissChartInstance = null;
+let dgChartInstance = null;
+let movChartInstance = null;
 let isUsingLiveData = false; // Track whether we have real data
 
 // VISITOR MODULE VARIABLES
@@ -1123,18 +1128,15 @@ function renderDashboard() {
   // Stats
   document.getElementById('statTotal').textContent = d.summary.totalEmployees;
   document.getElementById('statPresent').textContent = d.summary.presentToday;
-  document.getElementById('statAbsent').textContent = d.summary.absentToday;
+  // statAbsent removed from UI
   // document.getElementById('statLate').textContent = d.summary.lateToday; 
-  document.getElementById('statPercent').textContent = d.summary.attendanceRate + '%';
+  // statPercent removed from UI
   document.getElementById('statRate').textContent = d.summary.attendanceRate + '% attendance';
   
   
 
   // Shifts
-  document.getElementById('shiftA').textContent = d.shiftBreakdown.A || 0;
-  document.getElementById('shiftB').textContent = d.shiftBreakdown.B || 0;
-  document.getElementById('shiftC').textContent = d.shiftBreakdown.C || 0;
-  document.getElementById('shiftG').textContent = d.shiftBreakdown.General || 0;
+  // Shift breakdown cards removed from UI
 
   // Weekly chart
   renderWeeklyChart(d.weeklyTrend);
@@ -1194,6 +1196,22 @@ function renderDashboard() {
     : [];
 
   currentNearMissRecords = nearMissData;
+
+  // Render Near Miss chart (aggregate by category or by day)
+  try {
+    if (nearMissData.length > 0) {
+      const catMap = {};
+      nearMissData.forEach(r => {
+        const cat = r.Category || r.Type || 'Other';
+        catMap[cat] = (catMap[cat] || 0) + 1;
+      });
+      renderNearMissChart({ categories: catMap });
+    } else if (d.nearMissSummary) {
+      renderNearMissChart({ categories: { 'Today': d.nearMissSummary.today || 0, 'This Week': d.nearMissSummary.thisWeek || 0, 'This Month': d.nearMissSummary.thisMonth || 0 } });
+    } else {
+      renderNearMissChart(null);
+    }
+  } catch(e) { console.warn('NearMiss chart error:', e); }
 
   // Always render table once data is loaded
   renderNearMissTable(nearMissData);
@@ -1268,8 +1286,160 @@ function renderWeeklyChart(trend) {
   });
 }
 
+// ============================================================
+// NEAR MISS CHART — bar chart of reports by category
+// ============================================================
+function renderNearMissChart(nearMissData) {
+  const ctx = document.getElementById('nearMissChart');
+  if (!ctx || typeof Chart === 'undefined') return;
+  if (nearMissChartInstance) nearMissChartInstance.destroy();
+
+  // nearMissData could be { categories: {cat: count}, daily: [{date, count}] }
+  // or if we just have summary data, show what we have
+  let labels = [], values = [], bgColors = [];
+  const palette = ['#f97316','#dc2626','#f59e0b','#8b5cf6','#06d6a0','#118ab2','#1B3C73'];
+
+  if (nearMissData && nearMissData.categories && Object.keys(nearMissData.categories).length > 0) {
+    Object.entries(nearMissData.categories).sort((a,b) => b[1]-a[1]).forEach(([cat, cnt], i) => {
+      labels.push(cat);
+      values.push(cnt);
+      bgColors.push(palette[i % palette.length]);
+    });
+  } else if (nearMissData && nearMissData.daily) {
+    nearMissData.daily.forEach(d => { labels.push(d.date); values.push(d.count); });
+    bgColors = labels.map(() => '#f97316');
+  } else {
+    labels = ['No Data']; values = [0]; bgColors = ['#ddd'];
+  }
+
+  nearMissChartInstance = new Chart(ctx.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Reports', data: values, backgroundColor: bgColors, borderRadius: 6, barPercentage: 0.6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#5a6377', font: { size: 11 } } },
+        y: { grid: { color: 'rgba(213,221,232,0.6)' }, ticks: { color: '#5a6377', font: { size: 11 }, stepSize: 1 }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+// ============================================================
+// DG STATUS CHART — doughnut by location
+// ============================================================
+function renderDGChart(dgData) {
+  const ctx = document.getElementById('dgChart');
+  if (!ctx || typeof Chart === 'undefined') return;
+  if (dgChartInstance) dgChartInstance.destroy();
+
+  let labels = [], working = [], notWorking = [];
+
+  if (dgData && dgData.locations && dgData.locations.length > 0) {
+    dgData.locations.forEach(loc => {
+      labels.push(loc.name || loc.location);
+      working.push(loc.working || 0);
+      notWorking.push(loc.notWorking || loc.faulty || 0);
+    });
+  } else if (dgData && dgData.working !== undefined) {
+    labels = ['Working', 'Not Working'];
+    var w = dgData.working || 0, t = dgData.total || 0;
+    dgChartInstance = new Chart(ctx.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Working', 'Not Working'],
+        datasets: [{ data: [w, t - w], backgroundColor: ['#06d6a0', '#dc2626'], borderWidth: 2, borderColor: '#fff' }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { color: '#5a6377', font: { size: 12 }, padding: 16 } } },
+        cutout: '60%'
+      }
+    });
+    return;
+  } else {
+    labels = ['No Data']; working = [0]; notWorking = [0];
+  }
+
+  dgChartInstance = new Chart(ctx.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Working', data: working, backgroundColor: '#06d6a0', borderRadius: 4, barPercentage: 0.5 },
+        { label: 'Not Working', data: notWorking, backgroundColor: '#dc2626', borderRadius: 4, barPercentage: 0.5 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { color: '#5a6377', font: { size: 12 }, boxWidth: 12, padding: 16 } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#5a6377', font: { size: 10 } }, stacked: true },
+        y: { grid: { color: 'rgba(213,221,232,0.6)' }, ticks: { color: '#5a6377', font: { size: 11 }, stepSize: 1 }, beginAtZero: true, stacked: true }
+      }
+    }
+  });
+}
+
+// ============================================================
+// MOV STATUS CHART — doughnut by location
+// ============================================================
+function renderMOVChart(movData) {
+  const ctx = document.getElementById('movChart');
+  if (!ctx || typeof Chart === 'undefined') return;
+  if (movChartInstance) movChartInstance.destroy();
+
+  let labels = [], working = [], notWorking = [];
+
+  if (movData && movData.locations && movData.locations.length > 0) {
+    movData.locations.forEach(loc => {
+      labels.push(loc.name || loc.location);
+      working.push(loc.working || 0);
+      notWorking.push(loc.notWorking || loc.faulty || 0);
+    });
+  } else if (movData && movData.working !== undefined) {
+    var w = movData.working || 0, t = movData.total || 0;
+    movChartInstance = new Chart(ctx.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Working', 'Not Working'],
+        datasets: [{ data: [w, t - w], backgroundColor: ['#06d6a0', '#dc2626'], borderWidth: 2, borderColor: '#fff' }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { color: '#5a6377', font: { size: 12 }, padding: 16 } } },
+        cutout: '60%'
+      }
+    });
+    return;
+  } else {
+    labels = ['No Data']; working = [0]; notWorking = [0];
+  }
+
+  movChartInstance = new Chart(ctx.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Working', data: working, backgroundColor: '#06d6a0', borderRadius: 4, barPercentage: 0.5 },
+        { label: 'Not Working', data: notWorking, backgroundColor: '#dc2626', borderRadius: 4, barPercentage: 0.5 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { color: '#5a6377', font: { size: 12 }, boxWidth: 12, padding: 16 } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#5a6377', font: { size: 10 } }, stacked: true },
+        y: { grid: { color: 'rgba(213,221,232,0.6)' }, ticks: { color: '#5a6377', font: { size: 11 }, stepSize: 1 }, beginAtZero: true, stacked: true }
+      }
+    }
+  });
+}
+
 function renderQuickOccupancy(todayRecords) {
   const el = document.getElementById('quickOccupancy');
+  if (!el) return; // Panel removed from UI
   if (!todayRecords || !todayRecords.length) {
     el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No check-ins today</div>';
     return;
@@ -1926,6 +2096,9 @@ async function renderEquipmentSummary() {
       }
 
       console.log('[Equipment] ✅ Summary loaded:', data);
+      // Render DG/MOV charts
+      renderDGChart(data.dgSummary || {});
+      renderMOVChart(data.movSummary || {});
     }
   } catch (err) {
     console.warn('[Equipment] Summary fetch failed:', err.message);
@@ -2178,6 +2351,16 @@ function exportEquipmentCSV() {
 // ============================================================
 let currentPermits = [];
 
+function toIST(dateStr) {
+  // Convert any date string to IST (UTC+5:30)
+  if (!dateStr || dateStr === '-' || dateStr === 'undefined' || dateStr === 'null') return null;
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d)) return null;
+    // Add 5hr 30min offset for IST
+    return new Date(d.getTime() + (5*60+30)*60000);
+  } catch(e) { return null; }
+}
 function cleanDate(v) {
   if (!v || v === 'undefined' || v === 'null' || v === '-') return '-';
   const s = String(v);
@@ -2186,6 +2369,11 @@ function cleanDate(v) {
   if (m1) return m1[1];
   const m2 = s.match(/\w+ (\w+) (\d+) (\d{4})/);
   if (m2) { const mo={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'}; return m2[3]+'-'+(mo[m2[1]]||'01')+'-'+m2[2].padStart(2,'0'); }
+  // For ISO timestamps with T/Z, convert to IST first
+  if (s.includes('T') || s.includes('Z') || s.includes('GMT')) {
+    const ist = toIST(s);
+    if (ist) return ist.getFullYear()+'-'+String(ist.getMonth()+1).padStart(2,'0')+'-'+String(ist.getDate()).padStart(2,'0');
+  }
   try { const d=new Date(s); if(!isNaN(d)&&d.getFullYear()>1900) return d.toISOString().split('T')[0]; } catch(e){}
   return s.substring(0,10);
 }
@@ -2194,6 +2382,11 @@ function cleanTime(v) {
   const s = String(v);
   if (/^\d{2}:\d{2}(:\d{2})?$/.test(s)) return s.substring(0,5);
   const m = s.match(/(\d{1,2}):(\d{2}):\d{2}/);
+  // For ISO timestamps with T/Z, convert to IST
+  if (s.includes('T') || s.includes('Z') || s.includes('GMT')) {
+    const ist = toIST(s);
+    if (ist) return String(ist.getHours()).padStart(2,'0')+':'+String(ist.getMinutes()).padStart(2,'0');
+  }
   if (m) return m[1].padStart(2,'0')+':'+m[2];
   try { const d=new Date(s); if(!isNaN(d)){const h=d.getHours(),mn=d.getMinutes();if(h||mn) return String(h).padStart(2,'0')+':'+String(mn).padStart(2,'0');} } catch(e){}
   return s.substring(0,5);
@@ -2876,34 +3069,26 @@ async function exportPermitPDF(id) {
   const isHot = p.PermitTypeKey==='hot'||p.PermitTypeKey==='comp';
   let y = 0;
 
-  // ===== IOCL LOGO DRAWING =====
-  function drawIOCLLogo(doc, cx, cy, r) {
-    doc.setFillColor(232,115,14); doc.circle(cx, cy, r, 'F');
-    doc.setDrawColor(27,40,86); doc.setLineWidth(r*0.08); doc.circle(cx, cy, r, 'S');
-    doc.setDrawColor(255,255,255); doc.setLineWidth(r*0.04); doc.circle(cx, cy, r*0.87, 'S');
-    doc.setFillColor(27,40,86); doc.rect(cx-r*0.85, cy-r*0.18, r*1.7, r*0.38, 'F');
-    doc.setTextColor(255,255,255); doc.setFontSize(r*0.28); doc.setFont('helvetica','bold');
-    doc.text('IndianOil', cx, cy+r*0.08, {align:'center'});
-    doc.setTextColor(0);
-  }
+  // ===== IOCL LOGO (actual image, base64) =====
+  const IOCL_LOGO_B64 = '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';
 
   // ===== PAGE HEADER with IOCL logo (every page) =====
   function pageHeader() {
-    // IOCL Logo top-left
-    drawIOCLLogo(doc, LM+10, y+10, 8);
-    doc.setTextColor(0); doc.setFontSize(11); doc.setFont('helvetica','bold');
-    doc.text('INDIAN OIL CORPORATION LIMITED', W/2+5, y+5, {align:'center'});
-    doc.setFontSize(9); doc.text('EASTERN REGION PIPELINES', W/2+5, y+10, {align:'center'});
-    doc.text('HSE DEPT.', W/2+5, y+15, {align:'center'});
-    y+=20;
+    // IOCL Logo top-left (actual image)
+    try { doc.addImage(IOCL_LOGO_B64, 'JPEG', LM+1, y+1, 18, 18); } catch(e) { console.warn('Logo failed:', e); }
+    doc.setTextColor(0); doc.setFontSize(13); doc.setFont('helvetica','bold');
+    doc.text('INDIAN OIL CORPORATION LIMITED', W/2+8, y+6, {align:'center'});
+    doc.setFontSize(11); doc.text('EASTERN REGION PIPELINES', W/2+8, y+12, {align:'center'});
+    doc.text('HSE DEPT.', W/2+8, y+17, {align:'center'});
+    y+=22;
     // Title block
     doc.setDrawColor(0); doc.setLineWidth(0.3); doc.rect(LM, y, CW, 16);
-    doc.setFontSize(6.5); doc.setFont('helvetica','bold');
+    doc.setFontSize(7.5); doc.setFont('helvetica','bold');
     doc.text('TITLE: COMPOSITE WORK / COLD WORK / HOT WORK / ENTRY TO CONFINED', LM+2, y+4);
     doc.text('SPACE / VEHICLE ENTRY / EXCAVATION WORK AT MAINLINE / RCP / SV', LM+2, y+8);
     doc.line(LM+CW*0.72, y, LM+CW*0.72, y+16);
     doc.text('Doc. No.: ERPL/HS&E/25-26', LM+CW*0.73, y+4);
-    doc.setFont('helvetica','normal'); doc.setFontSize(6);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7);
     doc.line(LM, y+10, LM+CW*0.72, y+10);
     doc.text('Issue No.: 01 | Issue Date: 01.09.2025 | Rev No.: 00', LM+2, y+14);
     doc.text('Revision date: --', LM+CW*0.73, y+14);
@@ -2917,19 +3102,19 @@ async function exportPermitPDF(id) {
   bg(); y=10; pageHeader();
   // Permit Type Banner
   doc.setFillColor(27,40,86); doc.rect(LM, y, CW, 8, 'F');
-  doc.setTextColor(255); doc.setFontSize(11); doc.setFont('helvetica','bold');
+  doc.setTextColor(255); doc.setFontSize(13); doc.setFont('helvetica','bold');
   doc.text(p.PermitType.toUpperCase()+' PERMIT', W/2, y+6, {align:'center'});
   doc.setTextColor(0); y+=12;
 
-  doc.setFontSize(8); doc.setFont('helvetica','bold');
+  doc.setFontSize(10); doc.setFont('helvetica','bold');
   doc.text('Permit ID: '+p.PermitID, LM, y); doc.text('Sl. No: '+p.PermitID.split('-').pop(), RM, y, {align:'right'}); y+=5;
-  doc.text('Status: '+p.Status, LM, y); y+=5;
+  doc.text('Status: '+p.Status, LM, y); y+=6;
 
   const df=cleanDate(p.DateFrom),tf=cleanTime(p.TimeFrom),dt=cleanDate(p.DateTo),tt=cleanTime(p.TimeTo);
   const addRow = (lbl,val) => {
-    chk(8); doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.text(lbl, LM, y);
-    doc.setFont('helvetica','normal'); doc.setFontSize(7);
-    const ln=doc.splitTextToSize(String(val||'-'),W-85); doc.text(ln,72,y); y+=Math.max(ln.length*3.5,5);
+    chk(10); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text(lbl, LM, y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+    const ln=doc.splitTextToSize(String(val||'-'),W-85); doc.text(ln,75,y); y+=Math.max(ln.length*4,6);
   };
 
   addRow('Work clearance from:', df+' '+tf+' hrs  To  '+dt+' '+tt+' hrs');
@@ -2943,7 +3128,7 @@ async function exportPermitPDF(id) {
   addRow('Emergency Contact:', p.EmergencyContact);
   addRow('Nearest Fire Station and Hospital:', p.FireStation||'-');
   y+=2;
-  doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
   doc.text('THE FOLLOWING ITEMS SHALL BE CHECKED BEFORE ISSUING THE PERMIT:', LM, y); y+=6;
 
   // CHECKLIST PAGES (bilingual)
@@ -2954,27 +3139,27 @@ async function exportPermitPDF(id) {
     chk(14);
     doc.setFillColor(27,40,86); doc.setTextColor(255);
     doc.rect(LM, y, CW, 6, 'F');
-    doc.setFontSize(6.5); doc.setFont('helvetica','bold');
+    doc.setFontSize(8); doc.setFont('helvetica','bold');
     doc.text(section.title, LM+2, y+4.5);
     doc.setTextColor(0); y+=8;
     // Table header
     doc.setDrawColor(0); doc.setLineWidth(0.2); doc.setFillColor(230,230,235);
     doc.rect(LM, y, 10, 6, 'FD'); doc.rect(LM+10, y, CW-50, 6, 'FD'); doc.rect(RM-40, y, 20, 6, 'FD'); doc.rect(RM-20, y, 20, 6, 'FD');
-    doc.setFontSize(5.5); doc.setFont('helvetica','bold');
+    doc.setFontSize(7); doc.setFont('helvetica','bold');
     doc.text('Sl.No.', LM+2, y+4); doc.text('Item', LM+12, y+4); doc.text('Done', RM-35, y+4); doc.text('Not Reqd.', RM-18, y+4);
     y+=7;
 
     section.items.forEach(([code, text]) => {
       const val = checklist[code] || '';
       const lines = doc.splitTextToSize(text, CW-52);
-      const rh = Math.max(lines.length*3, 5);
+      const rh = Math.max(lines.length*3.5, 6);
       chk(rh+2);
       doc.setDrawColor(160); doc.setLineWidth(0.1);
       doc.rect(LM, y-1, 10, rh+2); doc.rect(LM+10, y-1, CW-50, rh+2); doc.rect(RM-40, y-1, 20, rh+2); doc.rect(RM-20, y-1, 20, rh+2);
-      doc.setFont('helvetica','bold'); doc.setFontSize(5.5);
-      doc.text(code.replace('R',''), LM+2, y+2);
-      doc.setFont('helvetica','normal'); doc.setFontSize(5.5);
-      doc.text(lines, LM+12, y+2);
+      doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+      doc.text(code.replace('R',''), LM+2, y+2.5);
+      doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+      doc.text(lines, LM+12, y+2.5);
       if (val === 'Done') { drawTick(doc, RM-34, y+1, 3.5); }
       if (val === 'N/A') { drawTick(doc, RM-14, y+1, 3.5); }
       y += rh+2;
@@ -2991,16 +3176,16 @@ async function exportPermitPDF(id) {
 
   // REMARKS (bilingual)
   chk(45); y+=3;
-  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('Remarks:', LM, y); y+=5;
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('Remarks:', LM, y); y+=5;
   doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
   let hazards = []; try { hazards = JSON.parse(p.Hazards||'[]'); } catch(e){}
   doc.setFont('helvetica','bold'); doc.text('1. Residual Hazards:', LM, y); doc.setFont('helvetica','normal');
   doc.text(hazards.length?hazards.join(' / '):'NIL', LM+55, y); y+=5;
 
   let ppeList = []; try { ppeList = JSON.parse(p.PPE||'[]'); } catch(e){}
-  doc.setFont('helvetica','bold'); doc.text('2. Additional PPE (beyond Helmet, Safety Shoes, Gloves, Boiler Suit):', LM, y); y+=4;
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('2. Additional PPE (beyond Helmet, Safety Shoes, Gloves, Boiler Suit):', LM, y); y+=4;
   doc.setFont('helvetica','normal'); doc.text(ppeList.length?ppeList.join(' / '):'Standard PPE only', LM+3, y); y+=5;
-  doc.setFont('helvetica','bold'); doc.text('3. Additional Precautions:', LM, y); doc.setFont('helvetica','normal');
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('3. Additional Precautions:', LM, y); doc.setFont('helvetica','normal');
   doc.text(p.Precautions||'NIL', LM+50, y); y+=5;
   doc.setFont('helvetica','bold'); doc.text('Gas Test Values:', LM, y); doc.setFont('helvetica','normal');
   doc.text('HCs = '+(p.GasHC||'___')+'% LEL    Toxic Gas = '+(p.GasToxic||'___')+' PPM    O2 = '+(p.GasO2||'___')+'%', LM+38, y); y+=7;
@@ -3011,24 +3196,24 @@ async function exportPermitPDF(id) {
   doc.setDrawColor(0); doc.setLineWidth(0.2);
   // Issuer box
   doc.rect(LM,y,hw-2,28);
-  doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
   doc.text('Issuer Name & Designation',LM+2,y+5);
-  doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
   doc.text(p.IssuerName||'________________',LM+2,y+13);
   doc.text(p.IssuerDesignation||'________________',LM+2,y+17);
   if(p.IssuedAt&&p.IssuedAt!=='-'&&p.IssuedAt!=='undefined'){
-    doc.setFontSize(6); doc.setFont('helvetica','bold'); doc.setTextColor(0,100,0);
+    doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(0,100,0);
     doc.text('Approved: '+cleanDate(p.IssuedAt)+' '+cleanTime(p.IssuedAt),LM+2,y+21);
     doc.setTextColor(0);
   }
   doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
-  doc.text('Signature: ________________',LM+2,y+25);
+  doc.text('Signature: ________________',LM+2,y+27);
 
   // Receiver box
   doc.rect(LM+hw,y,hw,28);
-  doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
   doc.text('Receiver Name & Designation',LM+hw+2,y+5);
-  doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
   doc.text(p.ReceiverName||'________________',LM+hw+2,y+13);
   doc.text(p.ReceiverDesignation||'________________',LM+hw+2,y+17);
   if(p.CreatedAt&&p.CreatedAt!=='-'){
@@ -3037,16 +3222,16 @@ async function exportPermitPDF(id) {
     doc.setTextColor(0);
   }
   doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
-  doc.text('Signature: ________________',LM+hw+2,y+25);
+  doc.text('Signature: ________________',LM+hw+2,y+27);
   y+=32;
 
   // CLEARANCE RENEWAL TABLE
   chk(35);
-  doc.setFont('helvetica','bold'); doc.setFontSize(8);
+  doc.setFont('helvetica','bold'); doc.setFontSize(10);
   doc.text('Clearance Renewal',LM,y); y+=5;
   const cols=[22,14,14,28,30,35,35];
   const hdrs=['Date','Time\nFrom','Time\nTo','Gas Test\nHCs, Toxic, O2','Addl.\nPrecautions','Issuer Name,\nDesign. & Sign.','Receiver Name,\nDesign. & Sign.'];
-  let cx=LM; doc.setFontSize(4.5); doc.setFont('helvetica','bold'); doc.setDrawColor(0); doc.setLineWidth(0.2);
+  let cx=LM; doc.setFontSize(6); doc.setFont('helvetica','bold'); doc.setDrawColor(0); doc.setLineWidth(0.2);
   hdrs.forEach((h,i)=>{doc.rect(cx,y,cols[i],12);h.split('\n').forEach((ln,li)=>doc.text(ln,cx+1,y+3+li*2.5));cx+=cols[i];});
   y+=12;
   // Only show actual renewal records - no blank rows when empty
@@ -3057,7 +3242,7 @@ async function exportPermitPDF(id) {
       cx=LM;
       cols.forEach(function(c,ci) {
         doc.rect(cx,y,c,8);
-        doc.setFont('helvetica','normal'); doc.setFontSize(4.5);
+        doc.setFont('helvetica','normal'); doc.setFontSize(6);
         if(ci===0) doc.text(rnw.DateFrom||'',cx+1,y+5);
         if(ci===1) doc.text(rnw.TimeFrom||'',cx+1,y+5);
         if(ci===2) doc.text(rnw.TimeTo||'',cx+1,y+5);
@@ -3075,20 +3260,20 @@ async function exportPermitPDF(id) {
   // CLOSING SECTION
   chk(45);
   doc.setDrawColor(0); doc.setLineWidth(0.5); doc.line(LM,y,RM,y); y+=5;
-  doc.setFont('helvetica','bold'); doc.setFontSize(8);
+  doc.setFont('helvetica','bold'); doc.setFontSize(10);
   doc.text('Closing of the Work Permit',LM,y); y+=6;
   doc.setDrawColor(0); doc.setLineWidth(0.2);
   // Receiver closing
   doc.rect(LM,y,hw-2,20);
-  doc.setFont('helvetica','bold'); doc.setFontSize(6.5);
+  doc.setFont('helvetica','bold'); doc.setFontSize(8);
   doc.text('Receiver:',LM+2,y+4);
-  doc.setFont('helvetica','normal'); doc.setFontSize(5.5);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
   doc.text(doc.splitTextToSize('Certified that the subject work has been completed/stopped and area cleared.',hw-8),LM+2,y+8);
   // Issuer closing
   doc.rect(LM+hw,y,hw,20);
-  doc.setFont('helvetica','bold'); doc.setFontSize(6.5);
+  doc.setFont('helvetica','bold'); doc.setFontSize(8);
   doc.text('Issuer:',LM+hw+2,y+4);
-  doc.setFont('helvetica','normal'); doc.setFontSize(5.5);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
   doc.text(doc.splitTextToSize('Verified that the job has been completed and area cleared and is safe from any hazard.',hw-6),LM+hw+2,y+8);
   y+=23;
 
@@ -3097,17 +3282,17 @@ async function exportPermitPDF(id) {
   ['Receiver','Issuer'].forEach((role,ri)=>{
     const bx=LM+ri*chw;
     doc.rect(bx,y,30,10);doc.rect(bx+30,y,chw-50,10);doc.rect(bx+chw-20,y,20,10);
-    doc.setFontSize(4.5);doc.setFont('helvetica','bold');
-    doc.text('Date & Time',bx+1,y+3);
-    doc.text('Name & Designation',bx+32,y+3);
-    doc.text('Signature',bx+chw-18,y+3);
+    doc.setFontSize(7);doc.setFont('helvetica','bold');
+    doc.text('Date & Time',bx+1,y+4);
+    doc.text('Name & Designation',bx+32,y+4);
+    doc.text('Signature',bx+chw-18,y+4);
   });
   y+=10;
   ['Receiver','Issuer'].forEach((role,ri)=>{
     const bx=LM+ri*chw;
     doc.rect(bx,y,30,8);doc.rect(bx+30,y,chw-50,8);doc.rect(bx+chw-20,y,20,8);
     if(p.ClosedAt&&p.ClosedAt!=='-'&&p.ClosedAt!=='undefined'){
-      doc.setFontSize(5);doc.setFont('helvetica','normal');
+      doc.setFontSize(7);doc.setFont('helvetica','normal');
       doc.text(cleanDate(p.ClosedAt),bx+2,y+4);
       doc.text(cleanTime(p.ClosedAt),bx+2,y+7);
     }
@@ -3116,20 +3301,21 @@ async function exportPermitPDF(id) {
 
   // GENERAL INSTRUCTIONS PAGE (bilingual)
   newPage();
-  doc.setFont('helvetica','bold'); doc.setFontSize(9);
-  doc.text('General Instructions:',LM,y); y+=6;
-  doc.setFont('helvetica','normal'); doc.setFontSize(6);
+  doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('General Instructions:',LM,y); y+=7;
   GENERAL_INSTRUCTIONS_PDF.forEach((inst,i)=>{
     chk(12);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
     const lines=doc.splitTextToSize((i+1)+'. '+inst,CW-4);
-    doc.text(lines,LM+2,y); y+=lines.length*3+2;
+    doc.text(lines,LM+2,y); y+=lines.length*3.5+2;
   });
 
   // Page numbers on all pages
   const pages=doc.internal.getNumberOfPages();
   for(let pg=1;pg<=pages;pg++){
-    doc.setPage(pg);doc.setFontSize(5);doc.setTextColor(128);
-    doc.text('Page '+pg+' of '+pages+' | Generated from AttendX Work Permit System — IOCL ERPL | '+new Date().toLocaleString(),W/2,H-7,{align:'center'});
+    doc.setPage(pg);doc.setFontSize(6.5);doc.setTextColor(128);
+    var istNow = new Date(new Date().getTime()+(5*60+30)*60000);
+    doc.text('Page '+pg+' of '+pages+' | Generated from AttendX Work Permit System — IOCL ERPL | '+istNow.toISOString().replace('T',' ').slice(0,19)+' IST',W/2,H-7,{align:'center'});
     doc.setTextColor(0);
   }
   doc.save('WorkPermit_'+p.PermitID+'.pdf');
