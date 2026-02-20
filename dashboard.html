@@ -460,6 +460,9 @@
     <div class="nav-item" onclick="showPage('permits', this)">
     <span class="icon">📋</span> Work Permits
     </div>
+    <div class="nav-item" onclick="showPage('newpermit', this)">
+    <span class="icon">📝</span> New Work Permit
+    </div>
 
     <div class="nav-section">Management</div>
     <div class="nav-item" onclick="showPage('employees', this)">
@@ -814,6 +817,7 @@
           <option value="Issued">Issued / Active</option>
           <option value="ClosureRequested">Closure Requested</option>
           <option value="Closed">Closed</option>
+          <option value="Rejected">Rejected</option>
         </select>
         <button class="refresh-btn" onclick="filterPermits()">↻ Refresh</button>
       </div>
@@ -842,6 +846,14 @@
         <div id="wpDetailContent" style="padding:12px"></div>
       </div>
     </div>
+
+    <!-- New Work Permit (embedded) -->
+    <div class="page" id="page-newpermit">
+      <div class="panel" style="padding:0;overflow:hidden;border-radius:14px">
+        <iframe id="wpIframe" src="" style="width:100%;height:calc(100vh - 120px);border:none;border-radius:14px;background:#0a0e1a"></iframe>
+      </div>
+    </div>
+
     </div>
 
 
@@ -856,7 +868,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbzw3JL3gQwB7Zia3De_8e85GzWEtFOjdF1bZjbIJvsDpOx1Cd0vLiq8qJJegyjG4tyrXA/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbxoW8_SM1cyfEiPa7lfPQD-7dwqrT7frcVGuCynXzAMrEGEDDx1BZazeuxeBGjaskVHsw/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -1556,7 +1568,8 @@ function showPage(page, el) {
     equipstatus: 'Equipment Status',
     equipfault: 'Non-Working Equipment',
     nearmiss: 'Near Miss Reports',
-    permits: 'Work Permits'
+    permits: 'Work Permits',
+    newpermit: 'New Work Permit'
   };
   document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
   document.querySelector('.sidebar').classList.remove('open');
@@ -1568,6 +1581,11 @@ function showPage(page, el) {
   if (page === 'equipfault') filterFaultEquipment();
   if (page === 'nearmiss') filterNearMiss();
   if (page === 'permits') filterPermits();
+  if (page === 'newpermit') {
+    const iframe = document.getElementById('wpIframe');
+    const wpUrl = (window.location.href.split('?')[0].replace(/[^/]*$/, '') + 'workpermit.html') + '?api=' + encodeURIComponent(API_URL);
+    if (!iframe.src || !iframe.src.includes('workpermit')) iframe.src = wpUrl;
+  }
 }
 
 async function filterRecords() {
@@ -2285,10 +2303,11 @@ async function filterPermits() {
       tbody.innerHTML = currentPermits.map(p => {
         const isHot = p.PermitTypeKey==='hot'||p.PermitTypeKey==='comp';
         const typeBg = isHot?'background:rgba(220,38,38,.15);color:#dc2626':'background:rgba(255,209,102,.15);color:#ca8a04';
-        let statusClass = p.Status==='Pending'?'late':p.Status==='Issued'?'on-time':p.Status==='ClosureRequested'?'very-late':'completed';
+        let statusClass = p.Status==='Pending'?'late':p.Status==='Issued'?'on-time':p.Status==='ClosureRequested'?'very-late':p.Status==='Rejected'?'very-late':'completed';
 
         let actions = `<button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="viewPermitDetail('${p.PermitID}')">👁 View</button>`;
         if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.15);color:var(--accent)" onclick="startOTPApproval('${p.PermitID}')">🔐 Approve</button>`;
+        if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(211,47,47,.12);color:#d32f2f" onclick="startRejectPermit('${p.PermitID}')">❌ Reject</button>`;
         if (p.Status === 'Issued') {
           actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(232,115,14,.12);color:#e8730e" onclick="startRenewal('${p.PermitID}')">🔄 Renew</button>`;
           actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(255,209,102,.15);color:var(--warn)" onclick="startClosureOTP('${p.PermitID}')">🔒 Close</button>`;
@@ -2537,6 +2556,63 @@ async function verifyClosureOTPs(id) {
 }
 
 // ============================================================
+// REJECT PERMIT (Issuer only, OTP required)
+// ============================================================
+async function startRejectPermit(id) {
+  const p = currentPermits.find(x => x.PermitID === id);
+  if (!p) return;
+  if (!confirm('Reject permit ' + id + '?\n\nOTP will be sent to Issuer (' + (p.IssuerName||'Unknown') + ') for rejection confirmation.')) return;
+
+  const panel = document.getElementById('wpDetailPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('wpDetailTitle').textContent = 'Reject Permit — ' + id;
+  document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Sending rejection OTP to Issuer...</div>';
+  panel.scrollIntoView({ behavior:'smooth' });
+
+  try {
+    const url = API_URL + '?' + new URLSearchParams({ action:'generateRejectOTP', permitId:id }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+
+    if (d.success) {
+      var rh = '<div style="text-align:center;padding:20px">';
+      rh += '<div style="font-size:40px;margin-bottom:10px">&#x1F6AB;</div>';
+      rh += '<div style="font-size:14px;font-weight:600;color:#d32f2f;margin-bottom:8px">Rejection OTP Sent to Issuer!</div>';
+      rh += '<div style="font-size:12px;color:var(--text2);margin-bottom:16px">Sent to <b>' + d.maskedEmail + '</b> — valid for 30 minutes.</div>';
+      rh += '<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:600;color:var(--text2)">Reason for Rejection</label>';
+      rh += '<textarea id="rejectReason" rows="2" placeholder="Enter reason for rejecting this permit..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text);resize:vertical;font-family:inherit"></textarea></div>';
+      rh += '<div style="max-width:300px;margin:0 auto">';
+      rh += '<input type="text" id="rejectOtpInput" maxlength="6" placeholder="Enter 6-digit OTP" style="text-align:center;font-size:20px;letter-spacing:8px;font-family:monospace;padding:14px;background:var(--surface2);border:2px solid #d32f2f;border-radius:10px;color:var(--text);width:100%;margin-bottom:12px">';
+      rh += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(211,47,47,.12);color:#d32f2f;border:2px solid #d32f2f" onclick="verifyRejectOTP(\'' + id + '\')">Verify OTP &amp; Reject Permit</button>';
+      rh += '<div style="margin-top:10px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="startRejectPermit(\'' + id + '\')">Resend OTP</button></div></div>';
+      rh += '<div id="rejectError" style="margin-top:10px;color:#d32f2f;font-size:12px;display:none"></div></div>';
+      document.getElementById('wpDetailContent').innerHTML = rh;
+      setTimeout(function(){ var el=document.getElementById('rejectOtpInput'); if(el)el.focus(); }, 100);
+    } else {
+      document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px;color:#d32f2f">' + (d.error||'Failed to send OTP') + '</div>';
+    }
+  } catch(e) {
+    document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px;color:#d32f2f">Error: ' + e.message + '</div>';
+  }
+}
+
+async function verifyRejectOTP(id) {
+  const otp = document.getElementById('rejectOtpInput').value.trim();
+  if (!otp || otp.length !== 6) { var e=document.getElementById('rejectError'); e.style.display='block'; e.textContent='Enter a valid 6-digit OTP'; return; }
+  const reason = document.getElementById('rejectReason') ? document.getElementById('rejectReason').value.trim() : '';
+  try {
+    document.getElementById('rejectError').style.display='none';
+    const url = API_URL + '?' + new URLSearchParams({ action:'verifyRejectOTP', permitId:id, otp:otp, reason:reason }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+    if (d.success) {
+      document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div style="font-size:50px;margin-bottom:10px">&#x1F6AB;</div><div style="font-size:16px;font-weight:700;color:#d32f2f">Permit Rejected</div><div style="font-size:12px;color:var(--text2);margin-top:6px">' + d.message + '</div></div>';
+      setTimeout(function(){ filterPermits(); }, 1500);
+    } else { var e=document.getElementById('rejectError'); e.style.display='block'; e.textContent=d.error||'Verification failed'; }
+  } catch(e) { var el=document.getElementById('rejectError'); el.style.display='block'; el.textContent='Error: '+e.message; }
+}
+
+// ============================================================
 // CLEARANCE RENEWAL SYSTEM
 // ============================================================
 async function startRenewal(id) {
@@ -2547,8 +2623,9 @@ async function startRenewal(id) {
   const panel = document.getElementById('wpDetailPanel');
   panel.classList.remove('hidden');
   document.getElementById('wpDetailTitle').textContent = 'Clearance Renewal — ' + p.PermitID;
+  document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Loading employees...</div>';
+  panel.scrollIntoView({ behavior:'smooth' });
 
-  // Calculate default 8-hour window from now, within permit validity
   const now = new Date();
   const defFrom = now.toISOString().slice(0,10);
   const defFromTime = now.toTimeString().slice(0,5);
@@ -2557,74 +2634,60 @@ async function startRenewal(id) {
   const defToTime = endTime.toTimeString().slice(0,5);
   const maxDate = cleanDate(p.DateTo);
 
-  // Build employee dropdown options
-  let empOptions = '';
+  // Fetch employees using same pattern as OTP functions
+  var recvOpts = '<option value="">-- Select Receiver --</option>';
+  var issOpts = '<option value="">-- Select Issuer --</option>';
   try {
-    const resp = await fetch(API_URL+'?action=getEmployees');
-    const d = await resp.json();
-    if (d.employees && d.employees.length) {
-      d.employees.forEach(emp => {
-        const optVal = emp.Name + ' (' + emp.EmployeeID + ')';
-        empOptions += '<option value="'+optVal+'">'+emp.Name+' — '+emp.EmployeeID+'</option>';
+    const url = API_URL + '?' + new URLSearchParams({ action:'getEmployees' }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+    if (d.success && d.employees) {
+      d.employees.forEach(function(emp) {
+        const val = emp.Name + ' (' + emp.EmployeeID + ')';
+        const rSel = (val === p.ReceiverName) ? ' selected' : '';
+        const iSel = (val === p.IssuerName) ? ' selected' : '';
+        recvOpts += '<option value="' + val + '"' + rSel + '>' + val + '</option>';
+        issOpts += '<option value="' + val + '"' + iSel + '>' + val + '</option>';
       });
     }
   } catch(e) { console.error('Failed to load employees', e); }
-  // Pre-select helper
-  const mkSel = (opts, pre) => pre ? opts.replace('value="'+pre+'">', 'value="'+pre+'" selected>') : opts;
 
-  let html = `<div style="border:2px solid #e8730e;border-radius:12px;padding:16px;background:rgba(232,115,14,0.04)">
-    <div style="text-align:center;margin-bottom:12px">
-      <div style="font-size:14px;font-weight:700;color:#e8730e">🔄 Clearance Renewal</div>
-      <div style="font-size:12px;color:var(--text2);margin-top:4px">Permit: ${p.PermitID} | ${p.PermitType}</div>
-      <div style="font-size:11px;color:var(--text2)">Permit Validity: ${cleanDate(p.DateFrom)} ${cleanTime(p.TimeFrom)} to ${cleanDate(p.DateTo)} ${cleanTime(p.TimeTo)}</div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">Renewal From Date</label>
-        <input type="date" id="rnwDateFrom" value="${defFrom}" min="${cleanDate(p.DateFrom)}" max="${maxDate}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
-      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">Renewal From Time</label>
-        <input type="time" id="rnwTimeFrom" value="${defFromTime}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
-      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">Renewal To Date</label>
-        <input type="date" id="rnwDateTo" value="${defTo}" min="${cleanDate(p.DateFrom)}" max="${maxDate}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
-      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">Renewal To Time</label>
-        <input type="time" id="rnwTimeTo" value="${defToTime}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
-      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">HCs (% LEL)</label>
-        <input type="text" id="rnwGasHC" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
-      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">Toxic Gas (PPM)</label>
-        <input type="text" id="rnwGasToxic" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
-      <div><label style="font-size:11px;font-weight:600;color:var(--text2)">O2 (%)</label>
-        <input type="text" id="rnwGasO2" placeholder="20.8" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>
-    </div>
-    <div style="margin-bottom:12px">
-      <label style="font-size:11px;font-weight:600;color:var(--text2)">Additional Precautions (if any, otherwise "NIL")</label>
-      <input type="text" id="rnwPrecautions" value="NIL" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)">
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      <div>
-        <label style="font-size:11px;font-weight:600;color:var(--text2)">Receiver Name (Clearance Initiator)</label>
-        <select id="rnwReceiver" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)">
-          <option value="">-- Select Receiver --</option>
-          \${mkSel(empOptions, p.ReceiverName)}
-        </select>
-      </div>
-      <div>
-        <label style="font-size:11px;font-weight:600;color:var(--text2)">Issuer Name (OTP will be sent for approval)</label>
-        <select id="rnwIssuer" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)">
-          <option value="">-- Select Issuer --</option>
-          \${mkSel(empOptions, p.IssuerName)}
-        </select>
-      </div>
-    </div>
-    <div style="font-size:11px;color:var(--text2);margin-bottom:10px;padding:8px;background:rgba(232,115,14,0.06);border-radius:6px;border:1px solid rgba(232,115,14,0.15)">
-      ⚠️ Clearance is for 8 hours maximum and must be within permit validity period. OTP verification from the selected issuer is required.
-    </div>
-    <div id="rnwError" style="display:none;padding:8px;border-radius:6px;background:rgba(211,47,47,.1);color:#d32f2f;font-size:12px;margin-bottom:10px"></div>
-    <div id="rnwOtpSection" style="display:none"></div>
-    <button class="refresh-btn" id="rnwSendOTPBtn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(232,115,14,.12);color:#e8730e;border:2px solid #e8730e" onclick="sendRenewalOTP('${id}')">📧 Send OTP to Issuer & Initiate Renewal</button>
-  </div>`;
-  document.getElementById('wpDetailContent').innerHTML = html;
-  panel.scrollIntoView({ behavior:'smooth' });
+  var h = '<div style="border:2px solid #e8730e;border-radius:12px;padding:16px;background:rgba(232,115,14,0.04)">';
+  h += '<div style="text-align:center;margin-bottom:12px">';
+  h += '<div style="font-size:14px;font-weight:700;color:#e8730e">&#x1f504; Clearance Renewal</div>';
+  h += '<div style="font-size:12px;color:var(--text2);margin-top:4px">Permit: ' + p.PermitID + ' | ' + p.PermitType + '</div>';
+  h += '<div style="font-size:11px;color:var(--text2)">Validity: ' + cleanDate(p.DateFrom) + ' ' + cleanTime(p.TimeFrom) + ' to ' + cleanDate(p.DateTo) + ' ' + cleanTime(p.TimeTo) + '</div></div>';
+
+  // Receiver & Issuer dropdowns FIRST
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+  h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">Receiver Name (Initiator)</label>';
+  h += '<select id="rnwReceiver" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)">' + recvOpts + '</select></div>';
+  h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">Issuer (OTP sent for approval)</label>';
+  h += '<select id="rnwIssuer" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)">' + issOpts + '</select></div></div>';
+
+  // Date/Time fields
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+  h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">From Date</label><input type="date" id="rnwDateFrom" value="' + defFrom + '" min="' + cleanDate(p.DateFrom) + '" max="' + maxDate + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
+  h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">From Time</label><input type="time" id="rnwTimeFrom" value="' + defFromTime + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
+  h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">To Date</label><input type="date" id="rnwDateTo" value="' + defTo + '" min="' + cleanDate(p.DateFrom) + '" max="' + maxDate + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
+  h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">To Time</label><input type="time" id="rnwTimeTo" value="' + defToTime + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div></div>';
+
+  // Gas test
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">';
+  h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">HCs (% LEL)</label><input type="text" id="rnwGasHC" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
+  h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">Toxic Gas (PPM)</label><input type="text" id="rnwGasToxic" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
+  h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">O2 (%)</label><input type="text" id="rnwGasO2" placeholder="20.8" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div></div>';
+
+  // Precautions
+  h += '<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:600;color:var(--text2)">Additional Precautions</label>';
+  h += '<input type="text" id="rnwPrecautions" value="NIL" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
+
+  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:10px;padding:8px;background:rgba(232,115,14,0.06);border-radius:6px;border:1px solid rgba(232,115,14,0.15)">&#9888;&#65039; Clearance max 8 hours, must be within permit validity. OTP required from issuer.</div>';
+  h += '<div id="rnwError" style="display:none;padding:8px;border-radius:6px;background:rgba(211,47,47,.1);color:#d32f2f;font-size:12px;margin-bottom:10px"></div>';
+  h += '<div id="rnwOtpSection" style="display:none"></div>';
+  h += '<button class="refresh-btn" id="rnwSendOTPBtn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(232,115,14,.12);color:#e8730e;border:2px solid #e8730e" onclick="sendRenewalOTP(\'' + id + '\')">Send OTP to Issuer &amp; Initiate Renewal</button>';
+  h += '</div>';
+  document.getElementById('wpDetailContent').innerHTML = h;
 }
 
 async function sendRenewalOTP(id) {
@@ -2651,13 +2714,12 @@ async function sendRenewalOTP(id) {
   document.getElementById('rnwSendOTPBtn').textContent = '⏳ Sending OTP...';
 
   try {
-    const resp = await fetch(API_URL+'?action=generateRenewalOTP&permitId='+encodeURIComponent(id)+
-      '&issuerName='+encodeURIComponent(issuer)+
-      '&renewDateFrom='+encodeURIComponent(dateFrom)+
-      '&renewTimeFrom='+encodeURIComponent(timeFrom)+
-      '&renewDateTo='+encodeURIComponent(dateTo)+
-      '&renewTimeTo='+encodeURIComponent(timeTo));
-    const d = await resp.json();
+    const url = API_URL + '?' + new URLSearchParams({
+      action:'generateRenewalOTP', permitId:id, issuerName:issuer,
+      renewDateFrom:dateFrom, renewTimeFrom:timeFrom, renewDateTo:dateTo, renewTimeTo:timeTo
+    }).toString();
+    const resp = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await resp.text());
     if (d.success) {
       document.getElementById('rnwOtpSection').style.display='block';
       document.getElementById('rnwOtpSection').innerHTML = `
@@ -2987,27 +3049,26 @@ async function exportPermitPDF(id) {
   let cx=LM; doc.setFontSize(4.5); doc.setFont('helvetica','bold'); doc.setDrawColor(0); doc.setLineWidth(0.2);
   hdrs.forEach((h,i)=>{doc.rect(cx,y,cols[i],12);h.split('\n').forEach((ln,li)=>doc.text(ln,cx+1,y+3+li*2.5));cx+=cols[i];});
   y+=12;
-  // Fill with renewal data if available, otherwise blank rows
+  // Only show actual renewal records - no blank rows when empty
   let renewals = [];
-  try { if(p.Renewals) renewals = typeof p.Renewals==='string'?JSON.parse(p.Renewals):p.Renewals; } catch(e){}
-  const maxRows = Math.max(renewals.length, 3);
-  for(let r=0;r<maxRows;r++){
-    cx=LM;
-    cols.forEach((c,ci)=>{
-      doc.rect(cx,y,c,8);
-      if(r<renewals.length){
-        const rnw=renewals[r]; doc.setFont('helvetica','normal'); doc.setFontSize(4.5);
+  try { if(p.Renewals) renewals = Array.isArray(p.Renewals)?p.Renewals:(typeof p.Renewals==='string'?JSON.parse(p.Renewals):[]); } catch(e){}
+  if(renewals.length > 0) {
+    renewals.forEach(function(rnw) {
+      cx=LM;
+      cols.forEach(function(c,ci) {
+        doc.rect(cx,y,c,8);
+        doc.setFont('helvetica','normal'); doc.setFontSize(4.5);
         if(ci===0) doc.text(rnw.DateFrom||'',cx+1,y+5);
         if(ci===1) doc.text(rnw.TimeFrom||'',cx+1,y+5);
         if(ci===2) doc.text(rnw.TimeTo||'',cx+1,y+5);
         if(ci===3) doc.text('HC:'+(rnw.GasHC||'0')+'% Tx:'+(rnw.GasToxic||'0')+' O2:'+(rnw.GasO2||'20.8')+'%',cx+1,y+5);
-        if(ci===4) doc.text((rnw.Precautions||'NIL').substring(0,20),cx+1,y+5);
+        if(ci===4) doc.text(doc.splitTextToSize(rnw.Precautions||'NIL',c-2),cx+1,y+4);
         if(ci===5) doc.text((rnw.IssuerName||'').substring(0,22),cx+1,y+5);
         if(ci===6) doc.text((rnw.ReceiverName||'').substring(0,22),cx+1,y+5);
-      }
-      cx+=c;
+        cx+=c;
+      });
+      y+=8;
     });
-    y+=8;
   }
   y+=5;
 
