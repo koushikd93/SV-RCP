@@ -216,12 +216,12 @@
   }
 
   .refresh-btn {
-    background: rgba(242,103,34,0.15); border: 1px solid rgba(242,103,34,0.3);
+    background: rgba(242,103,34,0.55); border: 1px solid rgba(242,103,34,0.7);
     color: #FFF; padding: 7px 14px; border-radius: 8px;
     cursor: pointer; font-family: 'Poppins', sans-serif;
     font-size: 12px; font-weight: 500; transition: all 0.2s;
   }
-  .refresh-btn:hover { background: var(--accent); color: #FFF; }
+  .refresh-btn:hover { background: #F26722; color: #FFF; border-color: #F26722; box-shadow: 0 2px 8px rgba(242,103,34,0.4); transform: translateY(-1px); }
 
   /* Content padding after topbar */
   .page { padding: 28px 32px 32px; }
@@ -452,6 +452,9 @@
     </div>
     <div class="nav-item" onclick="showPage('equipfault', this)">
       <span class="icon">🔴</span> Non-Working Equipment
+    </div>
+    <div class="nav-item" onclick="showPage('energycalc', this)">
+      <span class="icon">⚡</span> Energy Consumption
     </div>
     <div class="nav-section">Safety</div>
     <div class="nav-item" onclick="showPage('nearmiss', this)">
@@ -803,6 +806,38 @@
       </div>
     </div>
 
+    <!-- ===== ENERGY CONSUMPTION PAGE ===== -->
+    <div class="page" id="page-energycalc">
+      <div class="filter-bar">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:12px;color:var(--text2);white-space:nowrap">From:</label>
+          <input type="date" id="energyDateFrom" style="flex:1">
+          <label style="font-size:12px;color:var(--text2);white-space:nowrap">To:</label>
+          <input type="date" id="energyDateTo" style="flex:1">
+        </div>
+        <select id="energyFilterLocation" onchange="calcEnergyConsumption()"><option value="">All Locations</option></select>
+        <button class="refresh-btn" onclick="calcEnergyConsumption()">⚡ Calculate</button>
+        <button class="refresh-btn" onclick="exportEnergyCSV()">↓ Export CSV</button>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">⚡ Energy Consumption Report</div>
+          <span class="panel-badge" style="background:rgba(139,92,246,.15);color:var(--purple)" id="energyBadge">Select dates to calculate</span>
+        </div>
+        <div id="energySummaryCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px"></div>
+        <div class="table-scroll" style="max-height:500px">
+          <table class="att-table">
+            <thead><tr>
+              <th>Location</th><th>Meter No.</th>
+              <th>From Date Reading</th><th>To Date Reading</th>
+              <th>Consumption (kWh)</th><th>Remarks</th>
+            </tr></thead>
+            <tbody id="energyTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ===== WORK PERMITS PAGE ===== -->
     <div class="page" id="page-permits">
       <div class="filter-bar">
@@ -826,7 +861,7 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">📋 Work Permits</div>
-          <span class="panel-badge" style="background:rgba(255,209,102,.15);color:var(--warn)" id="wpCount">0 permits</span>
+          <span class="panel-badge" style="background:rgba(255,209,102,.5);color:#fff" id="wpCount">0 permits</span>
         </div>
         <div class="table-scroll" style="max-height:600px">
           <table class="att-table">
@@ -870,7 +905,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbxoW8_SM1cyfEiPa7lfPQD-7dwqrT7frcVGuCynXzAMrEGEDDx1BZazeuxeBGjaskVHsw/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycby6X5LdnAMOdmXlnmEQVvqDdOXurpUVAF9xHvkJ0XKunVAXLR9ErTJw66rlL8mTm9urMQ/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -1737,6 +1772,7 @@ function showPage(page, el) {
     activevisitors: 'Active Visitors',
     equipstatus: 'Equipment Status',
     equipfault: 'Non-Working Equipment',
+    energycalc: 'Energy Consumption',
     nearmiss: 'Near Miss Reports',
     permits: 'Work Permits',
     newpermit: 'New Work Permit'
@@ -1749,6 +1785,7 @@ function showPage(page, el) {
   if (page === 'activevisitors' && typeof refreshActiveVisitors === 'function') refreshActiveVisitors();
   if (page === 'equipstatus') filterEquipmentStatus();
   if (page === 'equipfault') filterFaultEquipment();
+  if (page === 'energycalc') initEnergyPage();
   if (page === 'nearmiss') filterNearMiss();
   if (page === 'permits') filterPermits();
   if (page === 'newpermit') {
@@ -2499,14 +2536,15 @@ async function filterPermits() {
         let statusClass = p.Status==='Pending'?'late':p.Status==='Issued'?'on-time':p.Status==='ClosureRequested'?'very-late':p.Status==='Rejected'?'very-late':'completed';
 
         let actions = `<button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="viewPermitDetail('${p.PermitID}')">👁 View</button>`;
-        if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.15);color:var(--accent)" onclick="startOTPApproval('${p.PermitID}')">🔐 Approve</button>`;
-        if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(211,47,47,.12);color:#d32f2f" onclick="startRejectPermit('${p.PermitID}')">❌ Reject</button>`;
+        if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.5);color:#fff" onclick="startOTPApproval('${p.PermitID}')">🔐 Approve</button>`;
+        if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(211,47,47,.5);color:#fff" onclick="startRejectPermit('${p.PermitID}')">❌ Reject</button>`;
         if (p.Status === 'Issued') {
-          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(232,115,14,.12);color:#e8730e" onclick="startRenewal('${p.PermitID}')">🔄 Renew</button>`;
-          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(255,209,102,.15);color:var(--warn)" onclick="startClosureOTP('${p.PermitID}')">🔒 Close</button>`;
+          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(232,115,14,.5);color:#fff" onclick="startRenewal('${p.PermitID}')">🔄 Renew</button>`;
+          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(46,125,50,.5);color:#fff" onclick="checkPendingRenewals('${p.PermitID}')">✅ Approve Renewal</button>`;
+          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(255,209,102,.5);color:#fff" onclick="startClosureOTP('${p.PermitID}')">🔒 Close</button>`;
           actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="exportPermitPDF('${p.PermitID}')">📄 PDF</button>`;
         }
-        if (p.Status === 'ClosureRequested') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.15);color:var(--accent)" onclick="startClosureOTP('${p.PermitID}')">🔐 Verify Close</button>`;
+        if (p.Status === 'ClosureRequested') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.5);color:#fff" onclick="startClosureOTP('${p.PermitID}')">🔐 Verify Close</button>`;
         if (p.Status === 'Closed') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="exportPermitPDF('${p.PermitID}')">📄 PDF</button>`;
 
         return `<tr>
@@ -2638,7 +2676,7 @@ async function startOTPApproval(id) {
           <div style="font-size:12px;color:var(--text2);margin-bottom:16px">Sent to <b>${d.maskedEmail}</b> — valid for 30 minutes.</div>
           <div style="max-width:300px;margin:0 auto">
             <input type="text" id="otpInput" maxlength="6" placeholder="Enter 6-digit OTP" style="text-align:center;font-size:20px;letter-spacing:8px;font-family:monospace;padding:14px;background:var(--surface2);border:2px solid var(--border);border-radius:10px;color:var(--text);width:100%;margin-bottom:12px">
-            <button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(6,214,160,.15);color:var(--accent);border:2px solid var(--accent)" onclick="verifyApprovalOTP('${id}')">Verify OTP & Approve Permit</button>
+            <button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(6,214,160,.5);color:#fff;border:2px solid var(--accent)" onclick="verifyApprovalOTP('${id}')">Verify OTP & Approve Permit</button>
             <div style="margin-top:10px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="startOTPApproval('${id}')">Resend OTP</button></div>
           </div>
           <div id="otpError" style="margin-top:10px;color:var(--danger);font-size:12px;display:none"></div>
@@ -2707,7 +2745,7 @@ async function startClosureOTP(id) {
             </div>
           </div>
           <div style="text-align:center;margin-top:14px">
-            <button class="refresh-btn" style="padding:12px 30px;font-size:14px;font-weight:700;background:rgba(220,38,38,.15);color:#dc2626;border:2px solid #dc2626" onclick="verifyClosureOTPs('${id}')">Verify Both OTPs & Close Permit</button>
+            <button class="refresh-btn" style="padding:12px 30px;font-size:14px;font-weight:700;background:rgba(220,38,38,.5);color:#fff;border:2px solid #dc2626" onclick="verifyClosureOTPs('${id}')">Verify Both OTPs & Close Permit</button>
             <div style="margin-top:8px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="startClosureOTP('${id}')">Resend OTPs</button></div>
           </div>
           <div id="closureError" style="text-align:center;margin-top:10px;color:var(--danger);font-size:12px;display:none"></div>
@@ -2776,7 +2814,7 @@ async function startRejectPermit(id) {
       rh += '<textarea id="rejectReason" rows="2" placeholder="Enter reason for rejecting this permit..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text);resize:vertical;font-family:inherit"></textarea></div>';
       rh += '<div style="max-width:300px;margin:0 auto">';
       rh += '<input type="text" id="rejectOtpInput" maxlength="6" placeholder="Enter 6-digit OTP" style="text-align:center;font-size:20px;letter-spacing:8px;font-family:monospace;padding:14px;background:var(--surface2);border:2px solid #d32f2f;border-radius:10px;color:var(--text);width:100%;margin-bottom:12px">';
-      rh += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(211,47,47,.12);color:#d32f2f;border:2px solid #d32f2f" onclick="verifyRejectOTP(\'' + id + '\')">Verify OTP &amp; Reject Permit</button>';
+      rh += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(211,47,47,.5);color:#fff;border:2px solid #d32f2f" onclick="verifyRejectOTP(\'' + id + '\')">Verify OTP &amp; Reject Permit</button>';
       rh += '<div style="margin-top:10px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="startRejectPermit(\'' + id + '\')">Resend OTP</button></div></div>';
       rh += '<div id="rejectError" style="margin-top:10px;color:#d32f2f;font-size:12px;display:none"></div></div>';
       document.getElementById('wpDetailContent').innerHTML = rh;
@@ -2806,8 +2844,43 @@ async function verifyRejectOTP(id) {
 }
 
 // ============================================================
-// CLEARANCE RENEWAL SYSTEM
+// CLEARANCE RENEWAL SYSTEM (2-Step: Receiver OTP → Issuer Approval OTP)
 // ============================================================
+
+// Check for pending renewals awaiting issuer approval
+async function checkPendingRenewals(id) {
+  const panel = document.getElementById('wpDetailPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('wpDetailTitle').textContent = 'Pending Renewals — ' + id;
+  document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Checking for pending renewals...</div>';
+  panel.scrollIntoView({ behavior:'smooth' });
+  try {
+    const url = API_URL + '?' + new URLSearchParams({ action:'getClearanceRenewals', permitId:id }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+    var pending = (d.renewals||[]).filter(function(rn) { return rn.Status === 'PendingIssuerApproval'; });
+    if (!pending.length) {
+      document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div style="font-size:40px;margin-bottom:10px">&#x2705;</div><div style="font-size:14px;font-weight:600;color:var(--text)">No pending renewals for this permit.</div><div style="font-size:12px;color:var(--text2);margin-top:6px">All renewals are already approved or none have been initiated.</div></div>';
+      return;
+    }
+    var ph = '<div style="padding:16px">';
+    ph += '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px">Pending Renewals Awaiting Your Approval</div>';
+    pending.forEach(function(rn) {
+      ph += '<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--surface2)">';
+      ph += '<div style="display:flex;justify-content:space-between;align-items:center">';
+      ph += '<div><div style="font-weight:600;color:var(--text)">' + rn.RenewalID + '</div>';
+      ph += '<div style="font-size:11px;color:var(--text2)">Period: ' + (rn.DateFrom||'-') + ' ' + (rn.TimeFrom||'') + ' to ' + (rn.DateTo||'-') + ' ' + (rn.TimeTo||'') + '</div>';
+      ph += '<div style="font-size:11px;color:var(--text2)">Receiver: ' + (rn.ReceiverName||'-') + ' | Gas: HC=' + (rn.GasHC||'0') + '% Tx=' + (rn.GasToxic||'0') + ' O2=' + (rn.GasO2||'20.8') + '%</div></div>';
+      ph += '<button class="refresh-btn" style="padding:8px 16px;background:rgba(46,125,50,.5);color:#fff;border:1px solid #2e7d32" onclick="approveRenewal(\'' + id + '\',\'' + rn.RenewalID + '\')">🔐 Approve</button>';
+      ph += '</div></div>';
+    });
+    ph += '</div>';
+    document.getElementById('wpDetailContent').innerHTML = ph;
+  } catch(e) {
+    document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px;color:#d32f2f">Error: ' + e.message + '</div>';
+  }
+}
+
 async function startRenewal(id) {
   const p = currentPermits.find(x => x.PermitID === id);
   if (!p) return alert('Permit not found');
@@ -2827,7 +2900,6 @@ async function startRenewal(id) {
   const defToTime = endTime.toTimeString().slice(0,5);
   const maxDate = cleanDate(p.DateTo);
 
-  // Fetch employees using same pattern as OTP functions
   var recvOpts = '<option value="">-- Select Receiver --</option>';
   var issOpts = '<option value="">-- Select Issuer --</option>';
   try {
@@ -2847,43 +2919,37 @@ async function startRenewal(id) {
 
   var h = '<div style="border:2px solid #e8730e;border-radius:12px;padding:16px;background:rgba(232,115,14,0.04)">';
   h += '<div style="text-align:center;margin-bottom:12px">';
-  h += '<div style="font-size:14px;font-weight:700;color:#e8730e">&#x1f504; Clearance Renewal</div>';
+  h += '<div style="font-size:14px;font-weight:700;color:#e8730e">&#x1f504; Clearance Renewal (2-Step Approval)</div>';
   h += '<div style="font-size:12px;color:var(--text2);margin-top:4px">Permit: ' + p.PermitID + ' | ' + p.PermitType + '</div>';
   h += '<div style="font-size:11px;color:var(--text2)">Validity: ' + cleanDate(p.DateFrom) + ' ' + cleanTime(p.TimeFrom) + ' to ' + cleanDate(p.DateTo) + ' ' + cleanTime(p.TimeTo) + '</div></div>';
-
-  // Receiver & Issuer dropdowns FIRST
+  h += '<div style="padding:8px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);border-radius:8px;margin-bottom:12px;font-size:11px;color:var(--text2)">';
+  h += '<b>Step 1:</b> Receiver fills form &rarr; OTP sent to <b>Receiver</b> email<br>';
+  h += '<b>Step 2:</b> After Receiver verification, notification sent to Issuer &rarr; Issuer approves with OTP</div>';
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
   h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">Receiver Name (Initiator)</label>';
   h += '<select id="rnwReceiver" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)">' + recvOpts + '</select></div>';
-  h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">Issuer (OTP sent for approval)</label>';
+  h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">Issuer (Approver)</label>';
   h += '<select id="rnwIssuer" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)">' + issOpts + '</select></div></div>';
-
-  // Date/Time fields
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
   h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">From Date</label><input type="date" id="rnwDateFrom" value="' + defFrom + '" min="' + cleanDate(p.DateFrom) + '" max="' + maxDate + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
   h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">From Time</label><input type="time" id="rnwTimeFrom" value="' + defFromTime + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
   h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">To Date</label><input type="date" id="rnwDateTo" value="' + defTo + '" min="' + cleanDate(p.DateFrom) + '" max="' + maxDate + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
   h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">To Time</label><input type="time" id="rnwTimeTo" value="' + defToTime + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div></div>';
-
-  // Gas test
   h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">';
   h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">HCs (% LEL)</label><input type="text" id="rnwGasHC" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
   h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">Toxic Gas (PPM)</label><input type="text" id="rnwGasToxic" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
   h += '<div><label style="font-size:11px;font-weight:600;color:var(--text2)">O2 (%)</label><input type="text" id="rnwGasO2" placeholder="20.8" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div></div>';
-
-  // Precautions
   h += '<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:600;color:var(--text2)">Additional Precautions</label>';
   h += '<input type="text" id="rnwPrecautions" value="NIL" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
-
-  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:10px;padding:8px;background:rgba(232,115,14,0.06);border-radius:6px;border:1px solid rgba(232,115,14,0.15)">&#9888;&#65039; Clearance max 8 hours, must be within permit validity. OTP required from issuer.</div>';
   h += '<div id="rnwError" style="display:none;padding:8px;border-radius:6px;background:rgba(211,47,47,.1);color:#d32f2f;font-size:12px;margin-bottom:10px"></div>';
   h += '<div id="rnwOtpSection" style="display:none"></div>';
-  h += '<button class="refresh-btn" id="rnwSendOTPBtn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(232,115,14,.12);color:#e8730e;border:2px solid #e8730e" onclick="sendRenewalOTP(\'' + id + '\')">Send OTP to Issuer &amp; Initiate Renewal</button>';
+  h += '<button class="refresh-btn" id="rnwSendOTPBtn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(232,115,14,.5);color:#fff;border:2px solid #e8730e" onclick="sendReceiverOTP(\'' + id + '\')">Step 1: Send OTP to Receiver &amp; Start Renewal</button>';
   h += '</div>';
   document.getElementById('wpDetailContent').innerHTML = h;
 }
 
-async function sendRenewalOTP(id) {
+// Step 1: Send OTP to RECEIVER
+async function sendReceiverOTP(id) {
   const errEl = document.getElementById('rnwError');
   errEl.style.display='none';
   const receiver = document.getElementById('rnwReceiver').value;
@@ -2895,60 +2961,55 @@ async function sendRenewalOTP(id) {
   const timeFrom = document.getElementById('rnwTimeFrom').value;
   const dateTo = document.getElementById('rnwDateTo').value;
   const timeTo = document.getElementById('rnwTimeTo').value;
-
-  // Validate 8-hour max
   const from = new Date(dateFrom+'T'+timeFrom);
   const to = new Date(dateTo+'T'+timeTo);
   const diffHrs = (to - from) / (1000*60*60);
   if (diffHrs <= 0) { errEl.style.display='block'; errEl.textContent='To time must be after From time'; return; }
-  if (diffHrs > 8) { errEl.style.display='block'; errEl.textContent='Clearance renewal cannot exceed 8 hours. Current: '+diffHrs.toFixed(1)+' hrs'; return; }
+  if (diffHrs > 8) { errEl.style.display='block'; errEl.textContent='Clearance cannot exceed 8 hours. Current: '+diffHrs.toFixed(1)+' hrs'; return; }
 
   document.getElementById('rnwSendOTPBtn').disabled = true;
-  document.getElementById('rnwSendOTPBtn').textContent = '⏳ Sending OTP...';
-
+  document.getElementById('rnwSendOTPBtn').textContent = 'Sending OTP to Receiver...';
   try {
     const url = API_URL + '?' + new URLSearchParams({
-      action:'generateRenewalOTP', permitId:id, issuerName:issuer,
+      action:'generateReceiverRenewalOTP', permitId:id, receiverName:receiver, issuerName:issuer,
       renewDateFrom:dateFrom, renewTimeFrom:timeFrom, renewDateTo:dateTo, renewTimeTo:timeTo
     }).toString();
     const resp = await fetch(url, { redirect:'follow' });
     const d = JSON.parse(await resp.text());
     if (d.success) {
       document.getElementById('rnwOtpSection').style.display='block';
-      document.getElementById('rnwOtpSection').innerHTML = `
-        <div style="padding:12px;border-radius:8px;background:rgba(46,125,50,0.08);border:1px solid rgba(46,125,50,0.2);margin-bottom:12px">
-          <div style="font-size:12px;font-weight:600;color:#2e7d32">OTP sent to Issuer: ${d.maskedEmail}</div>
-          <div style="font-size:11px;color:var(--text2);margin-top:4px">Valid for 30 minutes. Enter OTP below to complete renewal.</div>
-        </div>
-        <div style="margin-bottom:10px">
-          <label style="font-size:11px;font-weight:600;color:var(--text2)">Enter Issuer OTP</label>
-          <input type="text" id="rnwOtpInput" maxlength="6" placeholder="6-digit OTP" style="width:100%;padding:10px;border:2px solid #e8730e;border-radius:6px;background:var(--surface);font-size:16px;font-family:monospace;text-align:center;color:var(--text);letter-spacing:6px">
-        </div>
-        <div id="rnwOtpError" style="display:none;padding:8px;border-radius:6px;background:rgba(211,47,47,.1);color:#d32f2f;font-size:12px;margin-bottom:10px"></div>
-        <button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(46,125,50,.12);color:#2e7d32;border:2px solid #2e7d32" onclick="verifyRenewalOTP('${id}')">✅ Verify OTP & Complete Renewal</button>
-        <div style="margin-top:8px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="sendRenewalOTP('${id}')">Resend OTP</button></div>`;
+      var oh = '<div style="padding:12px;border-radius:8px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);margin-bottom:12px">';
+      oh += '<div style="font-size:12px;font-weight:600;color:var(--purple)">Step 1: OTP sent to Receiver: ' + d.maskedEmail + '</div>';
+      oh += '<div style="font-size:11px;color:var(--text2);margin-top:4px">Valid for 30 minutes. Enter OTP below.</div></div>';
+      oh += '<div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;color:var(--text2)">Enter Receiver OTP</label>';
+      oh += '<input type="text" id="rnwOtpInput" maxlength="6" placeholder="6-digit OTP" style="width:100%;padding:10px;border:2px solid var(--purple);border-radius:6px;background:var(--surface);font-size:16px;font-family:monospace;text-align:center;color:var(--text);letter-spacing:6px"></div>';
+      oh += '<div id="rnwOtpError" style="display:none;padding:8px;border-radius:6px;background:rgba(211,47,47,.1);color:#d32f2f;font-size:12px;margin-bottom:10px"></div>';
+      oh += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(139,92,246,.5);color:#fff;border:2px solid var(--purple)" onclick="verifyReceiverOTP(\'' + id + '\')">Verify Receiver OTP &amp; Notify Issuer</button>';
+      oh += '<div style="margin-top:8px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="sendReceiverOTP(\'' + id + '\')">Resend OTP</button></div>';
+      document.getElementById('rnwOtpSection').innerHTML = oh;
       document.getElementById('rnwSendOTPBtn').style.display='none';
+      setTimeout(function(){ var el=document.getElementById('rnwOtpInput'); if(el) el.focus(); },100);
     } else {
-      errEl.style.display='block'; errEl.textContent=d.error||'Failed to send OTP';
-      document.getElementById('rnwSendOTPBtn').disabled = false;
-      document.getElementById('rnwSendOTPBtn').textContent = '📧 Send OTP to Issuer & Initiate Renewal';
+      errEl.style.display='block'; errEl.textContent=d.error||'Failed';
+      document.getElementById('rnwSendOTPBtn').disabled=false;
+      document.getElementById('rnwSendOTPBtn').textContent='Step 1: Send OTP to Receiver & Start Renewal';
     }
   } catch(e) {
     errEl.style.display='block'; errEl.textContent='Error: '+e.message;
-    document.getElementById('rnwSendOTPBtn').disabled = false;
-    document.getElementById('rnwSendOTPBtn').textContent = '📧 Send OTP to Issuer & Initiate Renewal';
+    document.getElementById('rnwSendOTPBtn').disabled=false;
+    document.getElementById('rnwSendOTPBtn').textContent='Step 1: Send OTP to Receiver & Start Renewal';
   }
 }
 
-async function verifyRenewalOTP(id) {
+// Step 1b: Verify RECEIVER OTP → creates PendingIssuerApproval record → emails Issuer
+async function verifyReceiverOTP(id) {
   const errEl = document.getElementById('rnwOtpError');
   errEl.style.display='none';
   const otp = document.getElementById('rnwOtpInput').value.trim();
-  if (!otp || otp.length !== 6) { errEl.style.display='block'; errEl.textContent='Please enter a valid 6-digit OTP'; return; }
-
+  if (!otp || otp.length !== 6) { errEl.style.display='block'; errEl.textContent='Enter a valid 6-digit OTP'; return; }
   try {
     const url = API_URL + '?' + new URLSearchParams({
-      action:'verifyRenewalOTP', permitId:id, otp:otp,
+      action:'verifyReceiverRenewalOTP', permitId:id, otp:otp,
       renewDateFrom: document.getElementById('rnwDateFrom').value,
       renewTimeFrom: document.getElementById('rnwTimeFrom').value,
       renewDateTo: document.getElementById('rnwDateTo').value,
@@ -2963,18 +3024,153 @@ async function verifyRenewalOTP(id) {
     const resp = await fetch(url, { redirect:'follow' });
     const d = JSON.parse(await resp.text());
     if (d.success) {
-      document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px">
-        <div style="font-size:50px;margin-bottom:10px">🔄✅</div>
-        <div style="font-size:16px;font-weight:700;color:#2e7d32">Clearance Renewed!</div>
-        <div style="font-size:12px;color:var(--text2);margin-top:6px">${d.message}</div>
-        <div style="font-size:11px;color:var(--text2);margin-top:4px">Renewal ID: ${d.renewalId||''}</div>
-      </div>`;
-      setTimeout(() => filterPermits(), 1500);
+      document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px">' +
+        '<div style="font-size:50px;margin-bottom:10px">&#x1f4e7;</div>' +
+        '<div style="font-size:16px;font-weight:700;color:var(--purple)">Step 1 Complete — Receiver Verified!</div>' +
+        '<div style="font-size:12px;color:var(--text2);margin-top:6px">Notification email sent to Issuer for approval.</div>' +
+        '<div style="font-size:11px;color:var(--text2);margin-top:4px">Renewal ID: ' + (d.renewalId||'') + '</div>' +
+        '<div style="margin-top:16px;padding:12px;background:rgba(232,115,14,.06);border:1px solid rgba(232,115,14,.2);border-radius:8px;font-size:12px;color:#e8730e">' +
+        '&#9888;&#65039; The Issuer must now approve this renewal from the dashboard using "Approve Renewal" option on this permit.</div></div>';
+      setTimeout(function(){ filterPermits(); },2000);
     } else {
       errEl.style.display='block'; errEl.textContent=d.error||'Verification failed';
     }
   } catch(e) { errEl.style.display='block'; errEl.textContent='Error: '+e.message; }
 }
+
+// Step 2: Issuer approves pending renewal
+async function approveRenewal(id, renewalId) {
+  const panel = document.getElementById('wpDetailPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('wpDetailTitle').textContent = 'Approve Renewal — ' + renewalId;
+  document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Sending approval OTP to Issuer...</div>';
+  panel.scrollIntoView({ behavior:'smooth' });
+
+  try {
+    const url = API_URL + '?' + new URLSearchParams({ action:'generateIssuerRenewalOTP', permitId:id, renewalId:renewalId }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+    if (d.success) {
+      var ah = '<div style="text-align:center;padding:20px">';
+      ah += '<div style="font-size:40px;margin-bottom:10px">&#x1f512;</div>';
+      ah += '<div style="font-size:14px;font-weight:600;color:#2e7d32;margin-bottom:8px">Step 2: Issuer Approval OTP Sent!</div>';
+      ah += '<div style="font-size:12px;color:var(--text2);margin-bottom:16px">Sent to <b>' + d.maskedEmail + '</b> — valid 30 minutes.</div>';
+      ah += '<div style="max-width:300px;margin:0 auto">';
+      ah += '<input type="text" id="issuerRnwOtpInput" maxlength="6" placeholder="Enter 6-digit OTP" style="text-align:center;font-size:20px;letter-spacing:8px;font-family:monospace;padding:14px;background:var(--surface2);border:2px solid #2e7d32;border-radius:10px;color:var(--text);width:100%;margin-bottom:12px">';
+      ah += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(46,125,50,.5);color:#fff;border:2px solid #2e7d32" onclick="verifyIssuerRenewalOTP(\'' + id + '\',\'' + renewalId + '\')">Verify OTP &amp; Complete Renewal</button>';
+      ah += '<div style="margin-top:10px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="approveRenewal(\'' + id + '\',\'' + renewalId + '\')">Resend OTP</button></div></div>';
+      ah += '<div id="issuerRnwError" style="margin-top:10px;color:#d32f2f;font-size:12px;display:none"></div></div>';
+      document.getElementById('wpDetailContent').innerHTML = ah;
+      setTimeout(function(){ var el=document.getElementById('issuerRnwOtpInput'); if(el) el.focus(); },100);
+    } else {
+      document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px;color:#d32f2f">' + (d.error||'Failed') + '</div>';
+    }
+  } catch(e) {
+    document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px;color:#d32f2f">Error: ' + e.message + '</div>';
+  }
+}
+
+// Step 2b: Verify Issuer OTP → complete renewal
+async function verifyIssuerRenewalOTP(id, renewalId) {
+  const otp = document.getElementById('issuerRnwOtpInput').value.trim();
+  if (!otp || otp.length !== 6) { var e=document.getElementById('issuerRnwError'); e.style.display='block'; e.textContent='Enter a valid 6-digit OTP'; return; }
+  try {
+    document.getElementById('issuerRnwError').style.display='none';
+    const url = API_URL + '?' + new URLSearchParams({ action:'verifyIssuerRenewalOTP', permitId:id, renewalId:renewalId, otp:otp }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+    if (d.success) {
+      document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div style="font-size:50px;margin-bottom:10px">&#x2705;</div><div style="font-size:16px;font-weight:700;color:#2e7d32">Clearance Renewal Approved!</div><div style="font-size:12px;color:var(--text2);margin-top:6px">' + d.message + '</div></div>';
+      setTimeout(function(){ filterPermits(); },1500);
+    } else { var e=document.getElementById('issuerRnwError'); e.style.display='block'; e.textContent=d.error||'Verification failed'; }
+  } catch(e) { var el=document.getElementById('issuerRnwError'); el.style.display='block'; el.textContent='Error: '+e.message; }
+}
+
+// ============================================================
+// ENERGY CONSUMPTION CALCULATOR
+// ============================================================
+let energyResults = [];
+function initEnergyPage() {
+  const now = new Date();
+  const lastWeek = new Date(now.getTime() - 7*24*60*60*1000);
+  if (!document.getElementById('energyDateFrom').value) {
+    document.getElementById('energyDateFrom').value = lastWeek.toISOString().slice(0,10);
+    document.getElementById('energyDateTo').value = now.toISOString().slice(0,10);
+  }
+  // Populate location filter
+  const sel = document.getElementById('energyFilterLocation');
+  if (sel.options.length <= 1 && allLocations && allLocations.length) {
+    allLocations.forEach(function(l) { sel.innerHTML += '<option value="' + l + '">' + l + '</option>'; });
+  }
+}
+
+async function calcEnergyConsumption() {
+  const dateFrom = document.getElementById('energyDateFrom').value;
+  const dateTo = document.getElementById('energyDateTo').value;
+  const loc = document.getElementById('energyFilterLocation').value;
+  if (!dateFrom || !dateTo) return alert('Please select both dates');
+  document.getElementById('energyBadge').textContent = 'Calculating...';
+  document.getElementById('energyTable').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px">Loading energy data...</td></tr>';
+  try {
+    const url = API_URL + '?' + new URLSearchParams({ action:'getEnergyConsumption', dateFrom:dateFrom, dateTo:dateTo, location:loc }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+    if (d.success) {
+      energyResults = d.results || [];
+      renderEnergyTable(energyResults, d.totalConsumption);
+    } else {
+      document.getElementById('energyTable').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#d32f2f">' + (d.error||'Error loading') + '</td></tr>';
+      document.getElementById('energyBadge').textContent = 'Error';
+    }
+  } catch(e) {
+    document.getElementById('energyTable').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#d32f2f">' + e.message + '</td></tr>';
+    document.getElementById('energyBadge').textContent = 'Error';
+  }
+}
+
+function renderEnergyTable(results, total) {
+  const tbody = document.getElementById('energyTable');
+  if (!results.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text3)">No energy meter data found for selected period</td></tr>';
+    document.getElementById('energyBadge').textContent = 'No data';
+    document.getElementById('energySummaryCards').innerHTML = '';
+    return;
+  }
+  var totalKWh = 0;
+  tbody.innerHTML = results.map(function(r) {
+    var consumption = r.consumption !== null && r.consumption !== undefined ? r.consumption : '-';
+    if (typeof consumption === 'number') totalKWh += consumption;
+    var consColor = consumption === '-' ? 'var(--text3)' : (consumption >= 0 ? 'var(--accent)' : 'var(--danger)');
+    return '<tr>' +
+      '<td>' + (r.location||'-') + '</td>' +
+      '<td>' + (r.meterNo||'-') + '</td>' +
+      '<td>' + (r.readingFrom !== null ? r.readingFrom + ' kWh' : '<span style="color:var(--text3)">No reading</span>') + '</td>' +
+      '<td>' + (r.readingTo !== null ? r.readingTo + ' kWh' : '<span style="color:var(--text3)">No reading</span>') + '</td>' +
+      '<td style="font-weight:600;color:' + consColor + '">' + (typeof consumption === 'number' ? consumption.toFixed(1) + ' kWh' : consumption) + '</td>' +
+      '<td>' + (r.remarks||'') + '</td></tr>';
+  }).join('');
+  document.getElementById('energyBadge').textContent = results.length + ' locations | Total: ' + totalKWh.toFixed(1) + ' kWh';
+  document.getElementById('energySummaryCards').innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">' +
+    '<div style="font-size:11px;color:var(--text2)">Total Consumption</div><div style="font-size:22px;font-weight:700;color:var(--purple)">' + totalKWh.toFixed(1) + ' kWh</div></div>' +
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">' +
+    '<div style="font-size:11px;color:var(--text2)">Locations Reporting</div><div style="font-size:22px;font-weight:700;color:var(--accent)">' + results.filter(function(r){return r.consumption !== null;}).length + '/' + results.length + '</div></div>' +
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">' +
+    '<div style="font-size:11px;color:var(--text2)">Avg per Location</div><div style="font-size:22px;font-weight:700;color:var(--blue)">' + (results.length > 0 ? (totalKWh/results.length).toFixed(1) : '0') + ' kWh</div></div>';
+}
+
+function exportEnergyCSV() {
+  if (!energyResults.length) return alert('No data to export');
+  var csv = 'Location,Meter No,From Date Reading (kWh),To Date Reading (kWh),Consumption (kWh),Remarks\n';
+  energyResults.forEach(function(r) {
+    csv += '"' + (r.location||'') + '","' + (r.meterNo||'') + '",' + (r.readingFrom||'') + ',' + (r.readingTo||'') + ',' + (r.consumption !== null ? r.consumption : '') + ',"' + (r.remarks||'') + '"\n';
+  });
+  var blob = new Blob([csv], { type:'text/csv' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Energy_Consumption_' + document.getElementById('energyDateFrom').value + '_to_' + document.getElementById('energyDateTo').value + '.csv';
+  a.click();
+}
+
 
 // ============================================================
 // FULL IOCL-FORMAT PDF EXPORT (Bilingual)
@@ -3068,6 +3264,16 @@ async function exportPermitPDF(id) {
   const W=210, H=297, LM=12, RM=W-12, CW=RM-LM;
   const isHot = p.PermitTypeKey==='hot'||p.PermitTypeKey==='comp';
   let y = 0;
+
+  // Format date-time as "20-Feb-2026 14:30 IST"
+  function fmtIST(v) {
+    if (!v || v==='-' || v==='undefined' || v==='null') return '-';
+    var ist = toIST(String(v));
+    if (!ist) { return cleanDate(v) + ' ' + cleanTime(v); }
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return String(ist.getDate()).padStart(2,'0') + '-' + months[ist.getMonth()] + '-' + ist.getFullYear() +
+      ' ' + String(ist.getHours()).padStart(2,'0') + ':' + String(ist.getMinutes()).padStart(2,'0') + ' IST';
+  }
 
   // ===== IOCL LOGO (actual image, base64) =====
   const IOCL_LOGO_B64 = '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';
@@ -3203,7 +3409,7 @@ async function exportPermitPDF(id) {
   doc.text(p.IssuerDesignation||'________________',LM+2,y+17);
   if(p.IssuedAt&&p.IssuedAt!=='-'&&p.IssuedAt!=='undefined'){
     doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(0,100,0);
-    doc.text('Approved: '+cleanDate(p.IssuedAt)+' '+cleanTime(p.IssuedAt),LM+2,y+21);
+    doc.text('Approved: '+fmtIST(p.IssuedAt),LM+2,y+21);
     doc.setTextColor(0);
   }
   doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
@@ -3218,7 +3424,7 @@ async function exportPermitPDF(id) {
   doc.text(p.ReceiverDesignation||'________________',LM+hw+2,y+17);
   if(p.CreatedAt&&p.CreatedAt!=='-'){
     doc.setFontSize(6); doc.setFont('helvetica','bold'); doc.setTextColor(0,100,0);
-    doc.text('Initiated: '+cleanDate(p.CreatedAt)+' '+cleanTime(p.CreatedAt),LM+hw+2,y+21);
+    doc.text('Initiated: '+fmtIST(p.CreatedAt),LM+hw+2,y+21);
     doc.setTextColor(0);
   }
   doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
@@ -3313,9 +3519,8 @@ async function exportPermitPDF(id) {
   // Page numbers on all pages
   const pages=doc.internal.getNumberOfPages();
   for(let pg=1;pg<=pages;pg++){
-    doc.setPage(pg);doc.setFontSize(6.5);doc.setTextColor(128);
-    var istNow = new Date(new Date().getTime()+(5*60+30)*60000);
-    doc.text('Page '+pg+' of '+pages+' | Generated from AttendX Work Permit System — IOCL ERPL | '+istNow.toISOString().replace('T',' ').slice(0,19)+' IST',W/2,H-7,{align:'center'});
+    doc.setPage(pg);doc.setFontSize(7);doc.setTextColor(128);
+    doc.text('Page '+pg+' of '+pages,W/2,H-7,{align:'center'});
     doc.setTextColor(0);
   }
   doc.save('WorkPermit_'+p.PermitID+'.pdf');
