@@ -216,12 +216,13 @@
   }
 
   .refresh-btn {
-    background: rgba(242,103,34,0.55); border: 1px solid rgba(242,103,34,0.7);
+    background: #F26722; border: 1px solid #d45a1c;
     color: #FFF; padding: 7px 14px; border-radius: 8px;
     cursor: pointer; font-family: 'Poppins', sans-serif;
-    font-size: 12px; font-weight: 500; transition: all 0.2s;
+    font-size: 12px; font-weight: 600; transition: all 0.2s;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.15);
   }
-  .refresh-btn:hover { background: #F26722; color: #FFF; border-color: #F26722; box-shadow: 0 2px 8px rgba(242,103,34,0.4); transform: translateY(-1px); }
+  .refresh-btn:hover { background: #e05a15; color: #FFF; border-color: #c04f10; box-shadow: 0 3px 10px rgba(242,103,34,0.45); transform: translateY(-1px); }
 
   /* Content padding after topbar */
   .page { padding: 28px 32px 32px; }
@@ -390,6 +391,40 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+  /* Occupancy Grid Styles */
+  .occupancy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; padding: 8px 0; }
+  .occ-card {
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%);
+    border: 1px solid var(--border); border-radius: 14px; padding: 18px;
+    transition: all 0.25s ease; position: relative; overflow: hidden;
+  }
+  .occ-card::before {
+    content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+    background: var(--accent); border-radius: 14px 0 0 14px;
+  }
+  .occ-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.08); border-color: var(--accent); }
+  .occ-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .occ-name { font-size: 15px; font-weight: 700; color: var(--text); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .occ-status {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 4px 10px; border-radius: 20px;
+  }
+  .occ-status.full { background: rgba(6,214,160,0.15); color: #10b981; }
+  .occ-status.empty { background: rgba(245,158,11,0.15); color: #f59e0b; }
+  .occ-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+  .occ-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+  .occ-bar-fill.green { background: linear-gradient(90deg, #06d6a0, #10b981); }
+  .occ-bar-fill.yellow { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+  .occ-count { font-size: 28px; font-weight: 800; color: var(--blue); font-family: 'JetBrains Mono', monospace; }
+  .occ-employees { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .emp-chip {
+    font-size: 11px; padding: 4px 10px; border-radius: 20px;
+    background: rgba(27,60,115,0.08); color: var(--blue); font-weight: 500;
+    border: 1px solid rgba(27,60,115,0.12);
+  }
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--text3); }
+  .empty-state .icon { font-size: 60px; margin-bottom: 12px; opacity: 0.5; }
+  .empty-state p { font-size: 16px; font-weight: 500; }
 </style>
 </head>
 <body>
@@ -587,12 +622,15 @@
 
     <!-- ===== LIVE OCCUPANCY PAGE ===== -->
     <div class="page" id="page-occupancy">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px" id="occSummaryCards"></div>
       <div class="panel" style="margin-bottom:20px">
         <div class="panel-header">
           <div class="panel-title"><span class="live-dot"></span> Live Office Occupancy</div>
-          <span class="panel-badge" style="background:var(--accent-dim);color:var(--accent)">Auto-refreshes every 30s</span>
+          <span class="panel-badge" style="background:rgba(6,214,160,.15);color:#10b981">Auto-refreshes every 30s</span>
         </div>
-        <div class="occupancy-grid" id="occGrid"></div>
+        <div class="occupancy-grid" id="occGrid">
+          <div class="empty-state"><div class="icon">🏢</div><p>Loading occupancy data...</p></div>
+        </div>
       </div>
     </div>
 
@@ -861,7 +899,7 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">📋 Work Permits</div>
-          <span class="panel-badge" style="background:rgba(255,209,102,.5);color:#fff" id="wpCount">0 permits</span>
+          <span class="panel-badge" style="background:#d4a017;color:#fff" id="wpCount">0 permits</span>
         </div>
         <div class="table-scroll" style="max-height:600px">
           <table class="att-table">
@@ -887,7 +925,7 @@
     <!-- New Work Permit (embedded) -->
     <div class="page" id="page-newpermit">
       <div class="panel" style="padding:0;overflow:hidden;border-radius:14px">
-        <iframe id="wpIframe" src="" style="width:100%;height:calc(100vh - 120px);border:none;border-radius:14px;background:#0a0e1a"></iframe>
+        <iframe id="wpIframe" src="" style="width:100%;height:calc(100vh - 120px);border:none;border-radius:14px;background:#f0f2f5"></iframe>
       </div>
     </div>
 
@@ -905,7 +943,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycby6X5LdnAMOdmXlnmEQVvqDdOXurpUVAF9xHvkJ0XKunVAXLR9ErTJw66rlL8mTm9urMQ/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbwPxLXV19MRHCMpdACYd527DrjgHKKNDZON4LEJlT_lIk3QKlsU9_UVqx2Nt7fDV6St0A/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -1191,7 +1229,8 @@ function renderDashboard() {
   // Locations
   renderLocations(d.locations);
 
-  
+  // Store locations globally for energy page and other uses
+  window.allLocations = d.locations.map(function(l) { return l.LocationName || l; });
 
   // Filter dropdown
   const filterLoc = document.getElementById('filterLocation');
@@ -1200,6 +1239,15 @@ function renderDashboard() {
     const n = l.LocationName || l;
     filterLoc.innerHTML += `<option value="${n}">${n}</option>`;
   });
+
+  // Populate energy location dropdown
+  const energyLoc = document.getElementById('energyFilterLocation');
+  if (energyLoc && energyLoc.options.length <= 1) {
+    d.locations.forEach(l => {
+      const n = l.LocationName || l;
+      energyLoc.innerHTML += '<option value="' + n + '">' + n + '</option>';
+    });
+  }
 
   // FIX: Always update allRecords when we render
   allRecords = d.todayRecords || [];
@@ -1514,47 +1562,63 @@ function renderQuickOccupancy(todayRecords) {
 
 function renderOccupancyGrid(todayRecords) {
   const grid = document.getElementById('occGrid');
+  const summaryEl = document.getElementById('occSummaryCards');
   if (!todayRecords || !todayRecords.length) {
-    grid.innerHTML = '<div class="empty-state"><div class="icon">🏢</div><p>No check-ins today</p></div>';
+    grid.innerHTML = '<div class="empty-state"><div class="icon">🏢</div><p>No check-ins today</p><div style="font-size:13px;color:var(--text3);margin-top:6px">Employees will appear here as they check in</div></div>';
+    if (summaryEl) summaryEl.innerHTML = '';
     return;
   }
 
   const locMap = {};
+  let totalPresent = 0, totalOut = 0;
   todayRecords.forEach(r => {
     const loc = r.Location || 'Unknown';
     if (!locMap[loc]) locMap[loc] = { present: 0, checkedOut: 0, employees: [] };
     if (!r.CheckOutTime) {
       locMap[loc].present++;
+      totalPresent++;
       locMap[loc].employees.push({ name: r.EmployeeName, shift: r.Shift || '?', checkIn: r.CheckInTime || '' });
     } else {
       locMap[loc].checkedOut++;
+      totalOut++;
     }
   });
+
+  // Summary cards
+  if (summaryEl) {
+    const locCount = Object.keys(locMap).length;
+    const activeLocs = Object.values(locMap).filter(v => v.present > 0).length;
+    summaryEl.innerHTML =
+      '<div style="background:linear-gradient(135deg,#1B3C73,#2a5298);border-radius:12px;padding:16px;text-align:center"><div style="font-size:11px;color:rgba(255,255,255,0.7)">Total Present</div><div style="font-size:26px;font-weight:800;color:#fff">' + totalPresent + '</div></div>' +
+      '<div style="background:linear-gradient(135deg,#F26722,#f59e0b);border-radius:12px;padding:16px;text-align:center"><div style="font-size:11px;color:rgba(255,255,255,0.7)">Checked Out</div><div style="font-size:26px;font-weight:800;color:#fff">' + totalOut + '</div></div>' +
+      '<div style="background:linear-gradient(135deg,#10b981,#06d6a0);border-radius:12px;padding:16px;text-align:center"><div style="font-size:11px;color:rgba(255,255,255,0.7)">Active Locations</div><div style="font-size:26px;font-weight:800;color:#fff">' + activeLocs + '/' + locCount + '</div></div>' +
+      '<div style="background:linear-gradient(135deg,#7c3aed,#a78bfa);border-radius:12px;padding:16px;text-align:center"><div style="font-size:11px;color:rgba(255,255,255,0.7)">Total Check-ins</div><div style="font-size:26px;font-weight:800;color:#fff">' + todayRecords.length + '</div></div>';
+  }
 
   let html = '';
   const sorted = Object.entries(locMap).sort((a, b) => b[1].present - a[1].present);
   sorted.forEach(([name, data]) => {
     const color = data.present > 0 ? 'green' : 'yellow';
-    const statusText = data.present > 0 ? 'Active' : 'All Left';
+    const statusText = data.present > 0 ? data.present + ' Active' : 'All Left';
     const statusClass = data.present > 0 ? 'full' : 'empty';
+    const total = data.present + data.checkedOut;
+    const pct = total > 0 ? Math.round((data.present / total) * 100) : 0;
 
     let empChips = '';
     data.employees.forEach(e => {
-      empChips += `<span class="emp-chip">${e.name} • ${e.shift} • ${e.checkIn}</span>`;
+      empChips += '<span class="emp-chip">' + e.name + ' \u2022 ' + e.shift + ' \u2022 ' + e.checkIn + '</span>';
     });
 
-    html += `<div class="occ-card">
-      <div class="occ-header">
-        <div class="occ-name" title="${name}">${name}</div>
-        <div class="occ-status ${statusClass}">${statusText}</div>
-      </div>
-      <div class="occ-bar"><div class="occ-bar-fill ${color}" style="width:${data.present > 0 ? 100 : 0}%"></div></div>
-      <div style="display:flex;justify-content:space-between;align-items:flex-end">
-        <div class="occ-count">${data.present}<span style="font-size:14px;color:var(--text3);font-weight:400"> present now</span></div>
-        ${data.checkedOut > 0 ? `<div style="font-size:12px;color:var(--text3)">${data.checkedOut} checked out</div>` : ''}
-      </div>
-      ${empChips ? `<div class="occ-employees">${empChips}</div>` : ''}
-    </div>`;
+    html += '<div class="occ-card">' +
+      '<div class="occ-header"><div class="occ-name" title="' + name + '">' + name + '</div>' +
+      '<div class="occ-status ' + statusClass + '">' + statusText + '</div></div>' +
+      '<div class="occ-bar"><div class="occ-bar-fill ' + color + '" style="width:' + pct + '%"></div></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-end">' +
+      '<div class="occ-count">' + data.present + '<span style="font-size:13px;color:var(--text3);font-weight:400"> / ' + total + ' present</span></div>' +
+      (data.checkedOut > 0 ? '<div style="font-size:12px;color:var(--text3)">' + data.checkedOut + ' checked out</div>' : '') +
+      '</div>' +
+      (empChips ? '<div class="occ-employees">' + empChips + '</div>' : '') +
+      '</div>';
   });
   grid.innerHTML = html;
 }
@@ -2536,15 +2600,24 @@ async function filterPermits() {
         let statusClass = p.Status==='Pending'?'late':p.Status==='Issued'?'on-time':p.Status==='ClosureRequested'?'very-late':p.Status==='Rejected'?'very-late':'completed';
 
         let actions = `<button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="viewPermitDetail('${p.PermitID}')">👁 View</button>`;
-        if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.5);color:#fff" onclick="startOTPApproval('${p.PermitID}')">🔐 Approve</button>`;
-        if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(211,47,47,.5);color:#fff" onclick="startRejectPermit('${p.PermitID}')">❌ Reject</button>`;
+        if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:#10b981;color:#fff" onclick="startOTPApproval('${p.PermitID}')">🔐 Approve</button>`;
+        if (p.Status === 'Pending') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:#dc2626;color:#fff" onclick="startRejectPermit('${p.PermitID}')">❌ Reject</button>`;
         if (p.Status === 'Issued') {
-          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(232,115,14,.5);color:#fff" onclick="startRenewal('${p.PermitID}')">🔄 Renew</button>`;
-          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(46,125,50,.5);color:#fff" onclick="checkPendingRenewals('${p.PermitID}')">✅ Approve Renewal</button>`;
-          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(255,209,102,.5);color:#fff" onclick="startClosureOTP('${p.PermitID}')">🔒 Close</button>`;
+          // Check if permit is still within validity period
+          var permitEnd = new Date(cleanDate(p.DateTo) + 'T' + (cleanTime(p.TimeTo)||'23:59'));
+          var nowIST = new Date(new Date().getTime() + (5*60+30)*60*1000);
+          var isValid = nowIST <= permitEnd;
+          if (isValid) {
+            actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:#e8730e;color:#fff" onclick="startRenewal('${p.PermitID}')">🔄 Renew</button>`;
+          }
+          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:#2e7d32;color:#fff" onclick="checkPendingRenewals('${p.PermitID}')">✅ Approve Renewal</button>`;
+          actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:#d4a017;color:#fff" onclick="startClosureOTP('${p.PermitID}')">🔒 Close</button>`;
           actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="exportPermitPDF('${p.PermitID}')">📄 PDF</button>`;
+          if (!isValid) {
+            actions += ` <span style="font-size:9px;color:#dc2626;font-weight:600">⚠ EXPIRED</span>`;
+          }
         }
-        if (p.Status === 'ClosureRequested') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:rgba(6,214,160,.5);color:#fff" onclick="startClosureOTP('${p.PermitID}')">🔐 Verify Close</button>`;
+        if (p.Status === 'ClosureRequested') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px;background:#10b981;color:#fff" onclick="startIssuerClosureOTP('${p.PermitID}')">🔐 Verify Close</button>`;
         if (p.Status === 'Closed') actions += ` <button class="refresh-btn" style="font-size:10px;padding:4px 8px" onclick="exportPermitPDF('${p.PermitID}')">📄 PDF</button>`;
 
         return `<tr>
@@ -2676,7 +2749,7 @@ async function startOTPApproval(id) {
           <div style="font-size:12px;color:var(--text2);margin-bottom:16px">Sent to <b>${d.maskedEmail}</b> — valid for 30 minutes.</div>
           <div style="max-width:300px;margin:0 auto">
             <input type="text" id="otpInput" maxlength="6" placeholder="Enter 6-digit OTP" style="text-align:center;font-size:20px;letter-spacing:8px;font-family:monospace;padding:14px;background:var(--surface2);border:2px solid var(--border);border-radius:10px;color:var(--text);width:100%;margin-bottom:12px">
-            <button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(6,214,160,.5);color:#fff;border:2px solid var(--accent)" onclick="verifyApprovalOTP('${id}')">Verify OTP & Approve Permit</button>
+            <button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:#10b981;color:#fff;border:2px solid var(--accent)" onclick="verifyApprovalOTP('${id}')">Verify OTP & Approve Permit</button>
             <div style="margin-top:10px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="startOTPApproval('${id}')">Resend OTP</button></div>
           </div>
           <div id="otpError" style="margin-top:10px;color:var(--danger);font-size:12px;display:none"></div>
@@ -2708,82 +2781,115 @@ async function verifyApprovalOTP(id) {
 // ============================================================
 // CLOSURE OTP FLOW (Both Receiver + Issuer)
 // ============================================================
+// Step 1: Closure initiated by Receiver — OTP sent to Receiver
 async function startClosureOTP(id) {
   const p = currentPermits.find(x => x.PermitID === id);
   if (!p) return;
-  if (!confirm('Close permit ' + id + '?\n\nOTPs will be sent to both:\n• Receiver: ' + (p.ReceiverName||'-') + '\n• Issuer: ' + (p.IssuerName||'-') + '\n\nBoth must verify via registered email.')) return;
+  if (!confirm('Close permit ' + id + '?\n\nStep 1: OTP will be sent to Receiver (' + (p.ReceiverName||'-') + ')\nStep 2: After Receiver verification, Issuer (' + (p.IssuerName||'-') + ') will approve')) return;
 
   const panel = document.getElementById('wpDetailPanel');
   panel.classList.remove('hidden');
   document.getElementById('wpDetailTitle').textContent = 'Permit Closure — ' + id;
-  document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Sending closure OTPs...</div>';
+  document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Sending closure OTP to Receiver...</div>';
   panel.scrollIntoView({ behavior:'smooth' });
 
   try {
-    const url = API_URL + '?' + new URLSearchParams({ action:'generateClosureOTP', permitId:id }).toString();
+    const url = API_URL + '?' + new URLSearchParams({ action:'generateReceiverClosureOTP', permitId:id }).toString();
     const r = await fetch(url, { redirect:'follow' });
     const d = JSON.parse(await r.text());
 
     if (d.success) {
-      document.getElementById('wpDetailContent').innerHTML = `
-        <div style="padding:20px">
-          <div style="text-align:center;margin-bottom:16px">
-            <div style="font-size:36px;margin-bottom:8px">🔒</div>
-            <div style="font-size:14px;font-weight:600;color:var(--warn)">Closure OTPs Sent!</div>
-            <div style="font-size:11px;color:var(--text2);margin-top:4px">${d.details ? d.details.join(' | ') : ''}</div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:500px;margin:0 auto">
-            <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
-              <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;margin-bottom:8px">Receiver OTP</div>
-              <div style="font-size:10px;color:var(--text2);margin-bottom:8px">${d.receiverMasked||'N/A'}</div>
-              <input type="text" id="closureRecOtp" maxlength="6" placeholder="6-digit OTP" style="text-align:center;font-size:18px;letter-spacing:6px;font-family:monospace;padding:10px;background:var(--surface2);border:2px solid var(--border);border-radius:8px;color:var(--text);width:100%">
-            </div>
-            <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
-              <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;margin-bottom:8px">Issuer OTP</div>
-              <div style="font-size:10px;color:var(--text2);margin-bottom:8px">${d.issuerMasked||'N/A'}</div>
-              <input type="text" id="closureIssOtp" maxlength="6" placeholder="6-digit OTP" style="text-align:center;font-size:18px;letter-spacing:6px;font-family:monospace;padding:10px;background:var(--surface2);border:2px solid var(--border);border-radius:8px;color:var(--text);width:100%">
-            </div>
-          </div>
-          <div style="text-align:center;margin-top:14px">
-            <button class="refresh-btn" style="padding:12px 30px;font-size:14px;font-weight:700;background:rgba(220,38,38,.5);color:#fff;border:2px solid #dc2626" onclick="verifyClosureOTPs('${id}')">Verify Both OTPs & Close Permit</button>
-            <div style="margin-top:8px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="startClosureOTP('${id}')">Resend OTPs</button></div>
-          </div>
-          <div id="closureError" style="text-align:center;margin-top:10px;color:var(--danger);font-size:12px;display:none"></div>
-        </div>`;
+      var ch = '<div style="padding:20px">';
+      ch += '<div style="text-align:center;margin-bottom:16px"><div style="font-size:36px;margin-bottom:8px">&#x1f512;</div>';
+      ch += '<div style="font-size:14px;font-weight:600;color:#7c3aed">Step 1: Receiver Closure OTP Sent!</div>';
+      ch += '<div style="font-size:11px;color:var(--text2);margin-top:4px">Sent to ' + (d.maskedEmail||'') + ' — valid 30 minutes</div></div>';
+      ch += '<div style="padding:10px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);border-radius:8px;margin-bottom:14px;font-size:11px;color:var(--text2)">';
+      ch += '<b>Step 1:</b> Receiver verifies OTP &rarr; <b>Step 2:</b> Issuer approves with OTP</div>';
+      ch += '<div style="max-width:350px;margin:0 auto">';
+      ch += '<input type="text" id="closureRecOtp" maxlength="6" placeholder="Enter 6-digit Receiver OTP" style="text-align:center;font-size:20px;letter-spacing:8px;font-family:monospace;padding:14px;background:var(--surface2);border:2px solid #7c3aed;border-radius:10px;color:var(--text);width:100%;margin-bottom:12px">';
+      ch += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:#7c3aed;color:#fff;border:2px solid #7c3aed" onclick="verifyReceiverClosureOTP(\'' + id + '\')">Verify Receiver OTP & Notify Issuer</button>';
+      ch += '<div style="margin-top:8px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="startClosureOTP(\'' + id + '\')">Resend OTP</button></div>';
+      ch += '<div id="closureError" style="text-align:center;margin-top:10px;color:var(--danger);font-size:12px;display:none"></div></div></div>';
+      document.getElementById('wpDetailContent').innerHTML = ch;
+      setTimeout(function(){ var el=document.getElementById('closureRecOtp'); if(el) el.focus(); },100);
     } else {
-      document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">${d.error||'Failed'}</div>`;
+      document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px;color:var(--danger)">' + (d.error||'Failed') + '</div>';
     }
   } catch(e) {
-    document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">Error: ${e.message}</div>`;
+    document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px;color:var(--danger)">Error: ' + e.message + '</div>';
   }
 }
 
-async function verifyClosureOTPs(id) {
-  const recOtp = document.getElementById('closureRecOtp')?.value?.trim();
-  const issOtp = document.getElementById('closureIssOtp')?.value?.trim();
+// Step 1b: Verify Receiver closure OTP → notify Issuer
+async function verifyReceiverClosureOTP(id) {
+  const otp = document.getElementById('closureRecOtp').value.trim();
   const errEl = document.getElementById('closureError');
-
-  if ((!recOtp || recOtp.length !== 6) && (!issOtp || issOtp.length !== 6)) {
-    errEl.style.display='block'; errEl.textContent='Enter at least one valid 6-digit OTP'; return;
-  }
-
+  if (!otp || otp.length !== 6) { errEl.style.display='block'; errEl.textContent='Enter a valid 6-digit OTP'; return; }
+  errEl.style.display='none';
   try {
-    errEl.style.display='none';
-    const params = { action:'verifyClosureOTP', permitId:id };
-    if (recOtp && recOtp.length === 6) params.receiverOtp = recOtp;
-    if (issOtp && issOtp.length === 6) params.issuerOtp = issOtp;
-
-    const url = API_URL + '?' + new URLSearchParams(params).toString();
+    const url = API_URL + '?' + new URLSearchParams({ action:'verifyReceiverClosureOTP', permitId:id, otp:otp }).toString();
     const r = await fetch(url, { redirect:'follow' });
     const d = JSON.parse(await r.text());
-
     if (d.success) {
-      document.getElementById('wpDetailContent').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:50px;margin-bottom:10px">&#9989;</div><div style="font-size:16px;font-weight:700;color:var(--accent)">Permit Closed!</div><div style="font-size:12px;color:var(--text2);margin-top:6px">${d.message}</div></div>`;
-      setTimeout(() => filterPermits(), 1500);
+      document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px">' +
+        '<div style="font-size:50px;margin-bottom:10px">&#x1f4e7;</div>' +
+        '<div style="font-size:16px;font-weight:700;color:#7c3aed">Step 1 Complete — Receiver Verified!</div>' +
+        '<div style="font-size:12px;color:var(--text2);margin-top:6px">Notification sent to Issuer for closure approval.</div>' +
+        '<div style="margin-top:16px;padding:12px;background:rgba(46,125,50,.06);border:1px solid rgba(46,125,50,.2);border-radius:8px;font-size:12px;color:#2e7d32">' +
+        'Issuer must now click <b>"🔐 Verify Close"</b> on this permit to complete the closure.</div>' +
+        '<div style="margin-top:12px"><button class="refresh-btn" onclick="startIssuerClosureOTP(\'' + id + '\')">Proceed to Issuer Approval (Step 2)</button></div></div>';
+      setTimeout(function(){ filterPermits(); },2000);
     } else {
       errEl.style.display='block'; errEl.textContent=d.error||'Verification failed';
     }
   } catch(e) { errEl.style.display='block'; errEl.textContent='Error: '+e.message; }
+}
+
+// Step 2: Issuer approval for closure
+async function startIssuerClosureOTP(id) {
+  const panel = document.getElementById('wpDetailPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('wpDetailTitle').textContent = 'Issuer Closure Approval — ' + id;
+  document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Sending closure approval OTP to Issuer...</div>';
+
+  try {
+    const url = API_URL + '?' + new URLSearchParams({ action:'generateIssuerClosureOTP', permitId:id }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+    if (d.success) {
+      var ih = '<div style="text-align:center;padding:20px">';
+      ih += '<div style="font-size:40px;margin-bottom:10px">&#x1f512;</div>';
+      ih += '<div style="font-size:14px;font-weight:600;color:#2e7d32;margin-bottom:8px">Step 2: Issuer Closure OTP Sent!</div>';
+      ih += '<div style="font-size:12px;color:var(--text2);margin-bottom:16px">Sent to <b>' + (d.maskedEmail||'') + '</b></div>';
+      ih += '<div style="max-width:300px;margin:0 auto">';
+      ih += '<input type="text" id="closureIssOtp" maxlength="6" placeholder="Enter 6-digit OTP" style="text-align:center;font-size:20px;letter-spacing:8px;font-family:monospace;padding:14px;background:var(--surface2);border:2px solid #2e7d32;border-radius:10px;color:var(--text);width:100%;margin-bottom:12px">';
+      ih += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:#2e7d32;color:#fff;border:2px solid #2e7d32" onclick="verifyIssuerClosureOTP(\'' + id + '\')">Verify OTP & Close Permit</button>';
+      ih += '<div style="margin-top:10px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="startIssuerClosureOTP(\'' + id + '\')">Resend OTP</button></div></div>';
+      ih += '<div id="closureIssError" style="margin-top:10px;color:#d32f2f;font-size:12px;display:none"></div></div>';
+      document.getElementById('wpDetailContent').innerHTML = ih;
+      setTimeout(function(){ var el=document.getElementById('closureIssOtp'); if(el) el.focus(); },100);
+    } else {
+      document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px;color:#d32f2f">' + (d.error||'Failed') + '</div>';
+    }
+  } catch(e) {
+    document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px;color:#d32f2f">Error: ' + e.message + '</div>';
+  }
+}
+
+// Step 2b: Verify Issuer closure OTP → close permit
+async function verifyIssuerClosureOTP(id) {
+  const otp = document.getElementById('closureIssOtp').value.trim();
+  if (!otp || otp.length !== 6) { var e=document.getElementById('closureIssError'); e.style.display='block'; e.textContent='Enter a valid 6-digit OTP'; return; }
+  try {
+    document.getElementById('closureIssError').style.display='none';
+    const url = API_URL + '?' + new URLSearchParams({ action:'verifyIssuerClosureOTP', permitId:id, otp:otp }).toString();
+    const r = await fetch(url, { redirect:'follow' });
+    const d = JSON.parse(await r.text());
+    if (d.success) {
+      document.getElementById('wpDetailContent').innerHTML = '<div style="text-align:center;padding:30px"><div style="font-size:50px;margin-bottom:10px">&#9989;</div><div style="font-size:16px;font-weight:700;color:#2e7d32">Permit Closed Successfully!</div><div style="font-size:12px;color:var(--text2);margin-top:6px">' + (d.message||'') + '</div></div>';
+      setTimeout(function(){ filterPermits(); },1500);
+    } else { var e=document.getElementById('closureIssError'); e.style.display='block'; e.textContent=d.error||'Verification failed'; }
+  } catch(e) { var el=document.getElementById('closureIssError'); el.style.display='block'; el.textContent='Error: '+e.message; }
 }
 
 // ============================================================
@@ -2814,7 +2920,7 @@ async function startRejectPermit(id) {
       rh += '<textarea id="rejectReason" rows="2" placeholder="Enter reason for rejecting this permit..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text);resize:vertical;font-family:inherit"></textarea></div>';
       rh += '<div style="max-width:300px;margin:0 auto">';
       rh += '<input type="text" id="rejectOtpInput" maxlength="6" placeholder="Enter 6-digit OTP" style="text-align:center;font-size:20px;letter-spacing:8px;font-family:monospace;padding:14px;background:var(--surface2);border:2px solid #d32f2f;border-radius:10px;color:var(--text);width:100%;margin-bottom:12px">';
-      rh += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(211,47,47,.5);color:#fff;border:2px solid #d32f2f" onclick="verifyRejectOTP(\'' + id + '\')">Verify OTP &amp; Reject Permit</button>';
+      rh += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:#dc2626;color:#fff;border:2px solid #d32f2f" onclick="verifyRejectOTP(\'' + id + '\')">Verify OTP &amp; Reject Permit</button>';
       rh += '<div style="margin-top:10px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="startRejectPermit(\'' + id + '\')">Resend OTP</button></div></div>';
       rh += '<div id="rejectError" style="margin-top:10px;color:#d32f2f;font-size:12px;display:none"></div></div>';
       document.getElementById('wpDetailContent').innerHTML = rh;
@@ -2871,7 +2977,7 @@ async function checkPendingRenewals(id) {
       ph += '<div><div style="font-weight:600;color:var(--text)">' + rn.RenewalID + '</div>';
       ph += '<div style="font-size:11px;color:var(--text2)">Period: ' + (rn.DateFrom||'-') + ' ' + (rn.TimeFrom||'') + ' to ' + (rn.DateTo||'-') + ' ' + (rn.TimeTo||'') + '</div>';
       ph += '<div style="font-size:11px;color:var(--text2)">Receiver: ' + (rn.ReceiverName||'-') + ' | Gas: HC=' + (rn.GasHC||'0') + '% Tx=' + (rn.GasToxic||'0') + ' O2=' + (rn.GasO2||'20.8') + '%</div></div>';
-      ph += '<button class="refresh-btn" style="padding:8px 16px;background:rgba(46,125,50,.5);color:#fff;border:1px solid #2e7d32" onclick="approveRenewal(\'' + id + '\',\'' + rn.RenewalID + '\')">🔐 Approve</button>';
+      ph += '<button class="refresh-btn" style="padding:8px 16px;background:#2e7d32;color:#fff;border:1px solid #2e7d32" onclick="approveRenewal(\'' + id + '\',\'' + rn.RenewalID + '\')">🔐 Approve</button>';
       ph += '</div></div>';
     });
     ph += '</div>';
@@ -2943,7 +3049,7 @@ async function startRenewal(id) {
   h += '<input type="text" id="rnwPrecautions" value="NIL" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--text)"></div>';
   h += '<div id="rnwError" style="display:none;padding:8px;border-radius:6px;background:rgba(211,47,47,.1);color:#d32f2f;font-size:12px;margin-bottom:10px"></div>';
   h += '<div id="rnwOtpSection" style="display:none"></div>';
-  h += '<button class="refresh-btn" id="rnwSendOTPBtn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(232,115,14,.5);color:#fff;border:2px solid #e8730e" onclick="sendReceiverOTP(\'' + id + '\')">Step 1: Send OTP to Receiver &amp; Start Renewal</button>';
+  h += '<button class="refresh-btn" id="rnwSendOTPBtn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:#e8730e;color:#fff;border:2px solid #e8730e" onclick="sendReceiverOTP(\'' + id + '\')">Step 1: Send OTP to Receiver &amp; Start Renewal</button>';
   h += '</div>';
   document.getElementById('wpDetailContent').innerHTML = h;
 }
@@ -2984,7 +3090,7 @@ async function sendReceiverOTP(id) {
       oh += '<div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;color:var(--text2)">Enter Receiver OTP</label>';
       oh += '<input type="text" id="rnwOtpInput" maxlength="6" placeholder="6-digit OTP" style="width:100%;padding:10px;border:2px solid var(--purple);border-radius:6px;background:var(--surface);font-size:16px;font-family:monospace;text-align:center;color:var(--text);letter-spacing:6px"></div>';
       oh += '<div id="rnwOtpError" style="display:none;padding:8px;border-radius:6px;background:rgba(211,47,47,.1);color:#d32f2f;font-size:12px;margin-bottom:10px"></div>';
-      oh += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(139,92,246,.5);color:#fff;border:2px solid var(--purple)" onclick="verifyReceiverOTP(\'' + id + '\')">Verify Receiver OTP &amp; Notify Issuer</button>';
+      oh += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:#7c3aed;color:#fff;border:2px solid var(--purple)" onclick="verifyReceiverOTP(\'' + id + '\')">Verify Receiver OTP &amp; Notify Issuer</button>';
       oh += '<div style="margin-top:8px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="sendReceiverOTP(\'' + id + '\')">Resend OTP</button></div>';
       document.getElementById('rnwOtpSection').innerHTML = oh;
       document.getElementById('rnwSendOTPBtn').style.display='none';
@@ -3057,7 +3163,7 @@ async function approveRenewal(id, renewalId) {
       ah += '<div style="font-size:12px;color:var(--text2);margin-bottom:16px">Sent to <b>' + d.maskedEmail + '</b> — valid 30 minutes.</div>';
       ah += '<div style="max-width:300px;margin:0 auto">';
       ah += '<input type="text" id="issuerRnwOtpInput" maxlength="6" placeholder="Enter 6-digit OTP" style="text-align:center;font-size:20px;letter-spacing:8px;font-family:monospace;padding:14px;background:var(--surface2);border:2px solid #2e7d32;border-radius:10px;color:var(--text);width:100%;margin-bottom:12px">';
-      ah += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:rgba(46,125,50,.5);color:#fff;border:2px solid #2e7d32" onclick="verifyIssuerRenewalOTP(\'' + id + '\',\'' + renewalId + '\')">Verify OTP &amp; Complete Renewal</button>';
+      ah += '<button class="refresh-btn" style="width:100%;padding:12px;font-size:14px;font-weight:700;background:#2e7d32;color:#fff;border:2px solid #2e7d32" onclick="verifyIssuerRenewalOTP(\'' + id + '\',\'' + renewalId + '\')">Verify OTP &amp; Complete Renewal</button>';
       ah += '<div style="margin-top:10px"><button class="refresh-btn" style="font-size:11px;padding:6px 12px" onclick="approveRenewal(\'' + id + '\',\'' + renewalId + '\')">Resend OTP</button></div></div>';
       ah += '<div id="issuerRnwError" style="margin-top:10px;color:#d32f2f;font-size:12px;display:none"></div></div>';
       document.getElementById('wpDetailContent').innerHTML = ah;
@@ -3097,10 +3203,10 @@ function initEnergyPage() {
     document.getElementById('energyDateFrom').value = lastWeek.toISOString().slice(0,10);
     document.getElementById('energyDateTo').value = now.toISOString().slice(0,10);
   }
-  // Populate location filter
+  // Populate location filter from stored locations
   const sel = document.getElementById('energyFilterLocation');
-  if (sel.options.length <= 1 && allLocations && allLocations.length) {
-    allLocations.forEach(function(l) { sel.innerHTML += '<option value="' + l + '">' + l + '</option>'; });
+  if (sel.options.length <= 1 && window.allLocations && window.allLocations.length) {
+    window.allLocations.forEach(function(l) { sel.innerHTML += '<option value="' + l + '">' + l + '</option>'; });
   }
 }
 
@@ -3499,8 +3605,7 @@ async function exportPermitPDF(id) {
     doc.rect(bx,y,30,8);doc.rect(bx+30,y,chw-50,8);doc.rect(bx+chw-20,y,20,8);
     if(p.ClosedAt&&p.ClosedAt!=='-'&&p.ClosedAt!=='undefined'){
       doc.setFontSize(7);doc.setFont('helvetica','normal');
-      doc.text(cleanDate(p.ClosedAt),bx+2,y+4);
-      doc.text(cleanTime(p.ClosedAt),bx+2,y+7);
+      doc.text(fmtIST(p.ClosedAt),bx+2,y+5);
     }
   });
   y+=12;
