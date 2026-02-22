@@ -608,6 +608,14 @@
 
       <div class="panel">
         <div class="panel-header">
+          <div class="panel-title">⛽ DG Fuel Level — By Location (Latched)</div>
+          <span class="panel-badge" style="background:rgba(242,103,34,.1);color:var(--accent)">Last reported level</span>
+        </div>
+        <div class="chart-container"><canvas id="dgFuelChart"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
           <div class="panel-title">📋 Today's Activity</div>
           <span class="panel-badge" style="background:var(--blue-dim);color:var(--blue)" id="recordCount">0 records</span>
         </div>
@@ -943,7 +951,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbwPxLXV19MRHCMpdACYd527DrjgHKKNDZON4LEJlT_lIk3QKlsU9_UVqx2Nt7fDV6St0A/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbytCdVhxxBlXYETRPbRxv4GJJWh5KdSgInEIzC4joQJm3LhD61MbR3XxYzl0LXezivAtQ/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -951,6 +959,7 @@ let weeklyChartInstance = null;
 let nearMissChartInstance = null;
 let dgChartInstance = null;
 let movChartInstance = null;
+let dgFuelChartInstance = null;
 let isUsingLiveData = false; // Track whether we have real data
 
 // VISITOR MODULE VARIABLES
@@ -1515,6 +1524,77 @@ function renderMOVChart(movData) {
       scales: {
         x: { grid: { display: false }, ticks: { color: '#5a6377', font: { size: 10 } }, stacked: true },
         y: { grid: { color: 'rgba(213,221,232,0.6)' }, ticks: { color: '#5a6377', font: { size: 11 }, stepSize: 1 }, beginAtZero: true, stacked: true }
+      }
+    }
+  });
+}
+
+function renderDGFuelChart(fuelData) {
+  const ctx = document.getElementById('dgFuelChart');
+  if (!ctx || typeof Chart === 'undefined') return;
+  if (dgFuelChartInstance) dgFuelChartInstance.destroy();
+
+  if (!fuelData || fuelData.length === 0) {
+    ctx.parentElement.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">No DG fuel data available yet.<br>Submit equipment status with DG fuel level to see data here.</div>';
+    return;
+  }
+
+  // Sort by fuel level ascending for visual impact
+  fuelData.sort(function(a, b) { return a.fuelLevel - b.fuelLevel; });
+
+  var labels = fuelData.map(function(d) { return d.location; });
+  var values = fuelData.map(function(d) { return d.fuelLevel; });
+  var bgColors = fuelData.map(function(d) {
+    if (d.fuelLevel <= 10) return '#dc2626';
+    if (d.fuelLevel <= 25) return '#f59e0b';
+    return '#16A34A';
+  });
+  var borderColors = fuelData.map(function(d) {
+    if (d.fuelLevel <= 10) return '#b91c1c';
+    if (d.fuelLevel <= 25) return '#d97706';
+    return '#15803d';
+  });
+
+  dgFuelChartInstance = new Chart(ctx.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Fuel Level (Ltrs)',
+        data: values,
+        backgroundColor: bgColors,
+        borderColor: borderColors,
+        borderWidth: 1,
+        borderRadius: 6,
+        barPercentage: 0.6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              var idx = context.dataIndex;
+              return context.parsed.x + ' Ltrs (Updated: ' + (fuelData[idx].lastUpdated || 'N/A') + ')';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(213,221,232,0.6)' },
+          ticks: { color: '#5a6377', font: { size: 11 } },
+          beginAtZero: true,
+          title: { display: true, text: 'Fuel Level (Litres)', color: '#5a6377', font: { size: 11 } }
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: '#1a1a2e', font: { size: 11, weight: '600' } }
+        }
       }
     }
   });
@@ -2200,6 +2280,8 @@ async function renderEquipmentSummary() {
       // Render DG/MOV charts
       renderDGChart(data.dgSummary || {});
       renderMOVChart(data.movSummary || {});
+      // Render DG Fuel Level chart (latched data)
+      renderDGFuelChart(data.dgFuelData || []);
     }
   } catch (err) {
     console.warn('[Equipment] Summary fetch failed:', err.message);
