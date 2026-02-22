@@ -47,6 +47,7 @@
   .status-btn.active-w{background:rgba(242,103,34,.15);border-color:var(--success);color:var(--success)}
   .status-btn.active-nw{background:rgba(220,38,38,.15);border-color:var(--danger);color:var(--danger)}
   .status-btn.active-o{background:rgba(255,209,102,.15);border-color:var(--warn);color:var(--warn)}
+  .status-btn.active-na{background:rgba(139,92,246,.15);border-color:var(--purple);color:var(--purple)}
 
   .equip-remarks{margin-top:8px;display:none}
   .equip-remarks.show{display:block}
@@ -129,26 +130,32 @@
 
     <div class="equip-list" id="equipList"></div>
 
-    <!-- Energy Meter Reading -->
-    <div class="card" style="margin-top:12px;border-left:3px solid var(--purple)">
-      <div class="card-title"><div class="icon" style="background:rgba(139,92,246,.15)">⚡</div> Energy Meter Reading</div>
+    <!-- Housekeeping -->
+    <div class="card" style="margin-top:12px;border-left:3px solid var(--success)">
+      <div class="card-title"><div class="icon" style="background:rgba(22,163,74,.15)">🧹</div> Housekeeping</div>
       <div style="background:var(--bg);border-radius:10px;padding:12px;border:1px solid var(--border)">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <label>Meter Reading (kWh) <span style="color:var(--danger)">*</span></label>
-            <input type="number" id="energyReading" placeholder="e.g. 45230.5" min="0" step="0.01" oninput="checkEnergyFilled()">
-          </div>
-          <div>
-            <label>Meter Number / ID</label>
-            <input type="text" id="meterNumber" placeholder="e.g. MR-001">
-          </div>
-          <div style="grid-column:1/-1">
-            <label>Remarks (Optional)</label>
-            <textarea id="energyRemarks" placeholder="Any observations about the meter..." rows="2"></textarea>
-          </div>
+        <label>Housekeeping Status</label>
+        <div class="status-btns" style="margin-bottom:8px">
+          <button class="status-btn" onclick="setHousekeeping('Ok',this)" data-s="hk-ok">✓ Ok</button>
+          <button class="status-btn" onclick="setHousekeeping('Not Ok',this)" data-s="hk-nok">✕ Not Ok</button>
         </div>
-        <div id="energyWarning" class="hidden" style="margin-top:8px;padding:8px 12px;background:rgba(255,209,102,.1);border:1px solid var(--warn);border-radius:8px;font-size:12px;color:var(--warn)">
-          ⚠ Energy meter reading is mandatory for each location update.
+        <div id="hkRemarks" class="equip-remarks">
+          <textarea id="hkRemarkText" placeholder="Describe housekeeping issue..." rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Energy Meter Reading (Optional) -->
+    <div class="card" style="margin-top:12px;border-left:3px solid var(--purple)">
+      <div class="card-title"><div class="icon" style="background:rgba(139,92,246,.15)">⚡</div> Energy Meter Reading <span style="font-size:11px;font-weight:400;color:var(--text2)">(Optional)</span></div>
+      <div style="background:var(--bg);border-radius:10px;padding:12px;border:1px solid var(--border)">
+        <div>
+          <label>Meter Reading (kWh)</label>
+          <input type="number" id="energyReading" placeholder="e.g. 45230.5 (leave blank if not available)" min="0" step="0.01">
+        </div>
+        <div style="margin-top:8px">
+          <label>Remarks (Optional)</label>
+          <textarea id="energyRemarks" placeholder="Any observations about the meter..." rows="2"></textarea>
         </div>
       </div>
     </div>
@@ -170,7 +177,7 @@
 // CONFIG
 // ============================================================
 const _urlParams = new URLSearchParams(window.location.search);
-const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbwPxLXV19MRHCMpdACYd527DrjgHKKNDZON4LEJlT_lIk3QKlsU9_UVqx2Nt7fDV6St0A/exec';
+const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbytCdVhxxBlXYETRPbRxv4GJJWh5KdSgInEIzC4joQJm3LhD61MbR3XxYzl0LXezivAtQ/exec';
 
 // ============================================================
 // EQUIPMENT DEFINITIONS
@@ -346,10 +353,11 @@ function buildEquipmentList() {
           ${eq.priority === 'critical' ? '<span style="color:var(--danger);font-size:11px;font-weight:700">★ CRITICAL</span>' : ''}
         </div>
       </div>
-      <div class="status-btns">
+      <div class="status-btns" style="flex-wrap:wrap">
         <button class="status-btn" onclick="setStatus(${eq.id},'Working',this)" data-s="w">✓ Working</button>
         <button class="status-btn" onclick="setStatus(${eq.id},'Not Working',this)" data-s="nw">✕ Not Working</button>
         <button class="status-btn" onclick="setStatus(${eq.id},'Other',this)" data-s="o">◎ Other</button>
+        <button class="status-btn" onclick="setStatus(${eq.id},'Not Available',this)" data-s="na">⊘ Not Available</button>
       </div>
       <div class="equip-remarks" id="remarks-${eq.id}">
         <textarea id="remarkText-${eq.id}" placeholder="Describe the issue or status..." rows="2"></textarea>
@@ -384,6 +392,9 @@ function setStatus(id, status, btn) {
     remarksEl.classList.remove('show');
   }
 
+  // Handle Not Available class
+  if (status === 'Not Available') btn.classList.add('active-na');
+
   updateSummary();
 }
 
@@ -392,11 +403,12 @@ function updateSummary() {
   const w = vals.filter(v => v === 'Working').length;
   const nw = vals.filter(v => v === 'Not Working').length;
   const o = vals.filter(v => v === 'Other').length;
+  const na = vals.filter(v => v === 'Not Available').length;
   const pending = EQUIPMENT.length - vals.length;
 
   document.getElementById('sumOk').textContent = `✓ ${w} Working`;
   document.getElementById('sumBad').textContent = `✕ ${nw} Not Working`;
-  document.getElementById('sumOther').textContent = `◎ ${o} Other`;
+  document.getElementById('sumOther').textContent = `◎ ${o + na} Other/NA`;
   document.getElementById('sumPending').textContent = `⏳ ${pending} Pending`;
 
   const pct = Math.round((vals.length / EQUIPMENT.length) * 100);
@@ -404,14 +416,20 @@ function updateSummary() {
   fill.style.width = pct + '%';
   fill.style.background = nw > 0 ? 'var(--danger)' : 'var(--accent)';
 
-  // Enable submit when ALL equipment have status AND energy reading is filled
-  const energyOk = document.getElementById('energyReading').value.trim() !== '';
-  document.getElementById('btnSubmit').disabled = vals.length < EQUIPMENT.length || !energyOk;
-  document.getElementById('energyWarning').classList.toggle('hidden', energyOk);
+  // Enable submit when ALL equipment have status (energy is optional)
+  document.getElementById('btnSubmit').disabled = vals.length < EQUIPMENT.length;
 }
 
-function checkEnergyFilled() {
-  updateSummary();
+
+
+// Housekeeping
+window._housekeepingStatus = '';
+function setHousekeeping(status, btn) {
+  window._housekeepingStatus = status;
+  btn.parentElement.querySelectorAll('.status-btn').forEach(b => b.className = 'status-btn');
+  if (status === 'Ok') btn.classList.add('active-w');
+  else btn.classList.add('active-nw');
+  document.getElementById('hkRemarks').classList.toggle('show', status === 'Not Ok');
 }
 
 // ============================================================
@@ -463,8 +481,9 @@ async function submitAll() {
       location: location,
       data: JSON.stringify(items),
       energyReading: gv('energyReading'),
-      meterNumber: gv('meterNumber'),
       energyRemarks: gv('energyRemarks'),
+      housekeeping: window._housekeepingStatus || '',
+      housekeepingRemarks: gv('hkRemarkText'),
       deviceInfo: navigator.userAgent.substring(0, 80)
     };
 
@@ -503,6 +522,7 @@ async function submitAll() {
         'Working': w + '/' + EQUIPMENT.length,
         'Not Working': nw,
         'Energy Reading': gv('energyReading') ? gv('energyReading') + ' kWh' : 'Not entered',
+        'Housekeeping': window._housekeepingStatus || 'Not set',
         'Time': new Date().toLocaleTimeString(),
         'Date': new Date().toLocaleDateString()
       });
