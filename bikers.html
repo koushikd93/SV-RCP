@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Biker Attendance | ERPL HSE</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+  :root {
+    --bg: #EEF2F7; --surface: #FFFFFF; --surface2: #F7F9FC; --border: #D5DDE8;
+    --accent: #F26722; --accent2: #1B3C73; --danger: #DC2626; --warn: #F59E0B;
+    --purple: #8b5cf6; --text: #1a1a2e; --text2: #5a6377; --success: #16A34A;
+    --biker: #0891B2; --biker-dim: rgba(8,145,178,0.12);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+  .container { max-width:640px; margin:0 auto; padding:16px; min-height:100vh; }
+
+  .header { text-align:center; padding:16px 0 8px; }
+  .header .logo { font-family:'Space Mono',monospace; font-size:14px; color:var(--biker); letter-spacing:4px; text-transform:uppercase; margin-bottom:4px; }
+  .header h1 { font-size:20px; font-weight:700; background:linear-gradient(135deg,var(--biker),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .location-badge { display:inline-flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:6px 14px; margin-top:10px; font-size:13px; color:var(--text2); }
+  .timestamp-bar { text-align:center; font-family:'Space Mono',monospace; font-size:22px; color:var(--biker); padding:6px; letter-spacing:2px; }
+  .timestamp-bar .date { font-size:12px; color:var(--text2); letter-spacing:1px; margin-top:2px; }
+
+  .mode-toggle { display:flex; gap:8px; margin:16px 0; }
+  .mode-btn { flex:1; padding:12px; border:2px solid var(--border); border-radius:12px; background:var(--surface); color:var(--text2); font-size:14px; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; font-family:'DM Sans',sans-serif; }
+  .mode-btn.active { background:var(--biker); color:#fff; border-color:var(--biker); }
+  .mode-btn:hover { border-color:var(--biker); }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:16px; margin-bottom:12px; }
+  .card-title { font-size:15px; font-weight:600; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  .card-title .icon { width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; }
+
+  label { display:block; font-size:12px; color:var(--text2); margin-bottom:6px; font-weight:500; text-transform:uppercase; letter-spacing:1px; }
+  label .req { color:var(--danger); }
+  select,input,textarea { width:100%; padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:14px; font-family:'DM Sans',sans-serif; outline:none; transition:border-color .2s; }
+  select:focus,input:focus { border-color:var(--biker); }
+
+  .step-bar { display:flex; justify-content:center; gap:6px; margin:10px 0 14px; }
+  .step-dot { width:8px; height:8px; border-radius:50%; background:var(--border); transition:all .3s; }
+  .step-dot.active { background:var(--biker); width:20px; border-radius:4px; }
+  .step-dot.done { background:var(--success); }
+
+  .btn { width:100%; padding:14px; border:none; border-radius:12px; font-size:15px; font-weight:600; font-family:'DM Sans',sans-serif; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .btn-primary { background:linear-gradient(135deg,var(--biker),var(--accent2)); color:#fff; }
+  .btn-primary:hover { transform:translateY(-1px); box-shadow:0 6px 20px rgba(8,145,178,.3); }
+  .btn-primary:disabled { opacity:.4; cursor:not-allowed; transform:none; box-shadow:none; }
+  .btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+  .btn-danger { background:linear-gradient(135deg,var(--danger),#991b1b); color:#fff; }
+
+  .gps-status { padding:12px; border-radius:12px; margin:10px 0; font-size:14px; text-align:center; }
+  .gps-ok { background:rgba(22,163,74,.1); border:1px solid var(--success); color:var(--success); }
+  .gps-fail { background:rgba(220,38,38,.1); border:1px solid var(--danger); color:var(--danger); }
+  .gps-loading { background:var(--surface2); border:1px solid var(--border); color:var(--text2); }
+
+  #videoContainer { position:relative; width:100%; max-width:400px; margin:0 auto; border-radius:14px; overflow:hidden; background:#000; }
+  #video, #overlay { width:100%; display:block; border-radius:14px; }
+  #overlay { position:absolute; top:0; left:0; }
+  .face-status { text-align:center; padding:8px; font-size:13px; font-weight:600; margin-top:8px; }
+
+  .km-input { position:relative; }
+  .km-input input { font-size:24px; font-weight:700; text-align:center; font-family:'Space Mono',monospace; letter-spacing:2px; padding:16px; }
+  .km-unit { position:absolute; right:12px; top:50%; transform:translateY(-50%); font-size:12px; color:var(--text2); font-weight:600; }
+
+  .info-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border); font-size:14px; }
+  .info-row:last-child { border-bottom:none; }
+  .info-label { color:var(--text2); }
+  .info-value { font-weight:600; }
+
+  .result-card { text-align:center; padding:40px 20px; }
+  .result-icon { width:80px; height:80px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:36px; }
+  .result-icon.success { background:rgba(8,145,178,.15); }
+  .result-icon.error { background:rgba(220,38,38,.15); }
+
+  .loading-overlay { position:fixed; inset:0; background:rgba(238,242,247,.9); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; gap:16px; font-size:14px; color:var(--text2); }
+  .loading-spinner { width:40px; height:40px; border:3px solid var(--border); border-top-color:var(--biker); border-radius:50%; animation:spin .7s linear infinite; display:inline-block; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .hidden { display:none!important; }
+
+  .active-duty-card { background:linear-gradient(135deg,rgba(8,145,178,.08),rgba(27,60,115,.08)); border:2px solid var(--biker); border-radius:16px; padding:16px; margin-bottom:12px; }
+  .active-duty-card .duty-label { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--biker); font-weight:700; margin-bottom:8px; }
+  .pulse-dot { width:8px; height:8px; border-radius:50%; background:var(--success); display:inline-block; animation:pulse 1.5s infinite; margin-right:6px; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+</style>
+</head>
+<body>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div>Loading Biker Module...</div>
+</div>
+
+<div class="container">
+  <div class="header">
+    <div class="logo">● ERPL HSE</div>
+    <h1>🏍️ Biker Attendance & KM Log</h1>
+    <div class="location-badge" id="statusBadge">
+      <span id="bikerStatusText">Select Mode</span>
+    </div>
+  </div>
+
+  <div class="timestamp-bar">
+    <div id="liveTime">--:--:--</div>
+    <div class="date" id="liveDate">Loading...</div>
+  </div>
+
+  <!-- MODE SELECTION -->
+  <div id="modeSelect">
+    <div class="mode-toggle">
+      <button class="mode-btn" onclick="selectMode('start')" id="modeStart">🟢 Start Duty</button>
+      <button class="mode-btn" onclick="selectMode('end')" id="modeEnd">🔴 End Duty</button>
+    </div>
+  </div>
+
+  <!-- ========== START DUTY FLOW ========== -->
+  <div id="startFlow" class="hidden">
+    <div class="step-bar" id="startStepBar">
+      <div class="step-dot active"></div>
+      <div class="step-dot"></div>
+      <div class="step-dot"></div>
+      <div class="step-dot"></div>
+    </div>
+
+    <!-- Step 1: Biker + Shift + Location -->
+    <div id="startStep1">
+      <div class="card">
+        <div class="card-title"><div class="icon" style="background:var(--biker-dim)">👤</div> Biker Details</div>
+        <div style="margin-bottom:12px">
+          <label>Biker Name <span class="req">*</span></label>
+          <select id="bikerName" onchange="onBikerSelect()"><option value="">-- Select Biker --</option></select>
+        </div>
+        <div style="margin-bottom:12px">
+          <label>Shift <span class="req">*</span></label>
+          <select id="bikerShift">
+            <option value="">-- Select Shift --</option>
+            <option value="A">A Shift</option>
+            <option value="B">B Shift</option>
+            <option value="A+B">A+B (Double Shift)</option>
+            <option value="General">General</option>
+          </select>
+        </div>
+        <div style="margin-bottom:12px">
+          <label>Start Location <span class="req">*</span></label>
+          <select id="startLocation" onchange="onStartLocChange()"><option value="">-- Select Location --</option></select>
+        </div>
+        <button class="btn btn-primary" id="btnStartStep1" disabled onclick="startGPSCheck()">Verify GPS Location →</button>
+      </div>
+    </div>
+
+    <!-- Step 2: GPS Check -->
+    <div id="startStep2" class="hidden">
+      <div class="card">
+        <div class="card-title"><div class="icon" style="background:var(--biker-dim)">📍</div> GPS Location Verification</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Your device GPS must be within <strong>800 meters</strong> of the selected location.</p>
+        <div class="gps-status gps-loading" id="startGpsStatus">
+          <div class="loading-spinner" style="width:20px;height:20px;border-width:2px;display:inline-block;margin-right:8px;vertical-align:middle"></div>
+          Fetching GPS location...
+        </div>
+        <div id="startGpsDetails" class="hidden" style="margin-top:12px">
+          <div class="info-row"><span class="info-label">Your Position</span><span class="info-value" id="startYourPos">--</span></div>
+          <div class="info-row"><span class="info-label">Office Location</span><span class="info-value" id="startOfficePos">--</span></div>
+          <div class="info-row"><span class="info-label">Distance</span><span class="info-value" id="startDistance">--</span></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-secondary" onclick="startGoStep(1)" style="flex:1">← Back</button>
+          <button class="btn btn-primary" id="btnStartStep2" disabled onclick="startGoStep(3)" style="flex:2">Proceed to Face Scan →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Face Scan -->
+    <div id="startStep3" class="hidden">
+      <div class="card">
+        <div class="card-title"><div class="icon" style="background:var(--biker-dim)">📸</div> Face Verification</div>
+        <div id="videoContainer">
+          <video id="video" autoplay playsinline muted></video>
+          <canvas id="overlay"></canvas>
+        </div>
+        <div class="face-status" id="faceStatus" style="color:var(--text2)">Initializing camera...</div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-secondary" onclick="startGoStep(2)" style="flex:1">← Back</button>
+          <button class="btn btn-primary" id="btnCaptureFace" disabled onclick="captureFace()">📸 Capture & Verify</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: KM Reading -->
+    <div id="startStep4" class="hidden">
+      <div class="card">
+        <div class="card-title"><div class="icon" style="background:var(--biker-dim)">🔢</div> Start Odometer Reading</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Enter the current odometer reading of your bike before starting duty.</p>
+        <div class="km-input">
+          <input type="number" id="startKmReading" placeholder="0000" min="0" step="0.1" oninput="checkStartKM()">
+          <span class="km-unit">KM</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-secondary" onclick="startGoStep(3)" style="flex:1">← Back</button>
+          <button class="btn btn-primary" id="btnStartSubmit" disabled onclick="submitStartDuty()">✓ Start Duty</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== END DUTY FLOW ========== -->
+  <div id="endFlow" class="hidden">
+    <div class="step-bar" id="endStepBar">
+      <div class="step-dot active"></div>
+      <div class="step-dot"></div>
+      <div class="step-dot"></div>
+    </div>
+
+    <!-- Step 1: Select Biker with Active Duty -->
+    <div id="endStep1">
+      <div class="card">
+        <div class="card-title"><div class="icon" style="background:rgba(220,38,38,.12)">👤</div> End Duty</div>
+        <div style="margin-bottom:12px">
+          <label>Biker Name <span class="req">*</span></label>
+          <select id="endBikerName" onchange="onEndBikerSelect()"><option value="">-- Select Active Biker --</option></select>
+        </div>
+        <div id="activeDutyInfo" class="hidden"></div>
+        <div style="margin-bottom:12px">
+          <label>End Location <span class="req">*</span></label>
+          <select id="endLocation" onchange="onEndLocChange()"><option value="">-- Select Location --</option></select>
+        </div>
+        <button class="btn btn-danger" id="btnEndStep1" disabled onclick="endGPSCheck()">Verify GPS & End Location →</button>
+      </div>
+    </div>
+
+    <!-- Step 2: GPS Check for End -->
+    <div id="endStep2" class="hidden">
+      <div class="card">
+        <div class="card-title"><div class="icon" style="background:rgba(220,38,38,.12)">📍</div> GPS Verification — End Location</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Your GPS must be within <strong>800 meters</strong> of the end location.</p>
+        <div class="gps-status gps-loading" id="endGpsStatus">
+          <div class="loading-spinner" style="width:20px;height:20px;border-width:2px;display:inline-block;margin-right:8px;vertical-align:middle"></div>
+          Fetching GPS location...
+        </div>
+        <div id="endGpsDetails" class="hidden" style="margin-top:12px">
+          <div class="info-row"><span class="info-label">Your Position</span><span class="info-value" id="endYourPos">--</span></div>
+          <div class="info-row"><span class="info-label">Office Location</span><span class="info-value" id="endOfficePos">--</span></div>
+          <div class="info-row"><span class="info-label">Distance</span><span class="info-value" id="endDistance">--</span></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-secondary" onclick="endGoStep(1)" style="flex:1">← Back</button>
+          <button class="btn btn-primary" id="btnEndStep2" disabled onclick="endGoStep(3)" style="flex:2">Enter End KM Reading →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: End KM Reading + Submit -->
+    <div id="endStep3" class="hidden">
+      <div class="card">
+        <div class="card-title"><div class="icon" style="background:rgba(220,38,38,.12)">🔢</div> Closing Odometer Reading</div>
+        <div id="endKmInfo" style="margin-bottom:12px;padding:10px;background:var(--surface2);border-radius:10px;font-size:13px;border:1px solid var(--border)"></div>
+        <div class="km-input">
+          <input type="number" id="endKmReading" placeholder="0000" min="0" step="0.1" oninput="checkEndKM()">
+          <span class="km-unit">KM</span>
+        </div>
+        <div id="kmDiff" class="hidden" style="margin-top:8px;text-align:center;font-size:16px;font-weight:700;color:var(--biker)"></div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-secondary" onclick="endGoStep(2)" style="flex:1">← Back</button>
+          <button class="btn btn-danger" id="btnEndSubmit" disabled onclick="submitEndDuty()">🏁 End Duty & Submit</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULT -->
+  <div class="card hidden" id="resultCard">
+    <div class="result-card" id="resultContent"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/dist/face-api.js"></script>
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const _urlParams = new URLSearchParams(window.location.search);
+const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbwPxLXV19MRHCMpdACYd527DrjgHKKNDZON4LEJlT_lIk3QKlsU9_UVqx2Nt7fDV6St0A/exec';
+const GPS_MAX_DISTANCE = 800; // meters
+const FACE_MATCH_SCORE_MIN = 40;
+
+let locations = [];
+let bikers = [];
+let activeDuties = [];
+let currentGPS = null;
+let selectedLocCoords = null;
+let faceData = [];
+let stream = null;
+let capturedImage = null;
+let faceMatchScore = -1;
+let currentActiveDuty = null;
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('load', async () => {
+  updateClock(); setInterval(updateClock, 1000);
+  try {
+    await Promise.all([loadLocations(), loadBikers(), loadActiveDuties()]);
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  } catch(e) {
+    document.getElementById('loadingOverlay').innerHTML = `<div style="color:var(--danger);text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:16px">⚠️</div><h3>Load Error</h3><p style="margin-top:8px;font-size:13px">${e.message}</p><button class="btn btn-primary" style="margin-top:16px;width:auto;padding:12px 24px" onclick="location.reload()">Retry</button></div>`;
+  }
+});
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('liveTime').textContent = now.toLocaleTimeString('en-US',{hour12:false});
+  document.getElementById('liveDate').textContent = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'short',day:'numeric'});
+}
+
+async function apiGet(params) {
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 15000);
+  const res = await fetch(url, { redirect:'follow', signal:controller.signal });
+  clearTimeout(tid);
+  return JSON.parse(await res.text());
+}
+
+async function loadLocations() {
+  const r = await apiGet({ action:'getLocations' });
+  if (r.success && r.locations) {
+    locations = r.locations;
+    const startSel = document.getElementById('startLocation');
+    const endSel = document.getElementById('endLocation');
+    locations.forEach(l => {
+      const n = l.LocationName || l;
+      startSel.innerHTML += `<option value="${n}">${n}</option>`;
+      endSel.innerHTML += `<option value="${n}">${n}</option>`;
+    });
+  }
+}
+
+async function loadBikers() {
+  const r = await apiGet({ action:'getBikers' });
+  if (r.success && r.bikers) {
+    bikers = r.bikers;
+    const sel = document.getElementById('bikerName');
+    bikers.forEach(b => {
+      sel.innerHTML += `<option value="${b.EmployeeID}" data-name="${b.Name}">${b.Name} (${b.EmployeeID})</option>`;
+    });
+  }
+}
+
+async function loadActiveDuties() {
+  const r = await apiGet({ action:'getBikerActiveDuties' });
+  if (r.success && r.records) {
+    activeDuties = r.records;
+    const sel = document.getElementById('endBikerName');
+    sel.innerHTML = '<option value="">-- Select Active Biker --</option>';
+    activeDuties.forEach(d => {
+      sel.innerHTML += `<option value="${d.RecordID}">${d.BikerName} — ${d.StartLocation} (${d.Shift})</option>`;
+    });
+  }
+}
+
+// ============================================================
+// MODE SELECTION
+// ============================================================
+function selectMode(mode) {
+  document.getElementById('modeStart').classList.toggle('active', mode === 'start');
+  document.getElementById('modeEnd').classList.toggle('active', mode === 'end');
+  document.getElementById('startFlow').classList.toggle('hidden', mode !== 'start');
+  document.getElementById('endFlow').classList.toggle('hidden', mode !== 'end');
+  document.getElementById('bikerStatusText').textContent = mode === 'start' ? '🟢 Starting Duty' : '🔴 Ending Duty';
+}
+
+// ============================================================
+// START DUTY — Step Navigation
+// ============================================================
+function onBikerSelect() { checkStartStep1(); }
+function onStartLocChange() { checkStartStep1(); }
+
+function checkStartStep1() {
+  const ok = document.getElementById('bikerName').value && document.getElementById('bikerShift').value && document.getElementById('startLocation').value;
+  document.getElementById('btnStartStep1').disabled = !ok;
+}
+document.getElementById('bikerShift').addEventListener('change', checkStartStep1);
+
+function startGoStep(step) {
+  for (let i = 1; i <= 4; i++) document.getElementById('startStep' + i).classList.toggle('hidden', i !== step);
+  // Update step dots
+  const dots = document.querySelectorAll('#startStepBar .step-dot');
+  dots.forEach((d, idx) => {
+    d.className = 'step-dot';
+    if (idx < step - 1) d.classList.add('done');
+    if (idx === step - 1) d.classList.add('active');
+  });
+  if (step === 3) initCamera();
+  if (step !== 3) stopCamera();
+}
+
+// ============================================================
+// GPS VERIFICATION
+// ============================================================
+function getLocationCoords(locName) {
+  const loc = locations.find(l => (l.LocationName || l) === locName);
+  if (loc && loc.Latitude && loc.Longitude) {
+    return { lat: parseFloat(loc.Latitude), lng: parseFloat(loc.Longitude) };
+  }
+  return null;
+}
+
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function startGPSCheck() {
+  startGoStep(2);
+  const locName = document.getElementById('startLocation').value;
+  selectedLocCoords = getLocationCoords(locName);
+  performGPSCheck('start', selectedLocCoords);
+}
+
+function endGPSCheck() {
+  endGoStep(2);
+  const locName = document.getElementById('endLocation').value;
+  selectedLocCoords = getLocationCoords(locName);
+  performGPSCheck('end', selectedLocCoords);
+}
+
+function performGPSCheck(prefix, locCoords) {
+  const statusEl = document.getElementById(prefix + 'GpsStatus');
+  const detailsEl = document.getElementById(prefix + 'GpsDetails');
+  const btnNext = document.getElementById(prefix === 'start' ? 'btnStartStep2' : 'btnEndStep2');
+
+  statusEl.className = 'gps-status gps-loading';
+  statusEl.innerHTML = '<div class="loading-spinner" style="width:20px;height:20px;border-width:2px;display:inline-block;margin-right:8px;vertical-align:middle"></div> Fetching GPS location...';
+  detailsEl.classList.add('hidden');
+  btnNext.disabled = true;
+
+  if (!navigator.geolocation) {
+    statusEl.className = 'gps-status gps-fail';
+    statusEl.textContent = '❌ GPS not available on this device. Please enable location services.';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      currentGPS = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+      detailsEl.classList.remove('hidden');
+      document.getElementById(prefix + 'YourPos').textContent = currentGPS.lat.toFixed(5) + ', ' + currentGPS.lng.toFixed(5);
+
+      if (!locCoords) {
+        statusEl.className = 'gps-status gps-fail';
+        statusEl.textContent = '⚠️ Location coordinates not set in system. Contact admin to add Lat/Lng for this location.';
+        document.getElementById(prefix + 'OfficePos').textContent = 'Not configured';
+        document.getElementById(prefix + 'Distance').textContent = '--';
+        return;
+      }
+
+      document.getElementById(prefix + 'OfficePos').textContent = locCoords.lat.toFixed(5) + ', ' + locCoords.lng.toFixed(5);
+      const dist = haversineDistance(currentGPS.lat, currentGPS.lng, locCoords.lat, locCoords.lng);
+      document.getElementById(prefix + 'Distance').textContent = Math.round(dist) + ' m';
+
+      if (dist <= GPS_MAX_DISTANCE) {
+        statusEl.className = 'gps-status gps-ok';
+        statusEl.textContent = '✅ GPS Verified — You are ' + Math.round(dist) + 'm from location (within 800m limit)';
+        btnNext.disabled = false;
+      } else {
+        statusEl.className = 'gps-status gps-fail';
+        statusEl.textContent = '❌ Too far — ' + Math.round(dist) + 'm away. Must be within 800m. Move closer and retry.';
+        // Add retry button
+        statusEl.innerHTML += '<br><button class="btn btn-secondary" style="margin-top:10px;width:auto;padding:8px 20px;display:inline-flex" onclick="performGPSCheck(\'' + prefix + '\', selectedLocCoords)">🔄 Retry GPS</button>';
+      }
+    },
+    err => {
+      statusEl.className = 'gps-status gps-fail';
+      let msg = '❌ GPS Error: ';
+      if (err.code === 1) msg += 'Location permission denied. Please allow GPS access in device settings.';
+      else if (err.code === 2) msg += 'GPS unavailable. Please turn on location services.';
+      else msg += 'Timeout. Please try again.';
+      statusEl.innerHTML = msg + '<br><button class="btn btn-secondary" style="margin-top:10px;width:auto;padding:8px 20px;display:inline-flex" onclick="performGPSCheck(\'' + prefix + '\', selectedLocCoords)">🔄 Retry</button>';
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
+// ============================================================
+// FACE SCAN
+// ============================================================
+const MODEL_URLS = [
+  'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
+  'https://unpkg.com/@vladmandic/face-api@1.7.14/model'
+];
+let modelsLoaded = false;
+
+async function loadFaceModels() {
+  if (modelsLoaded) return;
+  for (const url of MODEL_URLS) {
+    try {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(url),
+        faceapi.nets.faceLandmark68TinyNet.loadFromUri(url),
+        faceapi.nets.faceRecognitionNet.loadFromUri(url)
+      ]);
+      modelsLoaded = true;
+      return;
+    } catch(e) { console.warn('Model load failed from', url); }
+  }
+  throw new Error('Failed to load face models');
+}
+
+async function loadFaceData() {
+  const locName = document.getElementById('startLocation').value;
+  const r = await apiGet({ action: 'getAllFaceData', location: locName });
+  if (r.success) faceData = r.faceData || [];
+}
+
+async function initCamera() {
+  try {
+    document.getElementById('faceStatus').textContent = 'Loading models...';
+    await loadFaceModels();
+    await loadFaceData();
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:'user', width:{ ideal:640 }, height:{ ideal:480 } }
+    });
+    const video = document.getElementById('video');
+    video.srcObject = stream;
+    await video.play();
+    document.getElementById('faceStatus').textContent = 'Camera ready — Position your face and capture';
+    document.getElementById('faceStatus').style.color = 'var(--success)';
+    document.getElementById('btnCaptureFace').disabled = false;
+  } catch(e) {
+    document.getElementById('faceStatus').textContent = '❌ Camera error: ' + e.message;
+    document.getElementById('faceStatus').style.color = 'var(--danger)';
+  }
+}
+
+function stopCamera() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+}
+
+async function captureFace() {
+  const btn = document.getElementById('btnCaptureFace');
+  btn.disabled = true;
+  document.getElementById('faceStatus').textContent = 'Scanning face...';
+  document.getElementById('faceStatus').style.color = 'var(--text2)';
+
+  try {
+    const video = document.getElementById('video');
+    const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.4 });
+    const detection = await faceapi.detectSingleFace(video, options).withFaceLandmarks(true).withFaceDescriptor();
+
+    if (!detection) {
+      document.getElementById('faceStatus').textContent = '❌ No face detected. Try again.';
+      document.getElementById('faceStatus').style.color = 'var(--danger)';
+      btn.disabled = false;
+      return;
+    }
+
+    // Capture photo
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    capturedImage = canvas.toDataURL('image/jpeg', 0.7);
+
+    // Match against registered bikers
+    const bikerId = document.getElementById('bikerName').value;
+    const bikerFace = faceData.find(f => f.employeeId === bikerId);
+
+    if (!bikerFace || !bikerFace.faceDescriptor) {
+      faceMatchScore = -1;
+      document.getElementById('faceStatus').textContent = '⚠️ Face not registered for this biker. Proceeding with photo only.';
+      document.getElementById('faceStatus').style.color = 'var(--warn)';
+    } else {
+      const stored = new Float32Array(JSON.parse(bikerFace.faceDescriptor));
+      const dist = faceapi.euclideanDistance(detection.descriptor, stored);
+      faceMatchScore = Math.max(0, Math.round((1 - dist / 1.2) * 100));
+
+      if (faceMatchScore >= FACE_MATCH_SCORE_MIN) {
+        document.getElementById('faceStatus').textContent = '✅ Face Verified — Match: ' + faceMatchScore + '%';
+        document.getElementById('faceStatus').style.color = 'var(--success)';
+      } else {
+        document.getElementById('faceStatus').textContent = '❌ Face mismatch — Score: ' + faceMatchScore + '% (Min: ' + FACE_MATCH_SCORE_MIN + '%)';
+        document.getElementById('faceStatus').style.color = 'var(--danger)';
+        btn.disabled = false;
+        return;
+      }
+    }
+
+    stopCamera();
+    // Auto-proceed to KM step after 1 second
+    setTimeout(() => startGoStep(4), 1000);
+
+  } catch(e) {
+    document.getElementById('faceStatus').textContent = '❌ Error: ' + e.message;
+    document.getElementById('faceStatus').style.color = 'var(--danger)';
+    btn.disabled = false;
+  }
+}
+
+// ============================================================
+// KM READING
+// ============================================================
+function checkStartKM() {
+  const v = document.getElementById('startKmReading').value;
+  document.getElementById('btnStartSubmit').disabled = !v || parseFloat(v) < 0;
+}
+
+function checkEndKM() {
+  const v = document.getElementById('endKmReading').value;
+  const startKm = currentActiveDuty ? parseFloat(currentActiveDuty.StartKM) : 0;
+  const endKm = parseFloat(v) || 0;
+  const diffEl = document.getElementById('kmDiff');
+  if (v && endKm >= startKm) {
+    diffEl.classList.remove('hidden');
+    diffEl.textContent = '🏍️ Distance Covered: ' + (endKm - startKm).toFixed(1) + ' KM';
+    document.getElementById('btnEndSubmit').disabled = false;
+  } else if (v && endKm < startKm) {
+    diffEl.classList.remove('hidden');
+    diffEl.textContent = '⚠️ End KM cannot be less than Start KM (' + startKm + ')';
+    diffEl.style.color = 'var(--danger)';
+    document.getElementById('btnEndSubmit').disabled = true;
+  } else {
+    diffEl.classList.add('hidden');
+    document.getElementById('btnEndSubmit').disabled = true;
+  }
+}
+
+// ============================================================
+// END DUTY — Steps
+// ============================================================
+function onEndBikerSelect() {
+  const recordId = document.getElementById('endBikerName').value;
+  currentActiveDuty = activeDuties.find(d => d.RecordID === recordId);
+  const infoEl = document.getElementById('activeDutyInfo');
+
+  if (currentActiveDuty) {
+    infoEl.classList.remove('hidden');
+    infoEl.innerHTML = `<div class="active-duty-card">
+      <div class="duty-label"><span class="pulse-dot"></span> Active Duty</div>
+      <div class="info-row"><span class="info-label">Start Location</span><span class="info-value">${currentActiveDuty.StartLocation}</span></div>
+      <div class="info-row"><span class="info-label">Shift</span><span class="info-value">${currentActiveDuty.Shift}</span></div>
+      <div class="info-row"><span class="info-label">Start Time</span><span class="info-value">${currentActiveDuty.StartTime}</span></div>
+      <div class="info-row"><span class="info-label">Start KM</span><span class="info-value">${currentActiveDuty.StartKM} KM</span></div>
+    </div>`;
+  } else {
+    infoEl.classList.add('hidden');
+  }
+  checkEndStep1();
+}
+
+function onEndLocChange() { checkEndStep1(); }
+
+function checkEndStep1() {
+  const ok = document.getElementById('endBikerName').value && document.getElementById('endLocation').value;
+  document.getElementById('btnEndStep1').disabled = !ok;
+}
+
+function endGoStep(step) {
+  for (let i = 1; i <= 3; i++) document.getElementById('endStep' + i).classList.toggle('hidden', i !== step);
+  const dots = document.querySelectorAll('#endStepBar .step-dot');
+  dots.forEach((d, idx) => {
+    d.className = 'step-dot';
+    if (idx < step - 1) d.classList.add('done');
+    if (idx === step - 1) d.classList.add('active');
+  });
+  if (step === 3 && currentActiveDuty) {
+    document.getElementById('endKmInfo').innerHTML = `<strong>Start KM:</strong> ${currentActiveDuty.StartKM} KM &nbsp;|&nbsp; <strong>Start Location:</strong> ${currentActiveDuty.StartLocation}`;
+  }
+}
+
+// ============================================================
+// SUBMIT START DUTY
+// ============================================================
+async function submitStartDuty() {
+  const btn = document.getElementById('btnStartSubmit');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="loading-spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin-right:8px"></div> Submitting...';
+
+  try {
+    const bikerSel = document.getElementById('bikerName');
+    const bikerName = bikerSel.options[bikerSel.selectedIndex].getAttribute('data-name');
+    const payload = {
+      action: 'submitBikerStart',
+      bikerId: bikerSel.value,
+      bikerName: bikerName,
+      shift: document.getElementById('bikerShift').value,
+      startLocation: document.getElementById('startLocation').value,
+      startKM: document.getElementById('startKmReading').value,
+      gpsLat: currentGPS ? currentGPS.lat : '',
+      gpsLng: currentGPS ? currentGPS.lng : '',
+      faceMatchScore: faceMatchScore,
+      deviceInfo: navigator.userAgent.substring(0, 80)
+    };
+
+    const r = await apiGet(payload);
+
+    if (r.success) {
+      showResult(true, 'Duty Started! 🏍️', `${bikerName} — ${payload.shift} Shift`, {
+        'Location': payload.startLocation,
+        'Start KM': payload.startKM + ' KM',
+        'Face Match': faceMatchScore > 0 ? faceMatchScore + '%' : 'Photo only',
+        'Time': new Date().toLocaleTimeString(),
+        'Record ID': r.recordId || '--'
+      });
+    } else {
+      showResult(false, 'Failed', r.error || 'Submission failed');
+    }
+  } catch(e) {
+    showResult(false, 'Error', e.message);
+  }
+}
+
+// ============================================================
+// SUBMIT END DUTY
+// ============================================================
+async function submitEndDuty() {
+  const btn = document.getElementById('btnEndSubmit');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="loading-spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin-right:8px"></div> Ending Duty...';
+
+  try {
+    const endKM = document.getElementById('endKmReading').value;
+    const startKM = currentActiveDuty ? parseFloat(currentActiveDuty.StartKM) : 0;
+    const distCovered = (parseFloat(endKM) - startKM).toFixed(1);
+
+    const payload = {
+      action: 'submitBikerEnd',
+      recordId: currentActiveDuty.RecordID,
+      endLocation: document.getElementById('endLocation').value,
+      endKM: endKM,
+      gpsLat: currentGPS ? currentGPS.lat : '',
+      gpsLng: currentGPS ? currentGPS.lng : '',
+      deviceInfo: navigator.userAgent.substring(0, 80)
+    };
+
+    const r = await apiGet(payload);
+
+    if (r.success) {
+      showResult(true, 'Duty Ended! 🏁', currentActiveDuty.BikerName + ' — Duty Complete', {
+        'Start Location': currentActiveDuty.StartLocation,
+        'End Location': payload.endLocation,
+        'Start KM': startKM + ' KM',
+        'End KM': endKM + ' KM',
+        'Distance Covered': distCovered + ' KM',
+        'Shift': currentActiveDuty.Shift,
+        'End Time': new Date().toLocaleTimeString()
+      });
+    } else {
+      showResult(false, 'Failed', r.error || 'Submission failed');
+    }
+  } catch(e) {
+    showResult(false, 'Error', e.message);
+  }
+}
+
+// ============================================================
+// RESULT
+// ============================================================
+function showResult(success, title, message, details) {
+  document.getElementById('startFlow').classList.add('hidden');
+  document.getElementById('endFlow').classList.add('hidden');
+  document.getElementById('modeSelect').classList.add('hidden');
+  document.getElementById('resultCard').classList.remove('hidden');
+  stopCamera();
+
+  let html = `<div class="result-icon ${success ? 'success' : 'error'}">${success ? '✓' : '✕'}</div>
+    <h2 style="color:${success ? 'var(--biker)' : 'var(--danger)'}; margin-bottom:4px">${title}</h2>
+    <p style="color:var(--text2);margin-bottom:16px">${message}</p>`;
+  if (details) {
+    html += '<div style="text-align:left">';
+    for (const [k,v] of Object.entries(details)) {
+      html += `<div class="info-row"><span class="info-label">${k}</span><span class="info-value">${v}</span></div>`;
+    }
+    html += '</div>';
+  }
+  html += `<button class="btn btn-secondary" style="margin-top:20px" onclick="location.reload()">Done</button>`;
+  document.getElementById('resultContent').innerHTML = html;
+}
+</script>
+</body>
+</html>
