@@ -813,7 +813,7 @@
         </div>
         <div class="table-scroll" style="max-height:600px">
           <table class="att-table">
-            <thead><tr><th>Date</th><th>Location</th><th>Equipment</th><th>Status</th><th>Remarks</th><th>DG/MOV Details</th></tr></thead>
+            <thead><tr><th>Date</th><th>Location</th><th>Equipment</th><th>Status</th><th>Remarks</th><th>DG/MOV/Solar Details</th></tr></thead>
             <tbody id="equipStatusTable"></tbody>
           </table>
         </div>
@@ -2406,6 +2406,9 @@ async function filterEquipmentStatus() {
             if (ex.mov) {
               if (ex.mov.testDate) details = 'Test: ' + ex.mov.testDate;
             }
+            if (ex.solar) {
+              if (ex.solar.totalKwh) details = 'Solar kWh: ' + ex.solar.totalKwh;
+            }
           } catch(e) {}
         }
         return `<tr>
@@ -2536,11 +2539,12 @@ function exportEquipmentCSV() {
   }
 
   const headers = [
-    'Date','Location','Equipment','Status','Remarks','Details'
+    'Date','Location','Equipment','Status','Remarks','DG/MOV Details','Solar kWh'
   ];
 
   const rows = currentEquipmentRecords.map(r => {
     let details = '';
+    let solarKwh = '';
     if (r.ExtraData) {
       try {
         const ex = typeof r.ExtraData === 'string' ? JSON.parse(r.ExtraData) : r.ExtraData;
@@ -2556,6 +2560,9 @@ function exportEquipmentCSV() {
         if (ex.mov && ex.mov.testDate) {
           details = 'Test:'+ex.mov.testDate;
         }
+        if (ex.solar && ex.solar.totalKwh) {
+          solarKwh = ex.solar.totalKwh;
+        }
       } catch(e){}
     }
 
@@ -2565,7 +2572,8 @@ function exportEquipmentCSV() {
       r.Equipment,
       r.Status,
       r.Remarks,
-      details
+      details,
+      solarKwh
     ];
   });
 
