@@ -768,7 +768,7 @@
         </div>
         <div class="table-scroll" style="max-height:600px">
           <table class="att-table">
-            <thead><tr><th>Date</th><th>Visitor</th><th>Phone</th><th>Company</th><th>Host</th><th>Purpose</th><th>Location</th><th>In</th><th>Out</th><th>Auth By</th><th>Status</th></tr></thead>
+            <thead><tr><th>Date</th><th>Visitor</th><th>Phone</th><th>Company</th><th>Activity</th><th>Purpose</th><th>Work Permit</th><th>Location</th><th>In</th><th>Out</th><th>Auth By</th><th>Status</th></tr></thead>
             <tbody id="visitorsTable"></tbody>
           </table>
         </div>
@@ -784,7 +784,7 @@
         </div>
         <div class="table-scroll" style="max-height:600px">
           <table class="att-table">
-            <thead><tr><th>Visitor ID</th><th>Name</th><th>Phone</th><th>Company</th><th>Host</th><th>Purpose</th><th>Location</th><th>Check-In</th><th>Authorized By</th></tr></thead>
+            <thead><tr><th>Visitor ID</th><th>Name</th><th>Phone</th><th>Company</th><th>Activity</th><th>Purpose</th><th>Work Permit</th><th>Location</th><th>Check-In</th><th>Authorized By</th></tr></thead>
             <tbody id="activeVisitorsTable"></tbody>
           </table>
         </div>
@@ -995,7 +995,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbykyKmAgg_INu32IU_ZqxWKaKRfskdvk0FOh3RbILspfkJJ6A9w69lVYd29V3dfZLY1LQ/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbzHX8hjF4KIIrGPizvubkassyQKN4MYnAq9SAAHutroDOgRxdmu68_GzOU9WRFZCxpDSQ/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -2206,15 +2206,16 @@ async function filterVisitors() {
           <td>${r.Company || '-'}</td>
           <td>${r.Host || '-'}</td>
           <td>${r.Purpose || '-'}</td>
+          <td>${r.WorkPermit || '-'}</td>
           <td>${r.Location || '-'}</td>
           <td style="font-family:'JetBrains Mono';font-size:12px">${r.CheckInTime || '-'}</td>
           <td style="font-family:'JetBrains Mono';font-size:12px">${r.CheckOutTime || '-'}</td>
           <td>${r.AuthorizedByName || '-'}</td>
           <td><span class="status-pill ${statusClass}">${r.Status}</span></td>
         </tr>`;
-      }).join('') || '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text3)">No visitor records found</td></tr>';
+      }).join('') || '<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--text3)">No visitor records found</td></tr>';
     } else {
-      tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text3)">Error: ' + (data.error || 'Unknown') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--text3)">Error: ' + (data.error || 'Unknown') + '</td></tr>';
     }
   } catch (err) {
     console.warn('[Visitors] Filter error:', err.message);
@@ -2252,16 +2253,17 @@ async function refreshActiveVisitors() {
         <td>${v.Company || '-'}</td>
         <td>${v.Host || '-'}</td>
         <td>${v.Purpose || '-'}</td>
+        <td>${v.WorkPermit || '-'}</td>
         <td>${v.Location || '-'}</td>
         <td style="font-family:'JetBrains Mono';font-size:12px">${v.CheckInTime || '-'}</td>
         <td>${v.AuthorizedByName || '-'}</td>
-      </tr>`).join('') || '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)">No active visitors</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text3)">No active visitors</td></tr>';
     } else {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)">Error: ' + (data.error || 'Unknown') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text3)">Error: ' + (data.error || 'Unknown') + '</td></tr>';
     }
   } catch (err) {
     console.warn('[ActiveVisitors] Error:', err.message);
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)">Failed to load: ' + err.message + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text3)">Failed to load: ' + err.message + '</td></tr>';
   }
 }
 
@@ -2499,8 +2501,8 @@ function exportVisitorsCSV() {
   }
 
   const headers = [
-    'Date','Visitor Name','Phone','Company','Host',
-    'Purpose','Location','CheckIn','CheckOut','Authorized By','Status'
+    'Date','Visitor Name','Phone','Company','Activity Details',
+    'Purpose','Work Permit','Location','CheckIn','CheckOut','Authorized By','Status'
   ];
 
   const rows = currentVisitorRecords.map(r => [
@@ -2510,6 +2512,7 @@ function exportVisitorsCSV() {
     r.Company,
     r.Host,
     r.Purpose,
+    r.WorkPermit || '',
     r.Location,
     r.CheckInTime,
     r.CheckOutTime,
