@@ -643,23 +643,28 @@
             <input type="text" id="visitorCompany" placeholder="Visitor's company">
           </div>
           <div class="form-group">
-            <label>Whom to Meet</label>
-            <input type="text" id="visitorHost" placeholder="Person to meet">
+            <label>Activity Details</label>
+            <input type="text" id="visitorHost" placeholder="Describe activity details">
           </div>
         </div>
         <div class="form-group">
           <label>Purpose of Visit *</label>
           <select id="visitorPurpose">
             <option value="">-- Select Purpose --</option>
-            <option value="Meeting">Meeting</option>
-            <option value="Delivery">Delivery</option>
-            <option value="Interview">Interview</option>
-            <option value="Maintenance">Maintenance / Repair</option>
-            <option value="Inspection">Inspection / Audit</option>
-            <option value="Vendor">Vendor Visit</option>
-            <option value="Client">Client Visit</option>
-            <option value="Personal">Personal</option>
+            <option value="DGR Guard">DGR Guard</option>
+            <option value="Biker Guard">Biker Guard</option>
+            <option value="Night QRT Guard">Night QRT Guard</option>
+            <option value="Maintenance Activities">Maintenance Activities</option>
+            <option value="Inspection">Inspection</option>
+            <option value="Surprise Visit">Surprise Visit</option>
+            <option value="Audit">Audit</option>
             <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Associated Work Permit <span style="font-size:10px;color:var(--text2)">(Optional)</span></label>
+          <select id="visitorWorkPermit">
+            <option value="">-- No Work Permit --</option>
           </select>
         </div>
         <div class="form-group">
@@ -817,7 +822,7 @@
 // ============================================================
 // Check URL for custom API override: visitor.html?api=YOUR_NEW_DEPLOYMENT_URL
 const _urlParams = new URLSearchParams(window.location.search);
-const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbykyKmAgg_INu32IU_ZqxWKaKRfskdvk0FOh3RbILspfkJJ6A9w69lVYd29V3dfZLY1LQ/exec';
+const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbzHX8hjF4KIIrGPizvubkassyQKN4MYnAq9SAAHutroDOgRxdmu68_GzOU9WRFZCxpDSQ/exec';
 if (_urlParams.get('api')) console.log('[CONFIG] Using custom API URL from URL param:', API_URL);
 const MODEL_URLS = [
   'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
@@ -1129,6 +1134,20 @@ async function loadData() {
     });
   }
 
+  // Load active work permits for dropdown
+  try {
+    const wpResult = await apiGet({ action: 'getActiveWorkPermits' });
+    const wpSelect = document.getElementById('visitorWorkPermit');
+    if (wpResult.success && wpResult.permits && wpResult.permits.length > 0) {
+      wpResult.permits.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.PermitNumber || p.RecordID;
+        opt.textContent = (p.PermitNumber || p.RecordID) + ' — ' + (p.PermitType || '') + ' (' + (p.Location || '') + ')';
+        wpSelect.appendChild(opt);
+      });
+    }
+  } catch(e) { console.warn('Work permits load failed:', e.message); }
+
   // Load face descriptors for employee verification
   const faceResult = await apiGet({ action: 'getAllFaceData' });
   if (faceResult.success && faceResult.faceData) {
@@ -1409,12 +1428,14 @@ function prepareConfirmation() {
   const idNumber = document.getElementById('visitorIdNumber').value.trim();
 
   let summaryHTML = '';
+  const workPermit = document.getElementById('visitorWorkPermit').value;
   const fields = [
     ['Visitor Name', name],
     ['Phone', phone],
     ['Company', company || '-'],
     ['Purpose', purpose],
-    ['Whom to Meet', host || '-'],
+    ['Activity Details', host || '-'],
+    ['Work Permit', workPermit || 'None'],
     ['ID Type', idType],
     ['ID Number', idNumber || '-'],
     ['Location', getLocation()]
@@ -1497,6 +1518,7 @@ async function submitVisitorCheckIn() {
       visitorIdType: document.getElementById('visitorIdType').value,
       visitorIdNumber: document.getElementById('visitorIdNumber').value.trim(),
       visitorRemarks: document.getElementById('visitorRemarks').value.trim(),
+      visitorWorkPermit: document.getElementById('visitorWorkPermit').value || '',
       location: getLocation(),
       authorizedBy: selectedEmployee.EmployeeID,
       authorizedByName: selectedEmployee.Name,
@@ -1515,6 +1537,8 @@ async function submitVisitorCheckIn() {
         'Visitor': payload.visitorName,
         'Visitor ID': result.visitorId || 'Generated',
         'Purpose': payload.visitorPurpose,
+        'Activity Details': payload.visitorHost || '-',
+        'Work Permit': payload.visitorWorkPermit || 'None',
         'Location': payload.location,
         'Authorized By': payload.authorizedByName,
         'Auth Face Match': faceMatchScore + '%',
@@ -1564,7 +1588,7 @@ async function loadActiveVisitors() {
         <div class="visitor-detail">
           <div class="visitor-name">${v.Name}</div>
           <div class="visitor-meta">${v.Company || '-'} • ${v.Purpose}</div>
-          <div class="visitor-meta">Host: ${v.Host || '-'}</div>
+          <div class="visitor-meta">Activity: ${v.Host || '-'}</div>
         </div>
         <div style="text-align:right">
           <div class="visitor-time">IN: ${v.CheckInTime}</div>
@@ -1664,8 +1688,6 @@ function showResult(success, title, message, details = null) {
 </script>
 </body>
 </html>
-
-
 
 
 
