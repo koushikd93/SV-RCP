@@ -812,6 +812,20 @@ async function apiPost(data) {
     const r = await fetch(url, { redirect:'follow', signal:c.signal });
     clearTimeout(t); result = JSON.parse(await r.text());
   }
+  // Fallback: If GET returned "Invalid action" error, retry via POST (for actions only in doPost like markAttendance)
+  if (result && result.error && typeof result.error === 'string' && result.error.includes('Invalid action')) {
+    console.log('[apiPost] GET failed for action "'+data.action+'", retrying via POST...');
+    const c2 = new AbortController();
+    const t2 = setTimeout(() => c2.abort(), 25000);
+    try {
+      const r2 = await fetch(API_URL, { method:'POST', redirect:'follow', headers:{'Content-Type':'text/plain'}, body:JSON.stringify(data), signal:c2.signal });
+      clearTimeout(t2);
+      const postResult = JSON.parse(await r2.text());
+      if (!postResult.error) return postResult;
+      // If POST also fails, return the POST result
+      return postResult;
+    } catch(e2) { clearTimeout(t2); console.warn('[apiPost] POST fallback also failed:', e2.message); }
+  }
   return result;
 }
 function gv(id) { const el = document.getElementById(id); return el ? el.value : ''; }
@@ -988,7 +1002,7 @@ async function attQuickCheckout() {
     try { const p = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:5000})); lat=p.coords.latitude; lng=p.coords.longitude; } catch(e){}
     const r = await apiPost({action:'markAttendance',type:'checkout',employeeId:att.employee.EmployeeID,employeeName:att.employee.Name,location:gv('att-locationSelect'),shift:gv('att-shiftSelect'),gpsLat:lat,gpsLng:lng,faceMatchScore:0,livenessScore:0,deviceInfo:navigator.userAgent.substring(0,80)});
     if (r.success) attShowResult(true,'Checked Out!',r.message,{Employee:att.employee.Name,Time:new Date().toLocaleTimeString(),Location:gv('att-locationSelect')});
-    else { btn.disabled=false; btn.innerHTML='🚪 Check Out Now'; alert(r.message||'Failed'); }
+    else { btn.disabled=false; btn.innerHTML='🚪 Check Out Now'; alert(r.error||r.message||'Failed'); }
   } catch(e) { btn.disabled=false; btn.innerHTML='🚪 Check Out Now'; alert('Error: '+e.message); }
 }
 
@@ -1080,7 +1094,7 @@ async function attSubmit(type='checkin') {
     const ls=[att.liveness.blink,att.liveness.headMove,att.liveness.faceDetected,att.liveness.matched].filter(Boolean).length;
     const r=await apiPost({action:'markAttendance',type:type,employeeId:att.employee.EmployeeID,employeeName:att.employee.Name,location:gv('att-locationSelect'),shift:gv('att-shiftSelect'),gpsLat:att.gps?att.gps.latitude:null,gpsLng:att.gps?att.gps.longitude:null,faceMatchScore:att.faceScore,livenessScore:ls,deviceInfo:navigator.userAgent.substring(0,80)});
     if(r.success) attShowResult(true,type==='checkout'?'Checked Out!':'Checked In!',r.message,{Employee:att.employee.Name,Shift:gv('att-shiftSelect'),Time:new Date().toLocaleTimeString(),Location:gv('att-locationSelect'),'Face Match':att.faceScore+'%'});
-    else attShowResult(false,'Failed',r.message||'Error');
+    else attShowResult(false,'Failed',r.error||r.message||'Unknown error');
   }catch(e){attShowResult(false,'Error',e.message);}
 }
 
