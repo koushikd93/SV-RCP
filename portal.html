@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>IOCL ERPL — Unified Operations Portal</title>
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/dist/face-api.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+:root {
+  --bg:#EEF2F7;--surface:#FFFFFF;--surface2:#F7F9FC;--border:#D5DDE8;
+  --accent:#F26722;--accent2:#1B3C73;--danger:#DC2626;--warn:#F59E0B;
+  --purple:#8b5cf6;--orange:#f97316;--text:#1a1a2e;--text2:#5a6377;
+  --success:#16A34A;--visitor:#a78bfa;--visitor-dim:rgba(167,139,250,.12);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+.portal-container{max-width:640px;margin:0 auto;padding:0 12px 80px}
+
+/* ── GLOBAL HEADER ── */
+.portal-header{text-align:center;padding:18px 0 10px;position:sticky;top:0;z-index:50;background:var(--bg)}
+.portal-header .org{font-size:11px;font-weight:700;color:var(--warn);letter-spacing:1.5px;text-transform:uppercase}
+.portal-header h1{font-size:19px;font-weight:700;margin:4px 0;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.portal-header .clock{font-family:'Space Mono',monospace;font-size:20px;color:var(--accent);letter-spacing:2px}
+.portal-header .date-line{font-size:11px;color:var(--text2);letter-spacing:1px;margin-top:2px}
+.portal-header .loc-badge{display:inline-flex;align-items:center;gap:5px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 12px;margin-top:6px;font-size:12px;color:var(--text2)}
+.portal-header .loc-badge svg{width:13px;height:13px;fill:var(--accent)}
+
+/* ── TAB NAV ── */
+.tab-nav{display:flex;gap:4px;padding:6px;background:var(--surface);border:1px solid var(--border);border-radius:14px;margin:10px 0 14px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tab-nav::-webkit-scrollbar{display:none}
+.tab-btn{flex-shrink:0;padding:10px 14px;border:none;border-radius:10px;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;background:transparent;color:var(--text2);transition:all .2s;white-space:nowrap;display:flex;align-items:center;gap:5px}
+.tab-btn:hover{background:var(--surface2)}
+.tab-btn.active{color:#fff}
+.tab-btn.active[data-tab="attendance"]{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.tab-btn.active[data-tab="equipment"]{background:linear-gradient(135deg,#16a34a,#059669)}
+.tab-btn.active[data-tab="visitor"]{background:linear-gradient(135deg,var(--visitor),var(--accent2))}
+.tab-btn.active[data-tab="nearmiss"]{background:linear-gradient(135deg,var(--orange),var(--danger))}
+.tab-btn.active[data-tab="workpermit"]{background:linear-gradient(135deg,var(--warn),var(--orange))}
+.tab-icon{font-size:15px}
+
+/* ── SECTION PANELS ── */
+.section-panel{display:none}
+.section-panel.active{display:block}
+.section-badge{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:14px;font-weight:700;margin-bottom:14px;letter-spacing:.5px}
+
+/* ── SHARED FORM STYLES ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:12px}
+.card-title{font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card-title .icon{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.form-group{margin-bottom:12px}
+label{display:block;font-size:11px;color:var(--text2);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.8px}
+label .req{color:var(--danger);margin-left:2px}
+select,input[type="text"],input[type="tel"],input[type="number"],input[type="date"],input[type="time"],textarea{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s}
+select:focus,input:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:55px}
+input[type="date"],input[type="time"]{color-scheme:light}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+
+/* ── BUTTONS ── */
+.btn{width:100%;padding:13px;border:none;border-radius:12px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(242,103,34,.3)}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-danger{background:rgba(220,38,38,.15);color:var(--danger);border:1px solid rgba(220,38,38,.3)}
+.btn-danger:hover{background:rgba(220,38,38,.25)}
+.btn-hot{background:linear-gradient(135deg,var(--danger),#b91c1c);color:#fff}
+.btn-row{display:flex;gap:8px;margin-top:12px}
+.btn-row .btn{flex:1}
+
+/* ── STEP DOTS ── */
+.step-indicator{display:flex;justify-content:center;gap:8px;margin:12px 0}
+.step-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:all .3s}
+.step-dot.active{width:24px;border-radius:4px}
+.step-dot.done{background:var(--accent)}
+
+/* ── CAMERA ── */
+.camera-container{position:relative;border-radius:16px;overflow:hidden;background:#000;aspect-ratio:3/4;max-height:360px;margin-bottom:12px}
+#att-video,#att-overlay,#vis-video,#vis-overlay{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
+#att-overlay,#vis-overlay{z-index:2}
+.face-guide{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:170px;height:210px;border:2px dashed var(--accent);border-radius:50%;z-index:3;opacity:.6;transition:all .3s}
+.face-guide.detected{border-color:var(--success);border-style:solid;opacity:1;box-shadow:0 0 30px rgba(242,103,34,.2)}
+.face-guide.error{border-color:var(--danger);border-style:solid;opacity:1}
+.camera-status{position:absolute;bottom:10px;left:10px;right:10px;z-index:4;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);border-radius:10px;padding:9px 12px;font-size:12px;display:flex;align-items:center;gap:8px;color:#fff}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-dot.green{background:var(--success);box-shadow:0 0 8px var(--success)}
+.status-dot.yellow{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+.status-dot.red{background:var(--danger);box-shadow:0 0 8px var(--danger)}
+.liveness-checks{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.check-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);background:var(--surface2);padding:7px 9px;border-radius:8px;border:1px solid var(--border)}
+.check-item.pass{border-color:var(--success);color:var(--success)}
+.check-icon{font-size:13px}
+
+/* ── GPS / COORD ── */
+.gps-coord{display:flex;justify-content:space-between;padding:9px 12px;background:var(--surface2);border-radius:8px;font-size:13px;margin-bottom:6px}
+.gps-coord span:first-child{color:var(--text2)}
+.gps-coord span:last-child{font-family:'Space Mono',monospace;font-size:12px}
+
+/* ── EQUIPMENT ── */
+.equip-list{display:flex;flex-direction:column;gap:8px}
+.equip-item{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px;transition:border-color .2s}
+.equip-item.critical{border-left:3px solid var(--danger)}
+.equip-item.important{border-left:3px solid var(--warn)}
+.equip-item.highlight{border-left:3px solid var(--accent)}
+.equip-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.equip-name{font-size:13px;font-weight:600;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.equip-num{font-size:10px;color:var(--text2);font-family:'Space Mono',monospace;background:var(--bg);padding:2px 5px;border-radius:4px}
+.status-btns{display:flex;gap:5px;flex-wrap:wrap}
+.status-btn{padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif}
+.status-btn:hover{border-color:var(--text2)}
+.status-btn.active-w{background:rgba(22,163,74,.12);border-color:var(--success);color:var(--success)}
+.status-btn.active-nw{background:rgba(220,38,38,.12);border-color:var(--danger);color:var(--danger)}
+.status-btn.active-o{background:rgba(255,209,102,.12);border-color:var(--warn);color:var(--warn)}
+.status-btn.active-na{background:rgba(139,92,246,.12);border-color:var(--purple);color:var(--purple)}
+.equip-remarks{margin-top:8px;display:none}
+.equip-remarks.show{display:block}
+.equip-extra{margin-top:10px;display:none;background:var(--bg);border-radius:10px;padding:12px;border:1px solid var(--border)}
+.equip-extra.show{display:block}
+.extra-title{font-size:11px;font-weight:600;color:var(--accent);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+.extra-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.extra-grid .full{grid-column:1/-1}
+.summary-bar{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.summary-pill{padding:4px 9px;border-radius:8px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:3px}
+.summary-pill.ok{background:rgba(22,163,74,.12);color:var(--success)}
+.summary-pill.bad{background:rgba(220,38,38,.12);color:var(--danger)}
+.summary-pill.other{background:rgba(255,209,102,.12);color:var(--warn)}
+.progress-ring{width:100%;height:5px;background:var(--border);border-radius:3px;margin-top:8px;margin-bottom:10px;overflow:hidden}
+.progress-fill{height:100%;border-radius:3px;transition:width .5s}
+
+/* ── FIRST AID CHECKBOXES ── */
+.fa-check-group{display:flex;flex-direction:column;gap:8px}
+.fa-check-item{display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:all .2s}
+.fa-check-item:hover{border-color:var(--accent)}
+.fa-check-item.selected{border-color:var(--success);background:rgba(22,163,74,.06)}
+.fa-check-item input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent);flex-shrink:0;margin-top:1px}
+.fa-check-item span{font-size:13px;line-height:1.4}
+
+/* ── NEAR MISS ── */
+.category-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.cat-btn{padding:12px 8px;border:2px solid var(--border);border-radius:12px;background:var(--surface2);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;text-align:center;transition:all .2s;font-family:'DM Sans',sans-serif}
+.cat-btn .cat-icon{font-size:18px;display:block;margin-bottom:4px}
+.cat-btn.active-nm{background:rgba(249,115,22,.12);border-color:var(--orange);color:var(--orange)}
+.cat-btn.active-ua{background:rgba(220,38,38,.12);border-color:var(--danger);color:var(--danger)}
+.cat-btn.active-uc{background:rgba(255,209,102,.12);border-color:var(--warn);color:var(--warn)}
+.toggle-row{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)}
+.toggle-row span{flex:1;font-size:13px}
+.toggle-switch{position:relative;width:44px;height:24px;cursor:pointer;flex-shrink:0}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-track{position:absolute;inset:0;background:var(--border);border-radius:12px;transition:background .2s}
+.toggle-switch input:checked+.toggle-track{background:var(--orange)}
+.toggle-knob{position:absolute;top:2px;left:2px;width:20px;height:20px;background:#fff;border-radius:50%;transition:transform .2s}
+.toggle-switch input:checked~.toggle-knob{transform:translateX(20px)}
+
+/* ── WORK PERMIT ── */
+.permit-type-bar{display:flex;gap:5px;justify-content:center;flex-wrap:wrap}
+.pt-btn{padding:7px 12px;border:2px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text2);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif}
+.pt-btn:hover{border-color:var(--text2)}
+.pt-btn.sel-hot{background:rgba(220,38,38,.12);border-color:var(--danger);color:var(--danger)}
+.pt-btn.sel-cold{background:rgba(255,209,102,.12);border-color:var(--warn);color:var(--warn)}
+.pt-btn.sel-conf{background:rgba(139,92,246,.12);border-color:var(--purple);color:var(--purple)}
+.pt-btn.sel-veh{background:rgba(242,103,34,.12);border-color:var(--accent);color:var(--accent)}
+.pt-btn.sel-exc{background:rgba(249,115,22,.12);border-color:var(--orange);color:var(--orange)}
+.pt-btn.sel-comp{background:rgba(17,138,178,.12);border-color:var(--accent2);color:var(--accent2)}
+.checklist{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:10px}
+.cl-header{background:var(--surface2);padding:8px 12px;font-size:11px;font-weight:600;color:var(--warn);text-transform:uppercase;letter-spacing:1px}
+.cl-item{display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);font-size:11px;gap:6px}
+.cl-item:last-child{border-bottom:none}
+.cl-num{font-family:'Space Mono',monospace;font-size:10px;color:var(--text2);min-width:20px}
+.cl-text{flex:1}
+.cl-opts{display:flex;gap:4px}
+.cl-opt{padding:3px 7px;border:1px solid var(--border);border-radius:6px;font-size:10px;font-weight:600;cursor:pointer;background:var(--bg);color:var(--text2);transition:all .15s;font-family:'DM Sans',sans-serif}
+.cl-opt:hover{border-color:var(--text2)}
+.cl-opt.done{background:rgba(242,103,34,.12);border-color:var(--accent);color:var(--accent)}
+.cl-opt.na{background:rgba(255,209,102,.12);border-color:var(--warn);color:var(--warn)}
+
+/* ── VISITOR ── */
+.mode-toggle{display:flex;gap:4px;background:var(--surface2);border-radius:12px;padding:4px;margin-bottom:14px}
+.mode-btn{flex:1;padding:10px 12px;text-align:center;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;color:var(--text2);background:transparent;transition:all .2s}
+.mode-btn.active{background:var(--visitor);color:#fff}
+.mode-btn.active.checkout-mode{background:var(--danger);color:#fff}
+.mode-btn:hover:not(.active){background:var(--border)}
+.visitor-list{display:flex;flex-direction:column;gap:8px;max-height:350px;overflow-y:auto}
+.visitor-item{display:flex;align-items:center;gap:12px;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;cursor:pointer;transition:all .2s}
+.visitor-item:hover{border-color:var(--visitor);transform:translateY(-1px)}
+.visitor-item.selected{border-color:var(--visitor);background:var(--visitor-dim)}
+.visitor-avatar{width:40px;height:40px;border-radius:50%;background:var(--visitor-dim);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;color:var(--visitor);font-weight:700}
+.visitor-detail{flex:1}
+.visitor-name{font-weight:600;font-size:13px}
+.visitor-meta{font-size:11px;color:var(--text2);margin-top:2px}
+.visitor-time{font-family:'Space Mono',monospace;font-size:10px;color:var(--accent2)}
+.badge-visitor{display:inline-flex;font-size:10px;padding:3px 8px;border-radius:20px;background:var(--visitor-dim);color:var(--visitor);font-weight:600}
+.visitor-summary{background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:12px}
+.visitor-summary .row{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid var(--border)}
+.visitor-summary .row:last-child{border-bottom:none}
+.visitor-summary .row span:first-child{color:var(--text2)}
+.visitor-summary .row span:last-child{font-weight:500}
+.auth-info{background:var(--visitor-dim);border:1px solid rgba(167,139,250,.3);border-radius:10px;padding:12px;margin-bottom:12px;font-size:12px}
+.auth-info .auth-label{font-size:10px;color:var(--visitor);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:5px}
+.auth-info .auth-name{font-weight:600;color:var(--text)}
+
+/* ── RESULT ── */
+.result-card{text-align:center;padding:30px 16px}
+.result-icon{width:70px;height:70px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:32px}
+.result-icon.success{background:rgba(242,103,34,.12)}
+.result-icon.error{background:rgba(220,38,38,.12)}
+.result-card h2{font-size:20px;margin-bottom:8px}
+.result-card p{color:var(--text2);font-size:13px}
+.result-details{margin-top:16px;text-align:left}
+.result-details .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.result-details .row span:first-child{color:var(--text2)}
+
+/* ── LOADING ── */
+.loading-overlay{position:fixed;inset:0;background:rgba(238,242,247,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200;gap:14px;font-size:14px;color:var(--text2)}
+.loading-spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hidden{display:none!important}
+.divider{height:1px;background:var(--border);margin:14px 0}
+.hint{font-size:10px;color:var(--text2);margin-top:3px;font-style:italic}
+
+.shift-badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.pulse{animation:pulse 1.5s infinite}
+@media(max-width:380px){.row-2,.extra-grid{grid-template-columns:1fr}.category-grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div id="loadingMsg">Loading IOCL Operations Portal...</div>
+  <div style="font-size:11px;color:var(--border)">Initializing modules & face recognition</div>
+</div>
+
+<div class="portal-container">
+
+  <!-- ═══════════ GLOBAL HEADER ═══════════ -->
+  <div class="portal-header">
+    <div class="org">INDIAN OIL CORPORATION LIMITED — ERPL HSE</div>
+    <h1>Unified Operations Portal</h1>
+    <div class="clock" id="liveTime">--:--:--</div>
+    <div class="date-line" id="liveDate">Loading...</div>
+    <div class="loc-badge">
+      <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+      <span id="locationName">Select Location</span>
+    </div>
+  </div>
+
+  <!-- ═══════════ TAB NAVIGATION ═══════════ -->
+  <div class="tab-nav" id="tabNav">
+    <button class="tab-btn active" data-tab="attendance" onclick="switchTab('attendance')"><span class="tab-icon">👤</span> Attendance</button>
+    <button class="tab-btn" data-tab="equipment" onclick="switchTab('equipment')"><span class="tab-icon">⚙️</span> Equipment</button>
+    <button class="tab-btn" data-tab="visitor" onclick="switchTab('visitor')"><span class="tab-icon">🪪</span> Visitor</button>
+    <button class="tab-btn" data-tab="nearmiss" onclick="switchTab('nearmiss')"><span class="tab-icon">⚠️</span> Near Miss</button>
+    <button class="tab-btn" data-tab="workpermit" onclick="switchTab('workpermit')"><span class="tab-icon">📋</span> Work Permit</button>
+  </div>
+
+  <!-- ╔══════════════════════════════════════╗ -->
+  <!-- ║  SECTION 1: ATTENDANCE CHECK-IN      ║ -->
+  <!-- ╚══════════════════════════════════════╝ -->
+  <div class="section-panel active" id="sec-attendance">
+    <div class="section-badge" style="background:rgba(242,103,34,.1);color:var(--accent)">👤 Section 1 — Attendance Check-In</div>
+
+    <div class="step-indicator" id="att-dots">
+      <div class="step-dot active" style="background:var(--accent)"></div>
+      <div class="step-dot"></div>
+      <div class="step-dot"></div>
+      <div class="step-dot"></div>
+    </div>
+
+    <!-- ATT Step 1 -->
+    <div class="card" id="att-step1">
+      <div class="card-title"><div class="icon" style="background:rgba(242,103,34,.12)">👤</div> Select Your Identity</div>
+      <div class="form-group"><label>Location</label>
+        <select id="att-locationSelect"><option value="">-- Select Location --</option></select></div>
+      <div class="form-group"><label>Employee</label>
+        <select id="att-employeeSelect"><option value="">-- Select Employee --</option></select></div>
+      <div class="form-group"><label>Shift</label>
+        <select id="att-shiftSelect">
+          <option value="A">A Shift (06:00–14:00)</option>
+          <option value="B">B Shift (14:00–22:00)</option>
+          <option value="C">C Shift (22:00–06:00)</option>
+          <option value="General" selected>General (09:00–17:00)</option>
+        </select></div>
+      <div id="att-empInfo" class="hidden" style="padding:10px;background:var(--surface2);border-radius:10px;font-size:13px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">Department</span><span id="att-empDept"></span></div>
+      </div>
+      <div id="att-checkedInBanner" class="hidden" style="padding:12px;background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.3);border-radius:10px;font-size:13px;margin-bottom:10px">
+        <span style="color:var(--success);font-weight:600">✓ Already Checked In</span><br>
+        <span style="color:var(--text2)" id="att-checkedInInfo"></span>
+      </div>
+      <button class="btn btn-primary" id="att-btnStep1" disabled onclick="attGoStep(2)">Continue to Face Scan →</button>
+      <button class="btn btn-danger hidden" id="att-btnCheckoutStep1" onclick="attQuickCheckout()" style="margin-top:8px">🚪 Check Out Now</button>
+    </div>
+
+    <!-- ATT Step 2: Face -->
+    <div class="card hidden" id="att-step2">
+      <div class="card-title"><div class="icon" style="background:rgba(17,138,178,.12)">📸</div> Face Verification</div>
+      <p style="font-size:12px;color:var(--text2);text-align:center;padding:6px 0">Position your face in the oval. Blink naturally and turn head slightly.</p>
+      <div class="camera-container">
+        <video id="att-video" autoplay playsinline muted></video>
+        <canvas id="att-overlay"></canvas>
+        <div class="face-guide" id="att-faceGuide"></div>
+        <div class="camera-status">
+          <div class="status-dot yellow" id="att-statusDot"></div>
+          <span id="att-statusText">Initializing camera...</span>
+        </div>
+      </div>
+      <div class="liveness-checks">
+        <div class="check-item" id="att-chkFace"><span class="check-icon">○</span> Face Detected</div>
+        <div class="check-item" id="att-chkMatch"><span class="check-icon">○</span> Identity Match</div>
+        <div class="check-item" id="att-chkBlink"><span class="check-icon">○</span> Blink Detected</div>
+        <div class="check-item" id="att-chkMove"><span class="check-icon">○</span> Head Movement</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="attGoStep(1)">← Back</button>
+        <button class="btn btn-primary" id="att-btnCapture" disabled onclick="attCapture()">Capture & Verify</button>
+      </div>
+    </div>
+
+    <!-- ATT Step 3: GPS -->
+    <div class="card hidden" id="att-step3">
+      <div class="card-title"><div class="icon" style="background:rgba(255,209,102,.12)">📍</div> Location & Confirmation</div>
+      <div class="gps-coord"><span>Latitude</span><span id="att-gpsLat">Fetching...</span></div>
+      <div class="gps-coord"><span>Longitude</span><span id="att-gpsLng">Fetching...</span></div>
+      <div class="gps-coord"><span>Accuracy</span><span id="att-gpsAcc">--</span></div>
+      <div class="gps-coord"><span>Face Match</span><span id="att-matchScore" style="color:var(--accent)">--</span></div>
+      <div class="gps-coord"><span>Liveness</span><span id="att-livenessDisp" style="color:var(--accent)">--</span></div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn btn-secondary" onclick="attGoStep(2)">← Retake</button>
+        <button class="btn btn-primary" id="att-btnSubmit" onclick="attSubmit()">✓ Confirm Check-In</button>
+        <button class="btn btn-danger hidden" id="att-btnCheckout" onclick="attSubmit('checkout')">✕ Check Out</button>
+      </div>
+    </div>
+
+    <!-- ATT Step 4: Result -->
+    <div class="card hidden" id="att-step4"><div class="result-card" id="att-resultContent"></div></div>
+  </div>
+
+  <!-- ╔══════════════════════════════════════╗ -->
+  <!-- ║  SECTION 2: EQUIPMENT STATUS         ║ -->
+  <!-- ╚══════════════════════════════════════╝ -->
+  <div class="section-panel" id="sec-equipment">
+    <div class="section-badge" style="background:rgba(22,163,74,.1);color:var(--success)">⚙️ Section 2 — Equipment Status Update</div>
+
+    <!-- EQ Location Select -->
+    <div class="card" id="eq-stepSelect">
+      <div class="card-title"><div class="icon" style="background:rgba(242,103,34,.12)">📍</div> Select Location</div>
+      <div class="form-group"><label>Location</label>
+        <select id="eq-locationSelect"><option value="">-- Select Location --</option></select></div>
+      <button class="btn btn-primary" id="eq-btnStart" disabled onclick="eqStart()">Start Equipment Check →</button>
+    </div>
+
+    <!-- EQ Form -->
+    <div class="hidden" id="eq-stepForm">
+      <div class="summary-bar" id="eq-summaryBar">
+        <div class="summary-pill ok" id="eq-sumOk">✓ 0 Working</div>
+        <div class="summary-pill bad" id="eq-sumBad">✕ 0 Not Working</div>
+        <div class="summary-pill other" id="eq-sumOther">◎ 0 Other</div>
+        <div class="summary-pill" style="background:rgba(139,92,246,.12);color:var(--purple)" id="eq-sumPending">⏳ 23 Pending</div>
+      </div>
+      <div class="progress-ring"><div class="progress-fill" id="eq-progressFill" style="width:0%;background:var(--success)"></div></div>
+
+      <div class="equip-list" id="eq-equipList"></div>
+
+      <!-- T-Point Extra Equipment -->
+      <div class="hidden" id="eq-tpointSection">
+        <div class="card" style="margin-top:12px;border-left:3px solid var(--danger)">
+          <div class="card-title"><div class="icon" style="background:rgba(220,38,38,.12)">🔥</div> T-Point Specific Equipment</div>
+          <div class="equip-list" id="eq-tpointList"></div>
+        </div>
+      </div>
+
+      <!-- First Aid Box -->
+      <div class="card" style="margin-top:12px;border-left:3px solid var(--success)">
+        <div class="card-title"><div class="icon" style="background:rgba(22,163,74,.12)">🏥</div> First Aid Box Medicine</div>
+        <div class="fa-check-group" id="eq-firstAidGroup">
+          <label class="fa-check-item" onclick="eqSetFirstAid(0,this)">
+            <input type="checkbox" name="fa" value="all_ok"> <span>All medicine is available & not expired</span>
+          </label>
+          <label class="fa-check-item" onclick="eqSetFirstAid(1,this)">
+            <input type="checkbox" name="fa" value="not_available"> <span>All Medicine is not available</span>
+          </label>
+          <label class="fa-check-item" onclick="eqSetFirstAid(2,this)">
+            <input type="checkbox" name="fa" value="expired"> <span>Few medicine has expired</span>
+          </label>
+          <label class="fa-check-item" onclick="eqSetFirstAid(3,this)">
+            <input type="checkbox" name="fa" value="other"> <span>Other</span>
+          </label>
+        </div>
+        <div id="eq-faRemarks" class="equip-remarks">
+          <textarea id="eq-faRemarkText" placeholder="Describe the issue with First Aid Box medicines..." rows="2" style="margin-top:8px"></textarea>
+        </div>
+      </div>
+
+      <!-- Housekeeping -->
+      <div class="card" style="margin-top:12px;border-left:3px solid var(--success)">
+        <div class="card-title"><div class="icon" style="background:rgba(22,163,74,.12)">🧹</div> Housekeeping</div>
+        <div style="background:var(--bg);border-radius:10px;padding:12px;border:1px solid var(--border)">
+          <label>Housekeeping Status</label>
+          <div class="status-btns" style="margin-bottom:8px">
+            <button class="status-btn" onclick="eqSetHK('Ok',this)">✓ Ok</button>
+            <button class="status-btn" onclick="eqSetHK('Not Ok',this)">✕ Not Ok</button>
+          </div>
+          <div id="eq-hkRemarks" class="equip-remarks">
+            <textarea id="eq-hkRemarkText" placeholder="Describe housekeeping issue..." rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Energy Meter -->
+      <div class="card" style="margin-top:12px;border-left:3px solid var(--purple)">
+        <div class="card-title"><div class="icon" style="background:rgba(139,92,246,.12)">⚡</div> Energy Meter Reading <span style="font-size:10px;font-weight:400;color:var(--text2)">(Optional)</span></div>
+        <div style="background:var(--bg);border-radius:10px;padding:12px;border:1px solid var(--border)">
+          <div class="form-group"><label>Meter Reading (kWh)</label>
+            <input type="number" id="eq-energyReading" placeholder="e.g. 45230.5" min="0" step="0.01"></div>
+          <div class="form-group" style="margin-bottom:0"><label>Remarks (Optional)</label>
+            <textarea id="eq-energyRemarks" placeholder="Any observations about the meter..." rows="2"></textarea></div>
+        </div>
+      </div>
+
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn btn-secondary" onclick="eqGoBack()" style="flex:1">← Back</button>
+        <button class="btn btn-primary" id="eq-btnSubmit" onclick="eqSubmitAll()" style="flex:2" disabled>Submit Equipment Status</button>
+      </div>
+    </div>
+
+    <!-- EQ Result -->
+    <div class="card hidden" id="eq-stepResult"><div class="result-card" id="eq-resultContent"></div></div>
+  </div>
+
+  <!-- ╔══════════════════════════════════════╗ -->
+  <!-- ║  SECTION 3: VISITOR CHECK-IN/OUT     ║ -->
+  <!-- ╚══════════════════════════════════════╝ -->
+  <div class="section-panel" id="sec-visitor">
+    <div class="section-badge" style="background:var(--visitor-dim);color:var(--visitor)">🪪 Section 3 — Visitor Check-In / Check-Out</div>
+
+    <div class="mode-toggle" id="vis-modeToggle">
+      <button class="mode-btn active" onclick="visSetMode('checkin')">🪪 Visitor Check-In</button>
+      <button class="mode-btn" onclick="visSetMode('checkout')">🚪 Visitor Check-Out</button>
+    </div>
+
+    <!-- Visitor Check-In Flow -->
+    <div id="vis-checkinFlow">
+      <div class="step-indicator" id="vis-dots">
+        <div class="step-dot active" style="background:var(--visitor)"></div>
+        <div class="step-dot"></div><div class="step-dot"></div><div class="step-dot"></div><div class="step-dot"></div>
+      </div>
+
+      <!-- VIS Step 1 -->
+      <div class="card" id="vis-step1">
+        <div class="card-title"><div class="icon" style="background:var(--visitor-dim)">🪪</div> Visitor Details</div>
+        <div class="form-group"><label>Location</label>
+          <select id="vis-locationSelect"><option value="">-- Select Location --</option></select></div>
+        <div class="form-group"><label>Full Name *</label>
+          <input type="text" id="vis-name" placeholder="Enter visitor's full name"></div>
+        <div class="row-2">
+          <div class="form-group"><label>Phone *</label>
+            <input type="tel" id="vis-phone" placeholder="+91 XXXXX XXXXX"></div>
+          <div class="form-group"><label>ID Type</label>
+            <select id="vis-idType"><option value="Aadhaar">Aadhaar</option><option value="PAN">PAN Card</option><option value="DL">Driving License</option><option value="Passport">Passport</option><option value="VoterID">Voter ID</option><option value="Other">Other</option></select></div>
+        </div>
+        <div class="form-group"><label>ID Number</label><input type="text" id="vis-idNum" placeholder="Enter ID number"></div>
+        <div class="row-2">
+          <div class="form-group"><label>Company / Organization</label><input type="text" id="vis-company" placeholder="Visitor's company"></div>
+          <div class="form-group"><label>Activity Details</label><input type="text" id="vis-host" placeholder="Describe activity details"></div>
+        </div>
+        <div class="form-group"><label>Purpose of Visit *</label>
+          <select id="vis-purpose"><option value="">-- Select Purpose --</option>
+            <option value="DGR Guard">DGR Guard</option><option value="Biker Guard">Biker Guard</option>
+            <option value="Night QRT Guard">Night QRT Guard</option><option value="Maintenance Activities">Maintenance Activities</option>
+            <option value="Inspection">Inspection</option><option value="Surprise Visit">Surprise Visit</option>
+            <option value="Audit">Audit</option><option value="Other">Other</option></select></div>
+        <div class="form-group"><label>Associated Work Permit <span style="font-size:9px;color:var(--text2)">(Optional)</span></label>
+          <select id="vis-workPermit"><option value="">-- No Work Permit --</option></select></div>
+        <div class="form-group"><label>Remarks (optional)</label><textarea id="vis-remarks" rows="2" placeholder="Additional notes..."></textarea></div>
+        <button class="btn btn-primary" id="vis-btnStep1" disabled onclick="visGoStep(2)" style="background:linear-gradient(135deg,var(--visitor),var(--accent2))">Continue to Authorization →</button>
+      </div>
+
+      <!-- VIS Step 2: Auth Employee -->
+      <div class="card hidden" id="vis-step2">
+        <div class="card-title"><div class="icon" style="background:rgba(17,138,178,.12)">🔐</div> Employee Authorization</div>
+        <p style="font-size:12px;color:var(--text2);text-align:center;padding:4px 0">Select the on-site employee who authorizes this visitor's entry.</p>
+        <div class="form-group" style="margin-top:10px"><label>Authorizing Employee</label>
+          <select id="vis-employeeSelect"><option value="">-- Select Employee --</option></select></div>
+        <div id="vis-empInfo" class="hidden" style="padding:10px;background:var(--surface2);border-radius:10px;font-size:12px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text2)">Department</span><span id="vis-empDept"></span></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">Employee ID</span><span id="vis-empId"></span></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="visGoStep(1)">← Back</button>
+          <button class="btn btn-primary" id="vis-btnStep2" disabled onclick="visGoStep(3)" style="background:linear-gradient(135deg,var(--visitor),var(--accent2))">Scan Employee Face →</button>
+        </div>
+      </div>
+
+      <!-- VIS Step 3: Face Scan -->
+      <div class="card hidden" id="vis-step3">
+        <div class="card-title"><div class="icon" style="background:var(--visitor-dim)">📸</div> Employee Face Verification</div>
+        <p style="font-size:12px;color:var(--text2);text-align:center;padding:4px 0">Authorizing employee must verify identity.</p>
+        <div class="camera-container">
+          <video id="vis-video" autoplay playsinline muted></video>
+          <canvas id="vis-overlay"></canvas>
+          <div class="face-guide" id="vis-faceGuide" style="border-color:var(--visitor)"></div>
+          <div class="camera-status">
+            <div class="status-dot yellow" id="vis-statusDot"></div>
+            <span id="vis-statusText">Initializing camera...</span>
+          </div>
+        </div>
+        <div class="liveness-checks">
+          <div class="check-item" id="vis-chkFace"><span class="check-icon">○</span> Face Detected</div>
+          <div class="check-item" id="vis-chkMatch"><span class="check-icon">○</span> Identity Match</div>
+          <div class="check-item" id="vis-chkBlink"><span class="check-icon">○</span> Blink Detected</div>
+          <div class="check-item" id="vis-chkMove"><span class="check-icon">○</span> Head Movement</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="visGoStep(2)">← Back</button>
+          <button class="btn btn-primary" id="vis-btnCapture" disabled onclick="visCapture()" style="background:linear-gradient(135deg,var(--visitor),var(--accent2))">Verify & Authorize ✓</button>
+        </div>
+      </div>
+
+      <!-- VIS Step 4: Confirm -->
+      <div class="card hidden" id="vis-step4">
+        <div class="card-title"><div class="icon" style="background:rgba(255,209,102,.12)">📍</div> Review & Confirm</div>
+        <div class="visitor-summary" id="vis-summary"></div>
+        <div class="auth-info" id="vis-authInfo">
+          <div class="auth-label">🔐 Authorized By</div>
+          <div class="auth-name" id="vis-authName">--</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:4px">Face Match: <span id="vis-authMatch">--</span> | Liveness: <span id="vis-authLive">--</span></div>
+        </div>
+        <div class="gps-coord"><span>Latitude</span><span id="vis-gpsLat">Fetching...</span></div>
+        <div class="gps-coord"><span>Longitude</span><span id="vis-gpsLng">Fetching...</span></div>
+        <div class="gps-coord"><span>Accuracy</span><span id="vis-gpsAcc">--</span></div>
+        <div class="btn-row" style="margin-top:14px">
+          <button class="btn btn-secondary" onclick="visGoStep(1)">← Start Over</button>
+          <button class="btn btn-primary" id="vis-btnSubmit" onclick="visSubmitCheckIn()" style="background:linear-gradient(135deg,var(--visitor),var(--accent2))">✓ Confirm Check-In</button>
+        </div>
+      </div>
+
+      <!-- VIS Step 5: Result -->
+      <div class="card hidden" id="vis-step5"><div class="result-card" id="vis-resultContent"></div></div>
+    </div>
+
+    <!-- Visitor Check-Out Flow -->
+    <div id="vis-checkoutFlow" class="hidden">
+      <div class="card">
+        <div class="card-title"><div class="icon" style="background:rgba(220,38,38,.12)">🚪</div> Visitor Check-Out</div>
+        <div class="form-group" style="margin-bottom:12px"><label>Location</label>
+          <select id="vis-coLocationSelect" style="border-color:var(--danger)" onchange="visLoadActiveVisitors()"><option value="">-- Select Location --</option></select></div>
+        <p style="font-size:12px;color:var(--text2);text-align:center;margin-bottom:10px">Select the visitor checking out:</p>
+        <div class="visitor-list" id="vis-activeList">
+          <div style="text-align:center;padding:30px;color:var(--text2)"><div style="font-size:36px;opacity:.5">👋</div><p>Select a location to see active visitors</p></div>
+        </div>
+        <button class="btn btn-danger" id="vis-btnCO" disabled onclick="visSubmitCheckOut()" style="margin-top:14px">✕ Confirm Check-Out</button>
+      </div>
+      <div class="card hidden" id="vis-coResult"><div class="result-card" id="vis-coResultContent"></div></div>
+    </div>
+  </div>
+
+  <!-- ╔══════════════════════════════════════╗ -->
+  <!-- ║  SECTION 4: NEAR MISS REPORT         ║ -->
+  <!-- ╚══════════════════════════════════════╝ -->
+  <div class="section-panel" id="sec-nearmiss">
+    <div class="section-badge" style="background:rgba(249,115,22,.1);color:var(--orange)">⚠️ Section 4 — Near Miss / Safety Report</div>
+
+    <div class="step-indicator" id="nm-dots">
+      <div class="step-dot active" style="background:var(--orange)"></div>
+      <div class="step-dot"></div><div class="step-dot"></div>
+    </div>
+
+    <!-- NM Step 1 -->
+    <div class="card" id="nm-step1">
+      <div class="card-title"><div class="icon" style="background:rgba(249,115,22,.12)">👤</div> Reporter Details</div>
+      <div class="form-group"><label>Location <span class="req">*</span></label>
+        <select id="nm-locationSelect"><option value="">-- Select Location --</option></select></div>
+      <div class="form-group"><label>Reporting Employee <span class="req">*</span></label>
+        <select id="nm-employeeSelect"><option value="">-- Select Employee --</option></select></div>
+      <div id="nm-empInfo" class="hidden" style="padding:10px;background:var(--surface2);border-radius:10px;font-size:12px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">Department</span><span id="nm-empDept">-</span></div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px"><span style="color:var(--text2)">Employee ID</span><span id="nm-empId" style="font-family:'Space Mono',monospace;font-size:11px">-</span></div>
+      </div>
+      <button class="btn btn-primary" id="nm-btnStep1" disabled onclick="nmGoStep(2)" style="background:linear-gradient(135deg,var(--orange),var(--danger))">Continue to Report Details →</button>
+    </div>
+
+    <!-- NM Step 2 -->
+    <div class="card hidden" id="nm-step2">
+      <div class="card-title"><div class="icon" style="background:rgba(220,38,38,.12)">📋</div> Incident Details</div>
+      <div class="row-2">
+        <div class="form-group"><label>Date of Incident <span class="req">*</span></label><input type="date" id="nm-date"></div>
+        <div class="form-group"><label>Time of Incident <span class="req">*</span></label><input type="time" id="nm-time"></div>
+      </div>
+      <div class="divider"></div>
+      <div class="form-group"><label>Category <span class="req">*</span></label>
+        <div class="category-grid">
+          <button class="cat-btn" onclick="nmSelectCat('Near Miss',this)"><span class="cat-icon">⚠️</span>Near Miss</button>
+          <button class="cat-btn" onclick="nmSelectCat('Unsafe Act',this)"><span class="cat-icon">🚫</span>Unsafe Act</button>
+          <button class="cat-btn" onclick="nmSelectCat('Unsafe Condition',this)"><span class="cat-icon">🔶</span>Unsafe Condition</button>
+        </div></div>
+      <div class="form-group"><label>Cause of Incident <span class="req">*</span></label>
+        <textarea id="nm-cause" placeholder="Describe what caused the incident..." rows="3"></textarea></div>
+      <div class="form-group"><label>Location of Near Miss <span class="req">*</span></label>
+        <input type="text" id="nm-incidentLoc" placeholder="e.g. Main gate area, DG room...">
+        <div class="hint">Specific area within the site</div></div>
+      <div class="divider"></div>
+      <div class="form-group"><label>Has Similar Incident Occurred in Past?</label>
+        <div class="toggle-row"><span>Similar incident occurred before</span>
+          <label class="toggle-switch"><input type="checkbox" id="nm-pastIncident" onchange="document.getElementById('nm-pastDetails').classList.toggle('hidden',!this.checked)"><span class="toggle-track"></span><span class="toggle-knob"></span></label>
+        </div></div>
+      <div class="form-group hidden" id="nm-pastDetails"><label>Past Incident Details</label>
+        <textarea id="nm-pastText" placeholder="When and where did similar incident happen?" rows="2"></textarea></div>
+      <div class="form-group"><label>Action Taken <span class="req">*</span></label>
+        <textarea id="nm-action" placeholder="Describe corrective action..." rows="3"></textarea></div>
+      <div class="form-group"><label>Remarks</label>
+        <textarea id="nm-remarks" placeholder="Additional notes..." rows="2"></textarea></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="nmGoStep(1)" style="flex:1">← Back</button>
+        <button class="btn btn-primary" id="nm-btnSubmit" onclick="nmSubmit()" style="flex:2;background:linear-gradient(135deg,var(--orange),var(--danger))" disabled>📤 Submit Near Miss Report</button>
+      </div>
+    </div>
+
+    <!-- NM Step 3: Result -->
+    <div class="card hidden" id="nm-step3"><div class="result-card" id="nm-resultContent"></div></div>
+  </div>
+
+  <!-- ╔══════════════════════════════════════╗ -->
+  <!-- ║  SECTION 5: WORK PERMIT              ║ -->
+  <!-- ╚══════════════════════════════════════╝ -->
+  <div class="section-panel" id="sec-workpermit">
+    <div class="section-badge" style="background:rgba(255,209,102,.1);color:var(--warn)">📋 Section 5 — Work Permit System</div>
+    <div style="text-align:center;font-size:11px;color:var(--text2);margin-bottom:10px;font-family:'Space Mono',monospace">Doc No.: ERPL/HS&E/25-26 | Rev: 00</div>
+
+    <div class="step-indicator" id="wp-dots">
+      <div class="step-dot active" style="background:var(--warn)"></div>
+      <div class="step-dot"></div><div class="step-dot"></div><div class="step-dot"></div>
+    </div>
+
+    <!-- WP Step 1 -->
+    <div id="wp-step1">
+      <div class="card">
+        <div class="card-title">📌 Permit Type <span class="req">*</span></div>
+        <div class="permit-type-bar" id="wp-typeBar">
+          <button class="pt-btn" onclick="wpSelType('Composite Work','comp',this)">Composite</button>
+          <button class="pt-btn" onclick="wpSelType('Cold Work','cold',this)">Cold Work</button>
+          <button class="pt-btn" onclick="wpSelType('Hot Work','hot',this)">Hot Work</button>
+          <button class="pt-btn" onclick="wpSelType('Confined Space Entry','conf',this)">Confined Space</button>
+          <button class="pt-btn" onclick="wpSelType('Vehicle Entry','veh',this)">Vehicle Entry</button>
+          <button class="pt-btn" onclick="wpSelType('Excavation Work','exc',this)">Excavation</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">📍 Work Details</div>
+        <div class="form-group"><label>Location <span class="req">*</span></label>
+          <select id="wp-location"><option value="">-- Select Location --</option></select></div>
+        <div class="form-group"><label>Exact Location of Work <span class="req">*</span></label>
+          <input type="text" id="wp-exactLoc" placeholder="e.g. RCP-3, Chainage KM 45.2"></div>
+        <div class="row-2">
+          <div class="form-group"><label>From Date <span class="req">*</span></label><input type="date" id="wp-dateFrom"></div>
+          <div class="form-group"><label>From Time <span class="req">*</span></label><input type="time" id="wp-timeFrom"></div>
+        </div>
+        <div class="row-2">
+          <div class="form-group"><label>To Date <span class="req">*</span></label><input type="date" id="wp-dateTo"></div>
+          <div class="form-group"><label>To Time <span class="req">*</span></label><input type="time" id="wp-timeTo"></div>
+        </div>
+        <div class="form-group"><label>Issued To <span class="req">*</span></label>
+          <input type="text" id="wp-issuedTo" placeholder="e.g. M/s ABC Contractor"></div>
+        <div class="form-group"><label>Work Description <span class="req">*</span></label>
+          <textarea id="wp-desc" placeholder="Detailed description..." rows="3"></textarea></div>
+      </div>
+      <div class="card">
+        <div class="card-title">👤 Personnel</div>
+        <div class="form-group"><label>Receiver Name <span class="req">*</span></label>
+          <select id="wp-receiver"><option value="">-- Select Employee --</option></select></div>
+        <div class="form-group"><label>Receiver Designation</label>
+          <input type="text" id="wp-receiverDesg" placeholder="e.g. Site Supervisor"></div>
+        <div class="divider"></div>
+        <div class="form-group"><label>Permit Issuer <span class="req">*</span></label>
+          <select id="wp-issuer"><option value="">-- Select Issuer --</option></select></div>
+        <div class="form-group"><label>Issuer Designation</label>
+          <input type="text" id="wp-issuerDesg" placeholder="e.g. Area In-charge"></div>
+        <div class="hint" style="margin-bottom:12px;color:var(--accent2)">🔐 OTP will be sent to Issuer's email for approval.</div>
+        <div class="divider"></div>
+        <div class="form-group"><label>Person at Site (Name & Contact) <span class="req">*</span></label>
+          <input type="text" id="wp-sitePerson" placeholder="Name - 9876543210"></div>
+        <div class="form-group"><label>Security Guard at Site</label>
+          <input type="text" id="wp-guard" placeholder="Name - 9876543210"></div>
+        <div class="row-2">
+          <div class="form-group"><label>JSA Ref. No.</label><input type="text" id="wp-jsa" placeholder="JSA-001"></div>
+          <div class="form-group"><label>Cross-Ref Permits</label><input type="text" id="wp-crossRef" placeholder="WP-xxx"></div>
+        </div>
+        <div class="form-group"><label>Emergency Contact <span class="req">*</span></label>
+          <input type="text" id="wp-emergency" placeholder="Name - 9876543210"></div>
+        <div class="form-group"><label>Nearest Fire Station & Hospital</label>
+          <input type="text" id="wp-fireStation" placeholder="Fire Station - XYZ, Hospital - ABC"></div>
+      </div>
+      <button class="btn btn-primary" id="wp-btnStep1" disabled onclick="wpGoStep(2)" style="background:linear-gradient(135deg,var(--warn),var(--orange))">Continue to Checklist →</button>
+    </div>
+
+    <!-- WP Step 2: Checklist -->
+    <div id="wp-step2" class="hidden">
+      <div class="card">
+        <div class="card-title">✅ Safety Checklist</div>
+        <div class="hint" style="margin-bottom:10px">Mark each item as ✓ Done or N/A</div>
+        <div id="wp-checklistContainer"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="wpGoStep(1)" style="flex:1">← Back</button>
+        <button class="btn btn-primary" onclick="wpGoStep(3)" style="flex:2;background:linear-gradient(135deg,var(--warn),var(--orange))">Gas Test & Remarks →</button>
+      </div>
+    </div>
+
+    <!-- WP Step 3: Gas Test -->
+    <div id="wp-step3" class="hidden">
+      <div class="card">
+        <div class="card-title">🧪 Gas Test Results</div>
+        <div class="row-3">
+          <div class="form-group"><label>HCs (% LEL)</label><input type="text" id="wp-gasHC" placeholder="0"></div>
+          <div class="form-group"><label>Toxic Gas (PPM)</label><input type="text" id="wp-gasToxic" placeholder="0"></div>
+          <div class="form-group"><label>O₂ (%)</label><input type="text" id="wp-gasO2" placeholder="20.9"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">⚠️ Residual Hazards</div>
+        <div id="wp-hazardsList" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🦺 Additional PPE</div>
+        <div id="wp-ppeList" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📝 Additional Precautions</div>
+        <div class="form-group"><textarea id="wp-precautions" placeholder="Any additional precautions..." rows="3"></textarea></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="wpGoStep(2)" style="flex:1">← Back</button>
+        <button class="btn btn-primary" onclick="wpGoStep(4)" style="flex:2;background:linear-gradient(135deg,var(--warn),var(--orange))">Review & Submit →</button>
+      </div>
+    </div>
+
+    <!-- WP Step 4: Review -->
+    <div id="wp-step4" class="hidden">
+      <div class="card">
+        <div class="card-title">📄 Permit Summary</div>
+        <div id="wp-summary"></div>
+      </div>
+      <div class="card" style="border:1px solid var(--warn);background:rgba(255,209,102,.04)">
+        <div class="card-title" style="color:var(--warn)">⚠️ Submission Notice</div>
+        <p style="font-size:11px;color:var(--text2);line-height:1.5">By submitting, the Receiver initiates this work permit. It will be in <b>Pending Approval</b> until the Issuer approves via OTP.</p>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="wpGoStep(3)" style="flex:1">← Back</button>
+        <button class="btn btn-hot" id="wp-btnSubmit" onclick="wpSubmit()" style="flex:2">📤 Submit Work Permit</button>
+      </div>
+    </div>
+
+    <!-- WP Step 5: Result -->
+    <div id="wp-step5" class="hidden">
+      <div class="card"><div class="result-card" id="wp-resultContent"></div></div>
+    </div>
+  </div>
+
+</div><!-- end portal-container -->
+
+<script>
+// ================================================================
+// GLOBAL CONFIG & STATE
+// ================================================================
+const _urlParams = new URLSearchParams(window.location.search);
+const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbzHX8hjF4KIIrGPizvubkassyQKN4MYnAq9SAAHutroDOgRxdmu68_GzOU9WRFZCxpDSQ/exec';
+const MODEL_URLS = ['https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model','https://unpkg.com/@vladmandic/face-api@1.7.14/model'];
+let MODEL_URL = MODEL_URLS[0];
+const FACE_MATCH_THRESHOLD = 0.5;
+const FACE_MATCH_SCORE_MIN = 50;
+
+// Shared data
+let _locations = [];
+let _employees = [];
+let _faceDescriptors = {};
+let _qrLocation = _urlParams.get('location') || _urlParams.get('loc') || '';
+
+// ================================================================
+// CLOCK
+// ================================================================
+function updateClock() {
+  const now = new Date();
+  document.getElementById('liveTime').textContent = now.toLocaleTimeString('en-US',{hour12:false});
+  document.getElementById('liveDate').textContent = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'short',day:'numeric'});
+}
+updateClock(); setInterval(updateClock, 1000);
+
+// ================================================================
+// API HELPERS
+// ================================================================
+async function apiGet(params) {
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), 15000);
+  const res = await fetch(url, { redirect:'follow', signal:c.signal });
+  clearTimeout(t);
+  return JSON.parse(await res.text());
+}
+async function apiPost(data) {
+  const params = {};
+  for (const [k,v] of Object.entries(data)) if (v !== null && v !== undefined) params[k] = String(v);
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), 25000);
+  let result;
+  if (url.length > 7500) {
+    const r = await fetch(API_URL, { method:'POST', redirect:'follow', headers:{'Content-Type':'text/plain'}, body:JSON.stringify(data), signal:c.signal });
+    clearTimeout(t); result = JSON.parse(await r.text());
+  } else {
+    const r = await fetch(url, { redirect:'follow', signal:c.signal });
+    clearTimeout(t); result = JSON.parse(await r.text());
+  }
+  return result;
+}
+function gv(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+
+// ================================================================
+// INITIALIZATION
+// ================================================================
+window.addEventListener('load', async () => {
+  if (_qrLocation) document.getElementById('locationName').textContent = _qrLocation;
+
+  // Load face-api models
+  if (typeof faceapi !== 'undefined') {
+    let loaded = false;
+    for (let i = 0; i < MODEL_URLS.length && !loaded; i++) {
+      MODEL_URL = MODEL_URLS[i];
+      try {
+        document.getElementById('loadingMsg').textContent = 'Loading face models (' + (i+1) + '/' + MODEL_URLS.length + ')...';
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]);
+        loaded = true;
+      } catch(e) { console.warn('Model load fail:', e.message); }
+    }
+  }
+
+  // Load shared data
+  document.getElementById('loadingMsg').textContent = 'Loading locations & employees...';
+  try {
+    const [locR, empR, faceR] = await Promise.all([
+      apiGet({action:'getLocations'}),
+      apiGet({action:'getEmployees'}),
+      apiGet({action:'getAllFaceData'})
+    ]);
+
+    if (locR.success && locR.locations) _locations = locR.locations.map(l => l.LocationName || l);
+    if (empR.success && empR.employees) _employees = empR.employees;
+    if (faceR.success && faceR.faceData) {
+      faceR.faceData.forEach(fd => {
+        try {
+          const empId = fd.employeeId || fd.EmployeeID;
+          const desc = fd.faceDescriptor || fd.FaceDescriptor;
+          if (empId && desc) _faceDescriptors[empId] = new Float32Array(typeof desc === 'string' ? JSON.parse(desc) : desc);
+        } catch(e) {}
+      });
+    }
+
+    // Populate all location dropdowns
+    ['att-locationSelect','eq-locationSelect','vis-locationSelect','vis-coLocationSelect','nm-locationSelect','wp-location'].forEach(id => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      _locations.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n; opt.textContent = n;
+        if (_qrLocation && n === _qrLocation) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    });
+
+    // Populate all employee dropdowns
+    ['att-employeeSelect','vis-employeeSelect','nm-employeeSelect','wp-receiver'].forEach(id => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      _employees.forEach(emp => {
+        const opt = document.createElement('option');
+        opt.value = JSON.stringify(emp);
+        opt.textContent = emp.Name + ' (' + emp.EmployeeID + ')';
+        sel.appendChild(opt);
+      });
+    });
+
+    // WP Issuer
+    const wpIss = document.getElementById('wp-issuer');
+    const ISSUERS = [{ name:'Koushik Das', id:'EMP597090', desg:'Area In-charge' }];
+    ISSUERS.forEach(i => { wpIss.innerHTML += `<option value="${i.name} (${i.id})" data-desg="${i.desg}">${i.name} (${i.id})</option>`; });
+    _employees.forEach(e => {
+      const val = e.Name + ' (' + e.EmployeeID + ')';
+      if (!ISSUERS.some(i => i.id === e.EmployeeID)) wpIss.innerHTML += `<option value="${val}">${val}</option>`;
+    });
+
+    // WP Receiver plain values
+    const wpRec = document.getElementById('wp-receiver');
+    wpRec.innerHTML = '<option value="">-- Select Employee --</option>';
+    _employees.forEach(e => { wpRec.innerHTML += `<option value="${e.Name} (${e.EmployeeID})">${e.Name} (${e.EmployeeID})</option>`; });
+
+    // Load work permits for visitor dropdown
+    try {
+      const wpR = await apiGet({action:'getActiveWorkPermits'});
+      const wpSel = document.getElementById('vis-workPermit');
+      if (wpR.success && wpR.permits) wpR.permits.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.PermitNumber || p.RecordID;
+        opt.textContent = (p.PermitNumber||p.RecordID) + ' — ' + (p.PermitType||'') + ' (' + (p.Location||'') + ')';
+        wpSel.appendChild(opt);
+      });
+    } catch(e) {}
+
+    // Init modules
+    eqInit();
+    nmInit();
+    wpInit();
+
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  } catch(e) {
+    document.getElementById('loadingOverlay').innerHTML = `<div style="color:var(--danger);text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:16px">⚠️</div><h3>Load Error</h3><p style="margin-top:8px;font-size:13px;color:var(--text2)">${e.message}</p><button class="btn btn-primary" style="margin-top:16px;width:auto;padding:12px 24px" onclick="location.reload()">Retry</button></div>`;
+  }
+});
+
+// ================================================================
+// TAB NAVIGATION
+// ================================================================
+function switchTab(tab) {
+  // Stop cameras when switching
+  attStopCamera(); visStopCamera();
+
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
+  document.querySelectorAll('.section-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('sec-' + tab).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// ================================================================
+// ═══ SECTION 1: ATTENDANCE ═══
+// ================================================================
+let att = { employee: null, stream: null, gps: null, faceScore: 0, detInt: null, liveness: {blink:false,headMove:false,faceDetected:false,matched:false}, blinkH:[], headH:[], distH:[] };
+
+document.getElementById('att-locationSelect').addEventListener('change', function() {
+  document.getElementById('locationName').textContent = this.value || 'Select Location';
+  attCheckReady();
+  attCheckAlready();
+});
+document.getElementById('att-employeeSelect').addEventListener('change', function() {
+  if (this.value) {
+    att.employee = JSON.parse(this.value);
+    document.getElementById('att-empInfo').classList.remove('hidden');
+    document.getElementById('att-empDept').textContent = att.employee.Department || '-';
+  } else { att.employee = null; document.getElementById('att-empInfo').classList.add('hidden'); }
+  attCheckReady(); attCheckAlready();
+});
+
+function attCheckReady() {
+  document.getElementById('att-btnStep1').disabled = !(gv('att-locationSelect') && att.employee);
+  document.getElementById('att-btnStep1').textContent = 'Continue to Face Scan →';
+}
+
+async function attCheckAlready() {
+  const banner = document.getElementById('att-checkedInBanner');
+  const coBtn = document.getElementById('att-btnCheckoutStep1');
+  banner.classList.add('hidden'); coBtn.classList.add('hidden');
+  if (!att.employee) return;
+  try {
+    const now = new Date();
+    const today = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+    const r = await apiGet({action:'getAttendance',employeeId:att.employee.EmployeeID,date:today});
+    if (r.success && r.records && r.records.length > 0) {
+      const last = r.records[r.records.length-1];
+      if (!last.CheckOutTime) {
+        banner.classList.remove('hidden'); coBtn.classList.remove('hidden');
+        document.getElementById('att-checkedInInfo').textContent = 'Checked in at '+last.CheckInTime+' at '+last.Location;
+        document.getElementById('att-btnStep1').textContent = 'Already Checked In';
+        document.getElementById('att-btnStep1').disabled = true;
+      }
+    }
+  } catch(e) {}
+}
+
+async function attQuickCheckout() {
+  const btn = document.getElementById('att-btnCheckoutStep1');
+  btn.disabled = true; btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;display:inline-block;margin-right:6px"></div> Checking out...';
+  try {
+    let lat=null,lng=null;
+    try { const p = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:5000})); lat=p.coords.latitude; lng=p.coords.longitude; } catch(e){}
+    const r = await apiPost({action:'markAttendance',type:'checkout',employeeId:att.employee.EmployeeID,employeeName:att.employee.Name,location:gv('att-locationSelect'),shift:gv('att-shiftSelect'),gpsLat:lat,gpsLng:lng,faceMatchScore:0,livenessScore:0,deviceInfo:navigator.userAgent.substring(0,80)});
+    if (r.success) attShowResult(true,'Checked Out!',r.message,{Employee:att.employee.Name,Time:new Date().toLocaleTimeString(),Location:gv('att-locationSelect')});
+    else { btn.disabled=false; btn.innerHTML='🚪 Check Out Now'; alert(r.message||'Failed'); }
+  } catch(e) { btn.disabled=false; btn.innerHTML='🚪 Check Out Now'; alert('Error: '+e.message); }
+}
+
+function attGoStep(step) {
+  for(let i=1;i<=4;i++) document.getElementById('att-step'+i).classList.toggle('hidden',i!==step);
+  document.querySelectorAll('#att-dots .step-dot').forEach((d,i) => {
+    d.className='step-dot'; if(i+1<step) d.classList.add('done'); if(i+1===step){d.classList.add('active');d.style.background='var(--accent)';}
+  });
+  if(step===2) attStartCamera(); else attStopCamera();
+  if(step===3) attFetchGPS();
+}
+
+async function attStartCamera() {
+  try {
+    att.stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});
+    const v = document.getElementById('att-video'); v.srcObject = att.stream; await v.play();
+    att.liveness = {blink:false,headMove:false,faceDetected:false,matched:false}; att.blinkH=[]; att.headH=[]; att.distH=[];
+    attUpdateChecks();
+    attUpdateStatus('yellow','Camera active — detecting face...');
+    att.detInt = setInterval(attDetect, 300);
+  } catch(e) { attUpdateStatus('red','Camera access denied.'); }
+}
+function attStopCamera() { if(att.detInt){clearInterval(att.detInt);att.detInt=null;} if(att.stream){att.stream.getTracks().forEach(t=>t.stop());att.stream=null;} }
+
+async function attDetect() {
+  const v = document.getElementById('att-video'); if(!v.videoWidth) return;
+  const opts = new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.5});
+  try {
+    const det = await faceapi.detectSingleFace(v,opts).withFaceLandmarks().withFaceDescriptor();
+    const guide = document.getElementById('att-faceGuide');
+    if (det) {
+      guide.classList.add('detected'); guide.classList.remove('error'); att.liveness.faceDetected=true;
+      if (att.employee && _faceDescriptors[att.employee.EmployeeID]) {
+        const dist = faceapi.euclideanDistance(det.descriptor, _faceDescriptors[att.employee.EmployeeID]);
+        att.distH.push(dist); if(att.distH.length>5) att.distH.shift();
+        const avg = att.distH.reduce((a,b)=>a+b,0)/att.distH.length;
+        att.faceScore = Math.round(Math.max(0,100-avg*100));
+        att.liveness.matched = avg < FACE_MATCH_THRESHOLD && att.faceScore >= FACE_MATCH_SCORE_MIN;
+      } else { att.faceScore=-1; att.liveness.matched=false; }
+      // Blink
+      const lm=det.landmarks, le=lm.getLeftEye(), re=lm.getRightEye();
+      const ear = (getEAR(le)+getEAR(re))/2;
+      att.blinkH.push(ear); if(att.blinkH.length>30)att.blinkH.shift();
+      if(att.blinkH.length>=5 && Math.max(...att.blinkH)-Math.min(...att.blinkH)>.045) att.liveness.blink=true;
+      // Head
+      const nx = lm.getNose()[0].x; att.headH.push(nx); if(att.headH.length>20)att.headH.shift();
+      if(att.headH.length>=8 && Math.max(...att.headH)-Math.min(...att.headH)>15) att.liveness.headMove=true;
+      // Draw
+      const ov=document.getElementById('att-overlay'),dims=faceapi.matchDimensions(ov,v,true),res=faceapi.resizeResults(det,dims);
+      ov.getContext('2d').clearRect(0,0,ov.width,ov.height); faceapi.draw.drawFaceLandmarks(ov,res);
+      // Status
+      const all = att.liveness.faceDetected && att.liveness.blink && att.liveness.headMove;
+      if(all && att.liveness.matched){attUpdateStatus('green','Face matched ('+att.faceScore+'%)! Ready.');document.getElementById('att-btnCapture').disabled=false;}
+      else if(att.faceScore===-1){attUpdateStatus('red','⚠ FACE NOT REGISTERED!');document.getElementById('att-btnCapture').disabled=true;guide.classList.remove('detected');guide.classList.add('error');}
+      else if(!att.liveness.matched){attUpdateStatus('red','✕ FACE MISMATCH ('+att.faceScore+'%)');document.getElementById('att-btnCapture').disabled=true;guide.classList.remove('detected');guide.classList.add('error');}
+      else{const p=[];if(!att.liveness.blink)p.push('blink');if(!att.liveness.headMove)p.push('move head');attUpdateStatus('yellow','Face OK ('+att.faceScore+'%) — '+p.join(' & '));document.getElementById('att-btnCapture').disabled=true;}
+    } else { guide.classList.remove('detected','error'); att.liveness.faceDetected=false; attUpdateStatus('yellow','No face detected'); document.getElementById('att-overlay').getContext('2d').clearRect(0,0,999,999); }
+    attUpdateChecks();
+  } catch(e) {}
+}
+
+function getEAR(eye) { const v1=Math.sqrt(Math.pow(eye[1].x-eye[5].x,2)+Math.pow(eye[1].y-eye[5].y,2)),v2=Math.sqrt(Math.pow(eye[2].x-eye[4].x,2)+Math.pow(eye[2].y-eye[4].y,2)),h=Math.sqrt(Math.pow(eye[0].x-eye[3].x,2)+Math.pow(eye[0].y-eye[3].y,2));return(v1+v2)/(2*h);}
+function attUpdateStatus(c,t){document.getElementById('att-statusDot').className='status-dot '+c;document.getElementById('att-statusText').textContent=t;}
+function attUpdateChecks(){['Face','Match','Blink','Move'].forEach((n,i)=>{const k=['faceDetected','matched','blink','headMove'][i];const el=document.getElementById('att-chk'+n);el.className='check-item '+(att.liveness[k]?'pass':'');el.querySelector('.check-icon').textContent=att.liveness[k]?'✓':'○';});}
+
+async function attCapture(){
+  const v=document.getElementById('att-video');
+  const can=document.createElement('canvas');can.width=v.videoWidth;can.height=v.videoHeight;can.getContext('2d').drawImage(v,0,0);
+  attStopCamera(); attGoStep(3);
+}
+
+function attFetchGPS() {
+  const ms=document.getElementById('att-matchScore');
+  if(att.faceScore===-1){ms.textContent='✕ Not Registered';ms.style.color='#ef4444';}
+  else{ms.textContent=att.faceScore+'% ✓';ms.style.color='var(--accent)';}
+  const ls=[att.liveness.blink,att.liveness.headMove,att.liveness.faceDetected,att.liveness.matched].filter(Boolean).length;
+  document.getElementById('att-livenessDisp').textContent=ls+'/4 checks';
+  const sb=document.getElementById('att-btnSubmit');
+  if(att.faceScore===-1||att.faceScore<FACE_MATCH_SCORE_MIN){sb.disabled=true;sb.innerHTML='⚠ Cannot Check In';sb.style.opacity='.5';}
+  else{sb.disabled=false;sb.innerHTML='✓ Confirm Check-In';sb.style.opacity='1';}
+  if(navigator.geolocation) navigator.geolocation.getCurrentPosition(p=>{att.gps=p.coords;document.getElementById('att-gpsLat').textContent=p.coords.latitude.toFixed(6);document.getElementById('att-gpsLng').textContent=p.coords.longitude.toFixed(6);document.getElementById('att-gpsAcc').textContent='±'+Math.round(p.coords.accuracy)+'m';},()=>{document.getElementById('att-gpsLat').textContent='Unavailable';document.getElementById('att-gpsLng').textContent='Unavailable';},{enableHighAccuracy:true,timeout:10000});
+}
+
+async function attSubmit(type='checkin') {
+  if(type==='checkin'){if(att.faceScore===-1||att.faceScore<FACE_MATCH_SCORE_MIN){alert('❌ Face verification failed');return;}}
+  const btn=type==='checkout'?document.getElementById('att-btnCheckout'):document.getElementById('att-btnSubmit');
+  btn.disabled=true;btn.innerHTML='<div class="loading-spinner" style="width:16px;height:16px;display:inline-block;margin-right:6px"></div> Submitting...';
+  try{
+    const ls=[att.liveness.blink,att.liveness.headMove,att.liveness.faceDetected,att.liveness.matched].filter(Boolean).length;
+    const r=await apiPost({action:'markAttendance',type:type,employeeId:att.employee.EmployeeID,employeeName:att.employee.Name,location:gv('att-locationSelect'),shift:gv('att-shiftSelect'),gpsLat:att.gps?att.gps.latitude:null,gpsLng:att.gps?att.gps.longitude:null,faceMatchScore:att.faceScore,livenessScore:ls,deviceInfo:navigator.userAgent.substring(0,80)});
+    if(r.success) attShowResult(true,type==='checkout'?'Checked Out!':'Checked In!',r.message,{Employee:att.employee.Name,Shift:gv('att-shiftSelect'),Time:new Date().toLocaleTimeString(),Location:gv('att-locationSelect'),'Face Match':att.faceScore+'%'});
+    else attShowResult(false,'Failed',r.message||'Error');
+  }catch(e){attShowResult(false,'Error',e.message);}
+}
+
+function attShowResult(ok,title,msg,det) {
+  attGoStep(4);
+  let h=`<div class="result-icon ${ok?'success':'error'}">${ok?'✓':'✕'}</div><h2 style="color:${ok?'var(--accent)':'var(--danger)'}">${title}</h2><p>${msg||''}</p>`;
+  if(det){h+='<div class="result-details">';for(const[k,v]of Object.entries(det))h+=`<div class="row"><span>${k}</span><span>${v}</span></div>`;h+='</div>';}
+  h+='<button class="btn btn-secondary" style="margin-top:16px" onclick="location.reload()">Done</button>';
+  document.getElementById('att-resultContent').innerHTML=h;
+}
+
+// ================================================================
+// ═══ SECTION 2: EQUIPMENT ═══
+// ================================================================
+const EQUIPMENT = [
+  {id:1,name:'DG',icon:'⚡',priority:'critical',hasDGExtra:true},
+  {id:2,name:'MOV',icon:'🔌',priority:'critical',hasMOVExtra:true},
+  {id:3,name:'Battery',icon:'🔋',priority:'important'},
+  {id:4,name:'Solar Panel',icon:'☀️',priority:'important',hasSolarExtra:true},
+  {id:5,name:'RTU',icon:'📡',priority:'important'},
+  {id:6,name:'Telecom Panel',icon:'📶',priority:'important'},
+  {id:7,name:'Telephone',icon:'📞',priority:''},
+  {id:8,name:'Charger',icon:'🔌',priority:''},
+  {id:9,name:'ACDB',icon:'⚙️',priority:'important'},
+  {id:10,name:'AMF',icon:'🔧',priority:'important'},
+  {id:11,name:'Transformer',icon:'🏗️',priority:'important'},
+  {id:12,name:'EEE',icon:'💡',priority:''},
+  {id:13,name:'PT',icon:'📊',priority:''},
+  {id:14,name:'TT',icon:'🌡️',priority:''},
+  {id:15,name:'HCD',icon:'🔩',priority:''},
+  {id:16,name:'MSD',icon:'📦',priority:''},
+  {id:17,name:'Earth Pit',icon:'🌍',priority:''},
+  {id:18,name:'TRU',icon:'🔄',priority:''},
+  {id:19,name:'CCTV',icon:'📹',priority:'highlight'},
+  {id:20,name:'Fire Extinguishers',icon:'🧯',priority:'highlight'},
+  {id:21,name:'FLP Lights',icon:'💡',priority:''},
+  {id:22,name:'Power Fencing',icon:'🔒',priority:'highlight'},
+  {id:23,name:'Concertina',icon:'🪢',priority:''}
+];
+
+const TPOINT_EQUIPMENT = [
+  {id:101,name:'Jockey Pump',icon:'💧',priority:'critical'},
+  {id:102,name:'Fire Fighting Engine',icon:'🚒',priority:'critical'},
+  {id:103,name:'Deluge Valve',icon:'🔧',priority:'important'},
+  {id:104,name:'5 KVA UPS',icon:'🔋',priority:'important'},
+  {id:105,name:'Scrapper Barrel',icon:'🛢️',priority:''},
+  {id:106,name:'PCV',icon:'⚙️',priority:'important'},
+  {id:107,name:'MFM',icon:'📊',priority:'important'}
+];
+
+let eqStatus = {};
+let eqTpStatus = {};
+let eqHKStatus = '';
+let eqFirstAidStatus = '';
+
+function eqInit() {
+  document.getElementById('eq-locationSelect').addEventListener('change', function() {
+    document.getElementById('locationName').textContent = this.value || 'Select Location';
+    document.getElementById('eq-btnStart').disabled = !this.value;
+  });
+}
+
+function eqStart() {
+  document.getElementById('eq-stepSelect').classList.add('hidden');
+  document.getElementById('eq-stepForm').classList.remove('hidden');
+  eqStatus = {}; eqTpStatus = {};
+  eqBuildList();
+  eqCheckTPoint();
+}
+
+function eqGoBack() {
+  document.getElementById('eq-stepForm').classList.add('hidden');
+  document.getElementById('eq-stepSelect').classList.remove('hidden');
+}
+
+function eqCheckTPoint() {
+  const loc = gv('eq-locationSelect');
+  const isTP = loc.toLowerCase().includes('t-point') || loc.toLowerCase().includes('tpoint') || loc === 'T-Point';
+  document.getElementById('eq-tpointSection').classList.toggle('hidden', !isTP);
+  if (isTP) eqBuildTPointList();
+}
+
+function eqBuildList() {
+  const list = document.getElementById('eq-equipList'); list.innerHTML = '';
+  EQUIPMENT.forEach(eq => eqRenderItem(eq, list, 'eq', eqStatus));
+  EQUIPMENT.forEach(eq => {
+    if(eq.hasDGExtra) document.getElementById('dgExtra-eq-'+eq.id).classList.add('show');
+    if(eq.hasMOVExtra) document.getElementById('movExtra-eq-'+eq.id).classList.add('show');
+    if(eq.hasSolarExtra) document.getElementById('solarExtra-eq-'+eq.id).classList.add('show');
+  });
+}
+
+function eqBuildTPointList() {
+  const list = document.getElementById('eq-tpointList'); list.innerHTML = '';
+  TPOINT_EQUIPMENT.forEach(eq => eqRenderItem(eq, list, 'tp', eqTpStatus));
+}
+
+function eqRenderItem(eq, container, prefix, statusObj) {
+  const div = document.createElement('div');
+  div.className = 'equip-item ' + (eq.priority||'');
+  div.id = prefix+'-equip-'+eq.id;
+  let extraHTML = '';
+  if(eq.hasDGExtra) extraHTML = `<div class="equip-extra" id="dgExtra-${prefix}-${eq.id}"><div class="extra-title">⚡ DG Additional Details</div><div class="extra-grid"><div><label>Fuel Filling Date</label><input type="date" id="dgFuelDate-${prefix}-${eq.id}"></div><div><label>Diesel Qty (Ltrs)</label><input type="number" id="dgFuelQty-${prefix}-${eq.id}" placeholder="e.g. 50" min="0" step="0.5"></div><div><label>Current Fuel Level (Ltrs)</label><input type="number" id="dgCurrentFuel-${prefix}-${eq.id}" placeholder="e.g. 30" min="0" step="0.5"></div><div><label>Total DG Run Hours</label><input type="number" id="dgTotalHours-${prefix}-${eq.id}" placeholder="e.g. 1500" min="0" step="0.1"></div><div><label>Trail Run Date</label><input type="date" id="dgTrailDate-${prefix}-${eq.id}"></div><div><label>Trail Running Time (Mins)</label><input type="number" id="dgRunTime-${prefix}-${eq.id}" placeholder="e.g. 30" min="0"></div></div></div>`;
+  if(eq.hasMOVExtra) extraHTML = `<div class="equip-extra" id="movExtra-${prefix}-${eq.id}"><div class="extra-title">🔌 MOV Additional Details</div><div class="extra-grid"><div class="full"><label>MOV Remote Testing Date</label><input type="date" id="movTestDate-${prefix}-${eq.id}"></div></div></div>`;
+  if(eq.hasSolarExtra) extraHTML = `<div class="equip-extra" id="solarExtra-${prefix}-${eq.id}"><div class="extra-title">☀️ Solar Additional Details</div><div class="extra-grid"><div class="full"><label>Solar Total kWh Reading</label><input type="number" id="solarKwh-${prefix}-${eq.id}" placeholder="e.g. 1250.5" min="0" step="0.1"></div></div></div>`;
+  div.innerHTML = `<div class="equip-header"><div class="equip-name"><span class="equip-num">#${eq.id>100?'TP'+(eq.id-100):eq.id}</span>${eq.icon} ${eq.name}${eq.priority==='critical'?'<span style="color:var(--danger);font-size:10px;font-weight:700">★ CRITICAL</span>':''}</div></div><div class="status-btns"><button class="status-btn" onclick="eqSetStatus('${prefix}',${eq.id},'Working',this)">✓ Working</button><button class="status-btn" onclick="eqSetStatus('${prefix}',${eq.id},'Not Working',this)">✕ Not Working</button><button class="status-btn" onclick="eqSetStatus('${prefix}',${eq.id},'Other',this)">◎ Other</button><button class="status-btn" onclick="eqSetStatus('${prefix}',${eq.id},'Not Available',this)">⊘ N/A</button></div><div class="equip-remarks" id="remarks-${prefix}-${eq.id}"><textarea id="remarkText-${prefix}-${eq.id}" placeholder="Describe the issue..." rows="2"></textarea></div>${extraHTML}`;
+  container.appendChild(div);
+}
+
+function eqSetStatus(prefix, id, status, btn) {
+  const obj = prefix==='tp' ? eqTpStatus : eqStatus;
+  const p = btn.parentElement;
+  p.querySelectorAll('.status-btn').forEach(b => b.className='status-btn');
+  if(status==='Working') btn.classList.add('active-w');
+  else if(status==='Not Working') btn.classList.add('active-nw');
+  else if(status==='Not Available') btn.classList.add('active-na');
+  else btn.classList.add('active-o');
+  obj[id] = status;
+  const rem = document.getElementById('remarks-'+prefix+'-'+id);
+  if(rem) rem.classList.toggle('show', status==='Not Working'||status==='Other');
+  eqUpdateSummary();
+}
+
+function eqUpdateSummary() {
+  const vals = Object.values(eqStatus);
+  const w=vals.filter(v=>v==='Working').length, nw=vals.filter(v=>v==='Not Working').length;
+  const o=vals.filter(v=>v==='Other'||v==='Not Available').length;
+  const pend=EQUIPMENT.length-vals.length;
+  document.getElementById('eq-sumOk').textContent='✓ '+w+' Working';
+  document.getElementById('eq-sumBad').textContent='✕ '+nw+' Not Working';
+  document.getElementById('eq-sumOther').textContent='◎ '+o+' Other/NA';
+  document.getElementById('eq-sumPending').textContent='⏳ '+pend+' Pending';
+  const pct=Math.round((vals.length/EQUIPMENT.length)*100);
+  const fill=document.getElementById('eq-progressFill');
+  fill.style.width=pct+'%'; fill.style.background=nw>0?'var(--danger)':'var(--success)';
+
+  // Check T-Point items too
+  const loc = gv('eq-locationSelect');
+  const isTP = loc.toLowerCase().includes('t-point') || loc.toLowerCase().includes('tpoint') || loc === 'T-Point';
+  const tpDone = isTP ? Object.values(eqTpStatus).length >= TPOINT_EQUIPMENT.length : true;
+  document.getElementById('eq-btnSubmit').disabled = vals.length < EQUIPMENT.length || !tpDone;
+}
+
+function eqSetFirstAid(idx, el) {
+  // Only allow one selection - radio behavior
+  document.querySelectorAll('#eq-firstAidGroup .fa-check-item').forEach((item,i) => {
+    item.classList.remove('selected');
+    item.querySelector('input').checked = false;
+  });
+  el.classList.add('selected');
+  el.querySelector('input').checked = true;
+  const vals = ['all_ok','not_available','expired','other'];
+  eqFirstAidStatus = vals[idx];
+  // Show remarks for all except "All medicine is available & not expired" (idx 0)
+  document.getElementById('eq-faRemarks').classList.toggle('show', idx !== 0);
+}
+
+function eqSetHK(status, btn) {
+  eqHKStatus = status;
+  btn.parentElement.querySelectorAll('.status-btn').forEach(b => b.className='status-btn');
+  if(status==='Ok') btn.classList.add('active-w'); else btn.classList.add('active-nw');
+  document.getElementById('eq-hkRemarks').classList.toggle('show', status==='Not Ok');
+}
+
+async function eqSubmitAll() {
+  const btn = document.getElementById('eq-btnSubmit');
+  btn.disabled=true; btn.innerHTML='<div class="loading-spinner" style="width:16px;height:16px;display:inline-block;margin-right:6px"></div> Submitting...';
+  try {
+    const loc = gv('eq-locationSelect');
+    const items = EQUIPMENT.map(eq => {
+      const item = {n:eq.name, s:eqStatus[eq.id]||'Pending', r:''};
+      const rem = document.getElementById('remarkText-eq-'+eq.id);
+      if(rem && rem.value.trim()) item.r = rem.value.trim();
+      if(eq.hasDGExtra) item.dg={fuelDate:gv('dgFuelDate-eq-'+eq.id),fuelQty:gv('dgFuelQty-eq-'+eq.id),currentFuel:gv('dgCurrentFuel-eq-'+eq.id),trailDate:gv('dgTrailDate-eq-'+eq.id),runTime:gv('dgRunTime-eq-'+eq.id),totalHours:gv('dgTotalHours-eq-'+eq.id)};
+      if(eq.hasMOVExtra) item.mov={testDate:gv('movTestDate-eq-'+eq.id)};
+      if(eq.hasSolarExtra) item.solar={totalKwh:gv('solarKwh-eq-'+eq.id)};
+      return item;
+    });
+
+    // Add T-Point items
+    const isTP = loc.toLowerCase().includes('t-point') || loc.toLowerCase().includes('tpoint') || loc === 'T-Point';
+    if (isTP) {
+      TPOINT_EQUIPMENT.forEach(eq => {
+        const item = {n:eq.name, s:eqTpStatus[eq.id]||'Pending', r:''};
+        const rem = document.getElementById('remarkText-tp-'+eq.id);
+        if(rem && rem.value.trim()) item.r = rem.value.trim();
+        items.push(item);
+      });
+    }
+
+    const payload = {
+      action:'submitEquipmentStatus', location:loc, data:JSON.stringify(items),
+      energyReading:gv('eq-energyReading'), energyRemarks:gv('eq-energyRemarks'),
+      housekeeping:eqHKStatus||'', housekeepingRemarks:gv('eq-hkRemarkText'),
+      firstAidStatus: eqFirstAidStatus||'', firstAidRemarks: gv('eq-faRemarkText'),
+      deviceInfo:navigator.userAgent.substring(0,80)
+    };
+    const result = await apiPost(payload);
+    if(result.success) {
+      const nw=Object.values(eqStatus).filter(v=>v==='Not Working').length;
+      const w=Object.values(eqStatus).filter(v=>v==='Working').length;
+      eqShowResult(true,'Equipment Status Submitted!',result.message||'',{Location:loc,'Working':w+'/'+EQUIPMENT.length,'Not Working':nw,'First Aid':eqFirstAidStatus||'Not set','Housekeeping':eqHKStatus||'Not set','Energy':gv('eq-energyReading')?gv('eq-energyReading')+' kWh':'Not entered','Time':new Date().toLocaleTimeString()});
+    } else eqShowResult(false,'Failed',result.error||result.message||'Error');
+  } catch(e) { eqShowResult(false,'Error',e.message); }
+}
+
+function eqShowResult(ok,title,msg,det) {
+  document.getElementById('eq-stepForm').classList.add('hidden');
+  document.getElementById('eq-stepResult').classList.remove('hidden');
+  let h=`<div class="result-icon ${ok?'success':'error'}">${ok?'✓':'✕'}</div><h2 style="color:${ok?'var(--success)':'var(--danger)'}">${title}</h2><p>${msg}</p>`;
+  if(det){h+='<div class="result-details">';for(const[k,v]of Object.entries(det))h+=`<div class="row"><span>${k}</span><span>${v}</span></div>`;h+='</div>';}
+  h+='<button class="btn btn-secondary" style="margin-top:16px" onclick="location.reload()">Done</button>';
+  document.getElementById('eq-resultContent').innerHTML=h;
+}
+
+// ================================================================
+// ═══ SECTION 3: VISITOR ═══
+// ================================================================
+let vis = { employee:null, stream:null, gps:null, faceScore:0, detInt:null, liveness:{blink:false,headMove:false,faceDetected:false,matched:false}, blinkH:[], headH:[], distH:[], activeVisitors:[], selectedCO:null };
+
+function visSetMode(mode) {
+  document.querySelectorAll('#vis-modeToggle .mode-btn').forEach((b,i) => {
+    b.classList.remove('active','checkout-mode');
+    if((mode==='checkin'&&i===0)||(mode==='checkout'&&i===1)){b.classList.add('active');if(mode==='checkout')b.classList.add('checkout-mode');}
+  });
+  visStopCamera();
+  if(mode==='checkin'){document.getElementById('vis-checkinFlow').classList.remove('hidden');document.getElementById('vis-checkoutFlow').classList.add('hidden');visGoStep(1);}
+  else{document.getElementById('vis-checkinFlow').classList.add('hidden');document.getElementById('vis-checkoutFlow').classList.remove('hidden');}
+}
+
+document.getElementById('vis-locationSelect').addEventListener('change', function(){document.getElementById('locationName').textContent=this.value||'Select Location';visCheckS1();});
+['vis-name','vis-phone','vis-purpose'].forEach(id=>{document.getElementById(id).addEventListener('input',visCheckS1);document.getElementById(id).addEventListener('change',visCheckS1);});
+document.getElementById('vis-employeeSelect').addEventListener('change', function(){
+  if(this.value){vis.employee=JSON.parse(this.value);document.getElementById('vis-empInfo').classList.remove('hidden');document.getElementById('vis-empDept').textContent=vis.employee.Department||'-';document.getElementById('vis-empId').textContent=vis.employee.EmployeeID;document.getElementById('vis-btnStep2').disabled=false;}
+  else{vis.employee=null;document.getElementById('vis-empInfo').classList.add('hidden');document.getElementById('vis-btnStep2').disabled=true;}
+});
+
+function visCheckS1(){document.getElementById('vis-btnStep1').disabled=!(gv('vis-locationSelect')&&gv('vis-name').trim()&&gv('vis-phone').trim()&&gv('vis-purpose'));}
+
+function visGoStep(step) {
+  for(let i=1;i<=5;i++) document.getElementById('vis-step'+i).classList.toggle('hidden',i!==step);
+  document.querySelectorAll('#vis-dots .step-dot').forEach((d,i)=>{d.className='step-dot';if(i+1<step)d.classList.add('done');if(i+1===step){d.classList.add('active');d.style.background='var(--visitor)';}});
+  if(step===3) visStartCamera(); else visStopCamera();
+  if(step===4) visConfirm();
+}
+
+async function visStartCamera() {
+  try {
+    vis.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});
+    const v=document.getElementById('vis-video');v.srcObject=vis.stream;await v.play();
+    vis.liveness={blink:false,headMove:false,faceDetected:false,matched:false};vis.blinkH=[];vis.headH=[];vis.distH=[];vis.faceScore=0;
+    visUpdateChecks();visUpdateStatus('yellow','Camera active...');
+    vis.detInt=setInterval(visDetect,300);
+  }catch(e){visUpdateStatus('red','Camera access denied.');}
+}
+function visStopCamera(){if(vis.detInt){clearInterval(vis.detInt);vis.detInt=null;}if(vis.stream){vis.stream.getTracks().forEach(t=>t.stop());vis.stream=null;}}
+
+async function visDetect() {
+  const v=document.getElementById('vis-video');if(!v.videoWidth)return;
+  const opts=new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.5});
+  try{
+    const det=await faceapi.detectSingleFace(v,opts).withFaceLandmarks().withFaceDescriptor();
+    const guide=document.getElementById('vis-faceGuide');
+    if(det){
+      guide.classList.add('detected');guide.classList.remove('error');vis.liveness.faceDetected=true;
+      if(vis.employee&&_faceDescriptors[vis.employee.EmployeeID]){const dist=faceapi.euclideanDistance(det.descriptor,_faceDescriptors[vis.employee.EmployeeID]);vis.distH.push(dist);if(vis.distH.length>5)vis.distH.shift();const avg=vis.distH.reduce((a,b)=>a+b,0)/vis.distH.length;vis.faceScore=Math.round(Math.max(0,100-avg*100));vis.liveness.matched=avg<FACE_MATCH_THRESHOLD&&vis.faceScore>=FACE_MATCH_SCORE_MIN;}else{vis.faceScore=-1;vis.liveness.matched=false;}
+      const lm=det.landmarks,le=lm.getLeftEye(),re=lm.getRightEye(),ear=(getEAR(le)+getEAR(re))/2;
+      vis.blinkH.push(ear);if(vis.blinkH.length>30)vis.blinkH.shift();if(vis.blinkH.length>=5&&Math.max(...vis.blinkH)-Math.min(...vis.blinkH)>.045)vis.liveness.blink=true;
+      const nx=lm.getNose()[0].x;vis.headH.push(nx);if(vis.headH.length>20)vis.headH.shift();if(vis.headH.length>=8&&Math.max(...vis.headH)-Math.min(...vis.headH)>15)vis.liveness.headMove=true;
+      const ov=document.getElementById('vis-overlay'),dims=faceapi.matchDimensions(ov,v,true),res=faceapi.resizeResults(det,dims);ov.getContext('2d').clearRect(0,0,ov.width,ov.height);faceapi.draw.drawFaceLandmarks(ov,res);
+      const all=vis.liveness.faceDetected&&vis.liveness.blink&&vis.liveness.headMove;
+      if(all&&vis.liveness.matched){visUpdateStatus('green','Verified ('+vis.faceScore+'%)!');document.getElementById('vis-btnCapture').disabled=false;}
+      else if(vis.faceScore===-1){visUpdateStatus('red','⚠ FACE NOT REGISTERED!');document.getElementById('vis-btnCapture').disabled=true;guide.classList.remove('detected');guide.classList.add('error');}
+      else if(!vis.liveness.matched){visUpdateStatus('red','✕ MISMATCH ('+vis.faceScore+'%)');document.getElementById('vis-btnCapture').disabled=true;guide.classList.remove('detected');guide.classList.add('error');}
+      else{const p=[];if(!vis.liveness.blink)p.push('blink');if(!vis.liveness.headMove)p.push('move head');visUpdateStatus('yellow','OK ('+vis.faceScore+'%) — '+p.join(' & '));document.getElementById('vis-btnCapture').disabled=true;}
+    }else{guide.classList.remove('detected','error');vis.liveness.faceDetected=false;visUpdateStatus('yellow','No face detected');document.getElementById('vis-overlay').getContext('2d').clearRect(0,0,999,999);}
+    visUpdateChecks();
+  }catch(e){}
+}
+function visUpdateStatus(c,t){document.getElementById('vis-statusDot').className='status-dot '+c;document.getElementById('vis-statusText').textContent=t;}
+function visUpdateChecks(){['Face','Match','Blink','Move'].forEach((n,i)=>{const k=['faceDetected','matched','blink','headMove'][i];const el=document.getElementById('vis-chk'+n);el.className='check-item '+(vis.liveness[k]?'pass':'');el.querySelector('.check-icon').textContent=vis.liveness[k]?'✓':'○';});}
+
+async function visCapture(){visStopCamera();visGoStep(4);}
+
+function visConfirm() {
+  const fields=[['Visitor Name',gv('vis-name')],['Phone',gv('vis-phone')],['Company',gv('vis-company')||'-'],['Purpose',gv('vis-purpose')],['Activity Details',gv('vis-host')||'-'],['Work Permit',gv('vis-workPermit')||'None'],['ID',gv('vis-idType')+' '+gv('vis-idNum')],['Location',gv('vis-locationSelect')]];
+  document.getElementById('vis-summary').innerHTML=fields.map(([k,v])=>`<div class="row"><span>${k}</span><span>${v}</span></div>`).join('');
+  document.getElementById('vis-authName').textContent=vis.employee?vis.employee.Name+' ('+vis.employee.EmployeeID+')':'--';
+  document.getElementById('vis-authMatch').textContent=vis.faceScore>=0?vis.faceScore+'%':'N/A';
+  const ls=[vis.liveness.blink,vis.liveness.headMove,vis.liveness.faceDetected,vis.liveness.matched].filter(Boolean).length;
+  document.getElementById('vis-authLive').textContent=ls+'/4';
+  const sb=document.getElementById('vis-btnSubmit');
+  if(vis.faceScore===-1||vis.faceScore<FACE_MATCH_SCORE_MIN){sb.disabled=true;sb.innerHTML='⚠ Not Verified';sb.style.opacity='.5';}
+  else{sb.disabled=false;sb.innerHTML='✓ Confirm Check-In';sb.style.opacity='1';}
+  if(navigator.geolocation) navigator.geolocation.getCurrentPosition(p=>{vis.gps=p.coords;document.getElementById('vis-gpsLat').textContent=p.coords.latitude.toFixed(6);document.getElementById('vis-gpsLng').textContent=p.coords.longitude.toFixed(6);document.getElementById('vis-gpsAcc').textContent='±'+Math.round(p.coords.accuracy)+'m';},()=>{document.getElementById('vis-gpsLat').textContent='Unavailable';document.getElementById('vis-gpsLng').textContent='Unavailable';},{enableHighAccuracy:true,timeout:10000});
+}
+
+async function visSubmitCheckIn() {
+  if(vis.faceScore===-1||vis.faceScore<FACE_MATCH_SCORE_MIN){alert('❌ Employee not verified');return;}
+  const btn=document.getElementById('vis-btnSubmit');btn.disabled=true;btn.innerHTML='<div class="loading-spinner" style="width:16px;height:16px;display:inline-block;margin-right:6px"></div> Submitting...';
+  try{
+    const ls=[vis.liveness.blink,vis.liveness.headMove,vis.liveness.faceDetected,vis.liveness.matched].filter(Boolean).length;
+    const r=await apiPost({action:'visitorCheckin',visitorName:gv('vis-name').trim(),visitorPhone:gv('vis-phone').trim(),visitorCompany:gv('vis-company').trim(),visitorHost:gv('vis-host').trim(),visitorPurpose:gv('vis-purpose'),visitorIdType:gv('vis-idType'),visitorIdNumber:gv('vis-idNum').trim(),visitorRemarks:gv('vis-remarks').trim(),visitorWorkPermit:gv('vis-workPermit'),location:gv('vis-locationSelect'),authorizedBy:vis.employee.EmployeeID,authorizedByName:vis.employee.Name,authFaceMatchScore:vis.faceScore,authLivenessScore:ls,gpsLat:vis.gps?vis.gps.latitude:null,gpsLng:vis.gps?vis.gps.longitude:null,deviceInfo:navigator.userAgent.substring(0,80)});
+    if(r.success) visShowResult(true,'Visitor Checked In!',r.message,{Visitor:gv('vis-name'),Purpose:gv('vis-purpose'),'Authorized By':vis.employee.Name,Location:gv('vis-locationSelect'),Time:new Date().toLocaleTimeString()});
+    else visShowResult(false,'Failed',r.error||r.message||'Error');
+  }catch(e){visShowResult(false,'Error',e.message);}
+}
+
+function visShowResult(ok,title,msg,det) {
+  visGoStep(5);
+  let h=`<div class="result-icon ${ok?'success':'error'}">${ok?'✓':'✕'}</div><h2 style="color:${ok?'var(--visitor)':'var(--danger)'}">${title}</h2><p>${msg||''}</p>`;
+  if(det){h+='<div class="result-details">';for(const[k,v]of Object.entries(det))h+=`<div class="row"><span>${k}</span><span>${v}</span></div>`;h+='</div>';}
+  h+='<button class="btn btn-secondary" style="margin-top:16px" onclick="location.reload()">Done</button>';
+  document.getElementById('vis-resultContent').innerHTML=h;
+}
+
+async function visLoadActiveVisitors() {
+  const loc=gv('vis-coLocationSelect'),list=document.getElementById('vis-activeList');
+  if(!loc){list.innerHTML='<div style="text-align:center;padding:30px;color:var(--text2)"><div style="font-size:36px;opacity:.5">👋</div><p>Select a location</p></div>';document.getElementById('vis-btnCO').disabled=true;return;}
+  list.innerHTML='<div style="text-align:center;padding:20px"><div class="loading-spinner"></div></div>';
+  try{
+    const r=await apiGet({action:'getActiveVisitors',location:loc});
+    vis.activeVisitors=r.visitors||[];vis.selectedCO=null;document.getElementById('vis-btnCO').disabled=true;
+    if(!vis.activeVisitors.length){list.innerHTML='<div style="text-align:center;padding:30px;color:var(--text2)"><div style="font-size:36px;opacity:.5">✅</div><p>No active visitors</p></div>';return;}
+    list.innerHTML=vis.activeVisitors.map((v,i)=>`<div class="visitor-item" onclick="visSelectCO(${i})" id="vis-vItem${i}"><div class="visitor-avatar">${v.Name.charAt(0)}</div><div class="visitor-detail"><div class="visitor-name">${v.Name}</div><div class="visitor-meta">${v.Company||'-'} • ${v.Purpose}</div></div><div style="text-align:right"><div class="visitor-time">IN: ${v.CheckInTime}</div><div class="badge-visitor" style="margin-top:4px">Active</div></div></div>`).join('');
+  }catch(e){list.innerHTML='<div style="text-align:center;padding:30px;color:var(--text2)">Error loading visitors</div>';}
+}
+
+function visSelectCO(i){vis.selectedCO=vis.activeVisitors[i];document.querySelectorAll('.visitor-item').forEach(el=>el.classList.remove('selected'));document.getElementById('vis-vItem'+i).classList.add('selected');document.getElementById('vis-btnCO').disabled=false;}
+
+async function visSubmitCheckOut() {
+  if(!vis.selectedCO) return;
+  const btn=document.getElementById('vis-btnCO');btn.disabled=true;btn.innerHTML='<div class="loading-spinner" style="width:16px;height:16px;display:inline-block;margin-right:6px"></div> Checking out...';
+  try{
+    let lat=null,lng=null;try{const p=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:5000}));lat=p.coords.latitude;lng=p.coords.longitude;}catch(e){}
+    const r=await apiPost({action:'visitorCheckout',visitorId:vis.selectedCO.VisitorID,location:gv('vis-coLocationSelect'),gpsLat:lat,gpsLng:lng,deviceInfo:navigator.userAgent.substring(0,80)});
+    if(r.success){document.getElementById('vis-coResult').classList.remove('hidden');document.getElementById('vis-coResultContent').innerHTML=`<div class="result-icon success">✓</div><h2 style="color:var(--visitor)">Checked Out!</h2><p>${r.message||''}</p><div class="result-details"><div class="row"><span>Visitor</span><span>${vis.selectedCO.Name}</span></div><div class="row"><span>Check-Out</span><span>${new Date().toLocaleTimeString()}</span></div></div><button class="btn btn-secondary" style="margin-top:16px" onclick="location.reload()">Done</button>`;}
+    else{btn.disabled=false;btn.innerHTML='✕ Confirm Check-Out';alert(r.error||'Failed');}
+  }catch(e){btn.disabled=false;btn.innerHTML='✕ Confirm Check-Out';alert('Error: '+e.message);}
+}
+
+// ================================================================
+// ═══ SECTION 4: NEAR MISS ═══
+// ================================================================
+let nm = { employee:null, category:'' };
+
+function nmInit() {
+  const now=new Date();
+  document.getElementById('nm-date').value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  document.getElementById('nm-time').value=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+
+  document.getElementById('nm-locationSelect').addEventListener('change', function(){nmCheckS1();});
+  document.getElementById('nm-employeeSelect').addEventListener('change', function(){
+    if(this.value){nm.employee=JSON.parse(this.value);document.getElementById('nm-empInfo').classList.remove('hidden');document.getElementById('nm-empDept').textContent=nm.employee.Department||'-';document.getElementById('nm-empId').textContent=nm.employee.EmployeeID||'-';}
+    else{nm.employee=null;document.getElementById('nm-empInfo').classList.add('hidden');}
+    nmCheckS1();
+  });
+  ['nm-date','nm-time','nm-cause','nm-incidentLoc','nm-action'].forEach(id=>document.getElementById(id).addEventListener('input',nmCheckS2));
+}
+
+function nmCheckS1(){document.getElementById('nm-btnStep1').disabled=!(gv('nm-locationSelect')&&nm.employee);}
+function nmCheckS2(){document.getElementById('nm-btnSubmit').disabled=!(gv('nm-date')&&gv('nm-time')&&nm.category&&gv('nm-cause').trim()&&gv('nm-incidentLoc').trim()&&gv('nm-action').trim());}
+
+function nmSelectCat(cat,btn){document.querySelectorAll('.cat-btn').forEach(b=>b.className='cat-btn');nm.category=cat;if(cat==='Near Miss')btn.classList.add('active-nm');else if(cat==='Unsafe Act')btn.classList.add('active-ua');else btn.classList.add('active-uc');nmCheckS2();}
+
+function nmGoStep(step){for(let i=1;i<=3;i++)document.getElementById('nm-step'+i).classList.toggle('hidden',i!==step);document.querySelectorAll('#nm-dots .step-dot').forEach((d,i)=>{d.className='step-dot';if(i+1<step)d.classList.add('done');if(i+1===step){d.classList.add('active');d.style.background='var(--orange)';}});}
+
+async function nmSubmit() {
+  const btn=document.getElementById('nm-btnSubmit');btn.disabled=true;btn.innerHTML='<div class="loading-spinner" style="width:16px;height:16px;display:inline-block;margin-right:6px"></div> Submitting...';
+  try{
+    const past=document.getElementById('nm-pastIncident').checked;
+    const r=await apiPost({action:'submitNearMiss',location:gv('nm-locationSelect'),employeeId:nm.employee.EmployeeID,employeeName:nm.employee.Name,incidentDate:gv('nm-date'),incidentTime:gv('nm-time'),category:nm.category,cause:gv('nm-cause').trim(),incidentLocation:gv('nm-incidentLoc').trim(),pastIncident:past?'Yes':'No',pastIncidentDetails:past?gv('nm-pastText').trim():'',actionTaken:gv('nm-action').trim(),remarks:gv('nm-remarks').trim(),deviceInfo:navigator.userAgent.substring(0,80)});
+    if(r.success){nmGoStep(3);document.getElementById('nm-resultContent').innerHTML=`<div class="result-icon success">✓</div><h2 style="color:var(--orange)">Report Submitted!</h2><p>${r.message||''}</p><div class="result-details"><div class="row"><span>Category</span><span>${nm.category}</span></div><div class="row"><span>Location</span><span>${gv('nm-locationSelect')}</span></div><div class="row"><span>Reported By</span><span>${nm.employee.Name}</span></div><div class="row"><span>Date</span><span>${gv('nm-date')}</span></div></div><button class="btn btn-secondary" style="margin-top:16px" onclick="location.reload()">Submit Another</button>`;}
+    else{btn.disabled=false;btn.innerHTML='📤 Submit Near Miss Report';alert(r.error||'Failed');}
+  }catch(e){btn.disabled=false;btn.innerHTML='📤 Submit Near Miss Report';alert('Error: '+e.message);}
+}
+
+// ================================================================
+// ═══ SECTION 5: WORK PERMIT ═══
+// ================================================================
+let wp = { type:'', typeKey:'', checklistData:{}, hazards:new Set(), ppe:new Set() };
+
+const WP_CHECKLIST = {
+  'A':{title:'General Points',items:[{id:'A1',text:'Equipment/Work Area inspected'},{id:'A2',text:'Surrounding area cleaned & covered'},{id:'A3',text:'Sewers/Manholes/CBD covered'},{id:'A4',text:'Hazards from other operations considered'},{id:'A5',text:'Equipment isolated/disconnected'},{id:'A6',text:'Equipment drained & depressurized'},{id:'A7',text:'Equipment steamed/purged'},{id:'A8',text:'Equipment water flushed'},{id:'A9',text:'Fire Tender access free'},{id:'A10',text:'Iron Sulfide removed/kept wet'},{id:'A11',text:'Equipment electrically isolated & tagged'},{id:'A13',text:'Running water hose/extinguisher provided'},{id:'A14',text:'Area cordoned off & tagged'},{id:'A15',text:'CCTV monitoring available'},{id:'A16',text:'Proper ventilation & lighting'}]},
+  'B':{title:'Hot Work / Confined Space',items:[{id:'B1',text:'Proper means of exit/escape'},{id:'B2',text:'Standby personnel provided'},{id:'B3',text:'Checked for trapped oil & gas'}]},
+  'C':{title:'Vehicle Entry',items:[{id:'C1',text:'PESO approved spark elimination system'}]},
+  'D':{title:'Excavation',items:[{id:'D1',text:'Proper sloping/shoring provided'},{id:'D2',text:'Excavated soil at safe distance'},{id:'D3',text:'Safe access inside trench/pit'},{id:'D4',text:'Heavy vehicle movement prohibited'}]}
+};
+const WP_HAZARDS = ['Lack of Oxygen','H2S / Toxic Gases','HC/Combustible Gases','Pyrophoric Iron','Corrosive Chemicals','Cave-in Formation','Others'];
+const WP_PPE = ['Face Shield','Apron','Goggles','Dust Respirator','Fresh Air Mask','Lifeline','Safety Harness','Airline','Earmuff'];
+
+function wpInit() {
+  wpBuildChecklist(); wpBuildHazards(); wpBuildPPE();
+  const now=new Date(); const ds=now.toISOString().split('T')[0];
+  document.getElementById('wp-dateFrom').value=ds; document.getElementById('wp-dateTo').value=ds;
+  document.getElementById('wp-issuer').addEventListener('change', function(){const sel=this.options[this.selectedIndex];const d=sel.getAttribute('data-desg');if(d)document.getElementById('wp-issuerDesg').value=d;wpValidateS1();});
+  document.querySelectorAll('#wp-step1 input, #wp-step1 select, #wp-step1 textarea').forEach(el=>{el.addEventListener('input',wpValidateS1);el.addEventListener('change',wpValidateS1);});
+}
+
+function wpSelType(type,key,btn){wp.type=type;wp.typeKey=key;document.querySelectorAll('.pt-btn').forEach(b=>b.className='pt-btn');btn.classList.add('sel-'+key);wpValidateS1();}
+
+function wpValidateS1(){
+  const ok=wp.type&&gv('wp-location')&&gv('wp-exactLoc').trim()&&gv('wp-dateFrom')&&gv('wp-timeFrom')&&gv('wp-dateTo')&&gv('wp-timeTo')&&gv('wp-issuedTo').trim()&&gv('wp-desc').trim()&&gv('wp-receiver')&&gv('wp-issuer')&&gv('wp-sitePerson').trim()&&gv('wp-emergency').trim();
+  document.getElementById('wp-btnStep1').disabled=!ok;
+}
+
+function wpBuildChecklist(){
+  const c=document.getElementById('wp-checklistContainer');c.innerHTML='';
+  for(const[sec,data]of Object.entries(WP_CHECKLIST)){
+    let h=`<div class="checklist"><div class="cl-header">${sec}. ${data.title}</div>`;
+    data.items.forEach(item=>{h+=`<div class="cl-item"><span class="cl-num">${item.id}</span><span class="cl-text">${item.text}</span><div class="cl-opts"><button class="cl-opt" onclick="wpSetCL('${item.id}','Done',this)">✓ Done</button><button class="cl-opt" onclick="wpSetCL('${item.id}','N/A',this)">N/A</button></div></div>`;});
+    h+='</div>';c.innerHTML+=h;
+  }
+}
+function wpSetCL(id,val,btn){wp.checklistData[id]=val;btn.parentElement.querySelectorAll('.cl-opt').forEach(o=>o.className='cl-opt');btn.classList.add(val==='Done'?'done':'na');}
+function wpBuildHazards(){const c=document.getElementById('wp-hazardsList');WP_HAZARDS.forEach(h=>{c.innerHTML+=`<button class="cl-opt" style="padding:5px 9px;font-size:10px" onclick="wpToggleSet(wp.hazards,'${h}',this)">${h}</button>`;});}
+function wpBuildPPE(){const c=document.getElementById('wp-ppeList');WP_PPE.forEach(p=>{c.innerHTML+=`<button class="cl-opt" style="padding:5px 9px;font-size:10px" onclick="wpToggleSet(wp.ppe,'${p}',this)">${p}</button>`;});}
+function wpToggleSet(set,val,btn){if(set.has(val)){set.delete(val);btn.classList.remove('done');}else{set.add(val);btn.classList.add('done');}}
+
+function wpGoStep(n){
+  for(let i=1;i<=5;i++)document.getElementById('wp-step'+i).classList.toggle('hidden',i!==n);
+  document.querySelectorAll('#wp-dots .step-dot').forEach((d,i)=>{d.className='step-dot';if(i+1<n)d.classList.add('done');if(i+1===n){d.classList.add('active');d.style.background='var(--warn)';}});
+  if(n===4) wpBuildSummary();
+  window.scrollTo(0,0);
+}
+
+function wpBuildSummary(){
+  const isHot=wp.typeKey==='hot'||wp.typeKey==='comp';const color=isHot?'var(--danger)':'var(--warn)';
+  const fields=[['Permit Type',wp.type],['Location',gv('wp-location')],['Exact Location',gv('wp-exactLoc')],['Clearance Period',gv('wp-dateFrom')+' '+gv('wp-timeFrom')+' → '+gv('wp-dateTo')+' '+gv('wp-timeTo')],['Issued To',gv('wp-issuedTo')],['Work Description',gv('wp-desc')],['Receiver',gv('wp-receiver')],['Issuer',gv('wp-issuer')],['Gas Test','HC:'+gv('wp-gasHC')+'% | Toxic:'+gv('wp-gasToxic')+'PPM | O₂:'+gv('wp-gasO2')+'%'],['Checklist',Object.keys(wp.checklistData).length+' items'],['Hazards',[...wp.hazards].join(', ')||'None'],['PPE',[...wp.ppe].join(', ')||'None']];
+  document.getElementById('wp-summary').innerHTML=`<div style="padding:8px;border-radius:8px;border:2px solid ${color};background:${isHot?'rgba(220,38,38,.06)':'rgba(255,209,102,.06)'};text-align:center;font-weight:700;color:${color};font-size:14px;margin-bottom:10px">${wp.type.toUpperCase()} PERMIT</div>`+fields.map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px"><span style="color:var(--text2);min-width:110px">${k}</span><span style="text-align:right;max-width:260px;word-break:break-word">${v}</span></div>`).join('');
+}
+
+async function wpSubmit(){
+  const btn=document.getElementById('wp-btnSubmit');btn.disabled=true;btn.innerHTML='<div class="loading-spinner" style="width:16px;height:16px;display:inline-block;margin-right:6px"></div> Submitting...';
+  try{
+    const payload={action:'submitWorkPermit',permitType:wp.type,permitTypeKey:wp.typeKey,location:gv('wp-location'),exactLocation:gv('wp-exactLoc'),dateFrom:gv('wp-dateFrom'),timeFrom:gv('wp-timeFrom'),dateTo:gv('wp-dateTo'),timeTo:gv('wp-timeTo'),issuedTo:gv('wp-issuedTo'),description:gv('wp-desc'),receiverName:gv('wp-receiver'),receiverDesignation:gv('wp-receiverDesg'),issuerName:gv('wp-issuer'),issuerDesignation:gv('wp-issuerDesg'),sitePerson:gv('wp-sitePerson'),securityGuard:gv('wp-guard'),jsaRef:gv('wp-jsa'),crossRef:gv('wp-crossRef'),emergencyContact:gv('wp-emergency'),fireStation:gv('wp-fireStation'),gasHC:gv('wp-gasHC'),gasToxic:gv('wp-gasToxic'),gasO2:gv('wp-gasO2'),checklist:JSON.stringify(wp.checklistData),hazards:JSON.stringify([...wp.hazards]),ppe:JSON.stringify([...wp.ppe]),precautions:gv('wp-precautions'),deviceInfo:navigator.userAgent.substring(0,80)};
+    const result=await apiPost(payload);
+    wpGoStep(5);
+    if(result.success){document.getElementById('wp-resultContent').innerHTML=`<div class="result-icon success">✓</div><h2 style="color:var(--warn)">Permit Submitted!</h2><p>Permit ID: <b style="color:var(--warn);font-family:'Space Mono',monospace">${result.permitId||'-'}</b></p><p style="font-size:11px;color:var(--text2);margin-top:8px">Status: <b>Pending Issuer Approval</b></p><button class="btn btn-secondary" style="margin-top:16px" onclick="location.reload()">Submit Another</button>`;}
+    else{document.getElementById('wp-resultContent').innerHTML=`<div class="result-icon error">✕</div><h2 style="color:var(--danger)">Failed</h2><p>${result.error||'Error'}</p><button class="btn btn-secondary" style="margin-top:16px" onclick="wpGoStep(4)">← Try Again</button>`;}
+  }catch(e){btn.disabled=false;btn.innerHTML='📤 Submit Work Permit';alert('Error: '+e.message);}
+}
+</script>
+</body>
+</html>
