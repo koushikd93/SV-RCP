@@ -325,6 +325,14 @@ input[type="date"],input[type="time"]{color-scheme:light}
       <div class="gps-coord"><span>Latitude</span><span id="att-gpsLat">Fetching...</span></div>
       <div class="gps-coord"><span>Longitude</span><span id="att-gpsLng">Fetching...</span></div>
       <div class="gps-coord"><span>Accuracy</span><span id="att-gpsAcc">--</span></div>
+      <div class="gps-coord"><span>Distance to Location</span><span id="att-gpsDist" style="font-weight:600">Calculating...</span></div>
+      <div id="att-gpsWarn" class="hidden" style="padding:10px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:10px;font-size:13px;margin:8px 0;color:var(--danger)">
+        <strong>⚠ Too Far from Location</strong><br>
+        <span id="att-gpsWarnMsg">You are more than 800m away from the selected location.</span>
+      </div>
+      <div id="att-gpsUnavail" class="hidden" style="padding:10px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:10px;font-size:13px;margin:8px 0;color:var(--danger)">
+        <strong>⚠ GPS Required</strong><br>GPS location is mandatory for attendance. Please enable location access and try again.
+      </div>
       <div class="gps-coord"><span>Face Match</span><span id="att-matchScore" style="color:var(--accent)">--</span></div>
       <div class="gps-coord"><span>Liveness</span><span id="att-livenessDisp" style="color:var(--accent)">--</span></div>
       <div class="btn-row" style="margin-top:14px">
@@ -765,7 +773,7 @@ input[type="date"],input[type="time"]{color-scheme:light}
 // GLOBAL CONFIG & STATE
 // ================================================================
 const _urlParams = new URLSearchParams(window.location.search);
-const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbzHX8hjF4KIIrGPizvubkassyQKN4MYnAq9SAAHutroDOgRxdmu68_GzOU9WRFZCxpDSQ/exec';
+const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbzTQksAVIIJfJitqsZM88KiVNlpOWeHAgE_psNzxlt0ezwyN40N3PdC_vHJkcMz_3YI2g/exec';
 const MODEL_URLS = ['https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model','https://unpkg.com/@vladmandic/face-api@1.7.14/model'];
 let MODEL_URL = MODEL_URLS[0];
 const FACE_MATCH_THRESHOLD = 0.5;
@@ -773,9 +781,19 @@ const FACE_MATCH_SCORE_MIN = 50;
 
 // Shared data
 let _locations = [];
+let _locationData = {}; // {LocationName: {lat, lng, radius}}
 let _employees = [];
 let _faceDescriptors = {};
 let _qrLocation = _urlParams.get('location') || _urlParams.get('loc') || '';
+const ATT_MAX_DISTANCE_M = 800; // Max allowed distance in meters
+
+// Haversine distance (meters)
+function haversineDistance(lat1,lon1,lat2,lon2){
+  const R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function getLocCoords(name){return _locationData[name]||null;}
 
 // ================================================================
 // CLOCK
@@ -862,7 +880,14 @@ window.addEventListener('load', async () => {
       apiGet({action:'getAllFaceData'})
     ]);
 
-    if (locR.success && locR.locations) _locations = locR.locations.map(l => l.LocationName || l);
+    if (locR.success && locR.locations) {
+      _locations = locR.locations.map(l => l.LocationName || l);
+      locR.locations.forEach(l => {
+        if(l.LocationName && l.Latitude && l.Longitude) {
+          _locationData[l.LocationName] = {lat:parseFloat(l.Latitude),lng:parseFloat(l.Longitude),radius:parseFloat(l.Radius)||500};
+        }
+      });
+    }
     if (empR.success && empR.employees) _employees = empR.employees;
     if (faceR.success && faceR.faceData) {
       faceR.faceData.forEach(fd => {
@@ -952,7 +977,7 @@ function switchTab(tab) {
 // ================================================================
 // ═══ SECTION 1: ATTENDANCE ═══
 // ================================================================
-let att = { employee: null, stream: null, gps: null, faceScore: 0, detInt: null, liveness: {blink:false,headMove:false,faceDetected:false,matched:false}, blinkH:[], headH:[], distH:[] };
+let att = { employee: null, stream: null, gps: null, gpsDistance: null, gpsTooFar: false, faceScore: 0, detInt: null, liveness: {blink:false,headMove:false,faceDetected:false,matched:false}, blinkH:[], headH:[], distH:[] };
 
 document.getElementById('att-locationSelect').addEventListener('change', function() {
   document.getElementById('locationName').textContent = this.value || 'Select Location';
@@ -996,12 +1021,31 @@ async function attCheckAlready() {
 
 async function attQuickCheckout() {
   const btn = document.getElementById('att-btnCheckoutStep1');
-  btn.disabled = true; btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;display:inline-block;margin-right:6px"></div> Checking out...';
+  btn.disabled = true; btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;display:inline-block;margin-right:6px"></div> Getting GPS...';
   try {
-    let lat=null,lng=null;
-    try { const p = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:5000})); lat=p.coords.latitude; lng=p.coords.longitude; } catch(e){}
-    const r = await apiPost({action:'markAttendance',type:'checkout',employeeId:att.employee.EmployeeID,employeeName:att.employee.Name,location:gv('att-locationSelect'),shift:gv('att-shiftSelect'),gpsLat:lat,gpsLng:lng,faceMatchScore:0,livenessScore:0,deviceInfo:navigator.userAgent.substring(0,80)});
-    if (r.success) attShowResult(true,'Checked Out!',r.message,{Employee:att.employee.Name,Time:new Date().toLocaleTimeString(),Location:gv('att-locationSelect')});
+    let lat=null,lng=null,dist=null;
+    try {
+      const p = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:true,timeout:15000}));
+      lat=p.coords.latitude; lng=p.coords.longitude;
+      // Distance check for checkout too
+      const locName=gv('att-locationSelect');
+      const locC=getLocCoords(locName);
+      if(locC && locC.lat && locC.lng){
+        dist=Math.round(haversineDistance(lat,lng,locC.lat,locC.lng));
+        if(dist>ATT_MAX_DISTANCE_M){
+          btn.disabled=false; btn.innerHTML='🚪 Check Out Now';
+          alert('❌ You are too far from the location.\n\nYour distance: '+dist+'m\nMaximum allowed: '+ATT_MAX_DISTANCE_M+'m\n\nPlease go to the location to check out.');
+          return;
+        }
+      }
+    } catch(e){
+      btn.disabled=false; btn.innerHTML='🚪 Check Out Now';
+      alert('❌ GPS location is mandatory for checkout.\n\nPlease enable location access and try again.');
+      return;
+    }
+    btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;display:inline-block;margin-right:6px"></div> Checking out...';
+    const r = await apiPost({action:'markAttendance',type:'checkout',employeeId:att.employee.EmployeeID,employeeName:att.employee.Name,location:gv('att-locationSelect'),shift:gv('att-shiftSelect'),gpsLat:lat,gpsLng:lng,gpsDistance:dist||0,faceMatchScore:0,livenessScore:0,deviceInfo:navigator.userAgent.substring(0,80)});
+    if (r.success) attShowResult(true,'Checked Out!',r.message,{Employee:att.employee.Name,Time:new Date().toLocaleTimeString(),Location:gv('att-locationSelect'),Distance:dist?dist+'m':'N/A'});
     else { btn.disabled=false; btn.innerHTML='🚪 Check Out Now'; alert(r.error||r.message||'Failed'); }
   } catch(e) { btn.disabled=false; btn.innerHTML='🚪 Check Out Now'; alert('Error: '+e.message); }
 }
@@ -1080,20 +1124,81 @@ function attFetchGPS() {
   else{ms.textContent=att.faceScore+'% ✓';ms.style.color='var(--accent)';}
   const ls=[att.liveness.blink,att.liveness.headMove,att.liveness.faceDetected,att.liveness.matched].filter(Boolean).length;
   document.getElementById('att-livenessDisp').textContent=ls+'/4 checks';
+
+  // Reset GPS warnings
+  att.gps=null; att.gpsDistance=null; att.gpsTooFar=false;
+  document.getElementById('att-gpsWarn').classList.add('hidden');
+  document.getElementById('att-gpsUnavail').classList.add('hidden');
+  document.getElementById('att-gpsDist').textContent='Calculating...';
+  document.getElementById('att-gpsDist').style.color='var(--text2)';
+
   const sb=document.getElementById('att-btnSubmit');
+  // Initially disable submit until GPS resolved
+  sb.disabled=true; sb.innerHTML='📍 Waiting for GPS...'; sb.style.opacity='.5';
+
   if(att.faceScore===-1||att.faceScore<FACE_MATCH_SCORE_MIN){sb.disabled=true;sb.innerHTML='⚠ Cannot Check In';sb.style.opacity='.5';}
-  else{sb.disabled=false;sb.innerHTML='✓ Confirm Check-In';sb.style.opacity='1';}
-  if(navigator.geolocation) navigator.geolocation.getCurrentPosition(p=>{att.gps=p.coords;document.getElementById('att-gpsLat').textContent=p.coords.latitude.toFixed(6);document.getElementById('att-gpsLng').textContent=p.coords.longitude.toFixed(6);document.getElementById('att-gpsAcc').textContent='±'+Math.round(p.coords.accuracy)+'m';},()=>{document.getElementById('att-gpsLat').textContent='Unavailable';document.getElementById('att-gpsLng').textContent='Unavailable';},{enableHighAccuracy:true,timeout:10000});
+
+  if(navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(p=>{
+      att.gps=p.coords;
+      document.getElementById('att-gpsLat').textContent=p.coords.latitude.toFixed(6);
+      document.getElementById('att-gpsLng').textContent=p.coords.longitude.toFixed(6);
+      document.getElementById('att-gpsAcc').textContent='±'+Math.round(p.coords.accuracy)+'m';
+
+      // Calculate distance to selected location
+      const locName=gv('att-locationSelect');
+      const locC=getLocCoords(locName);
+      if(locC && locC.lat && locC.lng){
+        const dist=haversineDistance(p.coords.latitude,p.coords.longitude,locC.lat,locC.lng);
+        att.gpsDistance=Math.round(dist);
+        if(dist>ATT_MAX_DISTANCE_M){
+          att.gpsTooFar=true;
+          document.getElementById('att-gpsDist').textContent=att.gpsDistance+'m ✕';
+          document.getElementById('att-gpsDist').style.color='var(--danger)';
+          document.getElementById('att-gpsWarn').classList.remove('hidden');
+          document.getElementById('att-gpsWarnMsg').textContent='You are '+att.gpsDistance+'m away. Maximum allowed: '+ATT_MAX_DISTANCE_M+'m.';
+          sb.disabled=true;sb.innerHTML='⚠ Too Far ('+att.gpsDistance+'m)';sb.style.opacity='.5';
+        } else {
+          att.gpsTooFar=false;
+          document.getElementById('att-gpsDist').textContent=att.gpsDistance+'m ✓';
+          document.getElementById('att-gpsDist').style.color='var(--success)';
+          if(att.faceScore!==-1&&att.faceScore>=FACE_MATCH_SCORE_MIN){sb.disabled=false;sb.innerHTML='✓ Confirm Check-In';sb.style.opacity='1';}
+        }
+      } else {
+        // No coordinates for location — allow but show info
+        document.getElementById('att-gpsDist').textContent='N/A (coords not set)';
+        document.getElementById('att-gpsDist').style.color='var(--warn)';
+        att.gpsTooFar=false;
+        if(att.faceScore!==-1&&att.faceScore>=FACE_MATCH_SCORE_MIN){sb.disabled=false;sb.innerHTML='✓ Confirm Check-In';sb.style.opacity='1';}
+      }
+    },()=>{
+      // GPS failed — mandatory, block submission
+      document.getElementById('att-gpsLat').textContent='Unavailable';
+      document.getElementById('att-gpsLng').textContent='Unavailable';
+      document.getElementById('att-gpsDist').textContent='GPS Failed ✕';
+      document.getElementById('att-gpsDist').style.color='var(--danger)';
+      document.getElementById('att-gpsUnavail').classList.remove('hidden');
+      sb.disabled=true;sb.innerHTML='⚠ GPS Required';sb.style.opacity='.5';
+    },{enableHighAccuracy:true,timeout:15000});
+  } else {
+    document.getElementById('att-gpsLat').textContent='Not supported';
+    document.getElementById('att-gpsUnavail').classList.remove('hidden');
+    sb.disabled=true;sb.innerHTML='⚠ GPS Required';sb.style.opacity='.5';
+  }
 }
 
 async function attSubmit(type='checkin') {
+  // GPS mandatory check
+  if(!att.gps){alert('❌ GPS location is mandatory.\n\nPlease enable location access and try again.');return;}
+  // Distance check
+  if(att.gpsTooFar){alert('❌ You are too far from the selected location.\n\nYour distance: '+(att.gpsDistance||'?')+'m\nMaximum allowed: '+ATT_MAX_DISTANCE_M+'m\n\nPlease go to the location and try again.');return;}
   if(type==='checkin'){if(att.faceScore===-1||att.faceScore<FACE_MATCH_SCORE_MIN){alert('❌ Face verification failed');return;}}
   const btn=type==='checkout'?document.getElementById('att-btnCheckout'):document.getElementById('att-btnSubmit');
   btn.disabled=true;btn.innerHTML='<div class="loading-spinner" style="width:16px;height:16px;display:inline-block;margin-right:6px"></div> Submitting...';
   try{
     const ls=[att.liveness.blink,att.liveness.headMove,att.liveness.faceDetected,att.liveness.matched].filter(Boolean).length;
-    const r=await apiPost({action:'markAttendance',type:type,employeeId:att.employee.EmployeeID,employeeName:att.employee.Name,location:gv('att-locationSelect'),shift:gv('att-shiftSelect'),gpsLat:att.gps?att.gps.latitude:null,gpsLng:att.gps?att.gps.longitude:null,faceMatchScore:att.faceScore,livenessScore:ls,deviceInfo:navigator.userAgent.substring(0,80)});
-    if(r.success) attShowResult(true,type==='checkout'?'Checked Out!':'Checked In!',r.message,{Employee:att.employee.Name,Shift:gv('att-shiftSelect'),Time:new Date().toLocaleTimeString(),Location:gv('att-locationSelect'),'Face Match':att.faceScore+'%'});
+    const r=await apiPost({action:'markAttendance',type:type,employeeId:att.employee.EmployeeID,employeeName:att.employee.Name,location:gv('att-locationSelect'),shift:gv('att-shiftSelect'),gpsLat:att.gps.latitude,gpsLng:att.gps.longitude,gpsDistance:att.gpsDistance||0,faceMatchScore:att.faceScore,livenessScore:ls,deviceInfo:navigator.userAgent.substring(0,80)});
+    if(r.success) attShowResult(true,type==='checkout'?'Checked Out!':'Checked In!',r.message,{Employee:att.employee.Name,Shift:gv('att-shiftSelect'),Time:new Date().toLocaleTimeString(),Location:gv('att-locationSelect'),'Face Match':att.faceScore+'%','Distance':att.gpsDistance?att.gpsDistance+'m':'N/A'});
     else attShowResult(false,'Failed',r.error||r.message||'Unknown error');
   }catch(e){attShowResult(false,'Error',e.message);}
 }
