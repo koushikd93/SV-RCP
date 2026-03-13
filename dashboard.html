@@ -55,7 +55,7 @@
     align-items: center; justify-content: center;
     transition: opacity 0.5s, visibility 0.5s;
   }
-  .loading-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; display: none !important; }
+  .loading-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
   .loading-logo-wrap {
     width: 90px; height: 90px;
     border-radius: 50%;
@@ -104,13 +104,10 @@
     display: flex; flex-direction: column;
     position: fixed; top: 0; left: 0; bottom: 0;
     z-index: 50;
-    transition: transform 0.3s, width 0.3s;
+    transition: transform 0.3s;
     box-shadow: 4px 0 20px rgba(0,0,0,0.12);
     overflow-y: auto;
   }
-  /* Sidebar collapsed state */
-  .sidebar.collapsed { transform: translateX(-264px); }
-  .layout.sidebar-collapsed .main { margin-left: 0; width: 100%; }
 
   .sidebar-brand {
     padding: 18px 20px 14px;
@@ -186,10 +183,7 @@
     padding: 0; min-height: 100vh;
     overflow-x: hidden;
     width: calc(100% - 264px);
-    display: flex; flex-direction: column;
   }
-  .main > .topbar { flex-shrink: 0; }
-  .main > .page { flex-shrink: 0; }
 
   /* ===== TOPBAR ===== */
   .topbar {
@@ -397,9 +391,8 @@
     .mobile-toggle { display: block; }
     .sidebar { transform: translateX(-100%); }
     .sidebar.open { transform: translateX(0); }
-    .sidebar.collapsed { transform: translateX(-100%); }
     .main { margin-left: 0; width: 100%; }
-    .topbar { padding: 14px 16px; }
+    .topbar { padding: 14px 16px 14px 56px; }
     .topbar h1 { font-size: 16px; }
     .page { padding: 12px; }
     .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -552,10 +545,7 @@
 
   <main class="main">
     <div class="topbar">
-      <div style="display:flex;align-items:center;gap:10px">
-        <button onclick="toggleSidebar()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:background 0.2s" onmouseover="this.style.background='rgba(255,255,255,0.15)'" onmouseout="this.style.background='none'">☰</button>
-        <h1 id="pageTitle">Dashboard Overview</h1>
-      </div>
+      <h1 id="pageTitle">Dashboard Overview</h1>
       <div class="topbar-right">
         <div class="date-badge" id="currentDate"></div>
         <button class="refresh-btn" onclick="refreshData()">↻ Refresh</button>
@@ -1154,20 +1144,84 @@ async function fetchAPIData(retries = 3, delayMs = 2000) {
 // DEMO DATA
 // ============================================================
 function getDemoData() {
-  // No demo data — show empty dashboard until live data loads
+  const locations = ['Head Office','Branch-A','Branch-B','Warehouse','Site-1','Site-2','Site-3','Regional-N','Regional-S','Regional-E'];
+  const names = ['Rajesh Kumar','Priya Sharma','Amit Singh','Sunita Devi','Vikram Patel','Neha Gupta','Ravi Verma','Deepa Nair','Suresh Reddy','Anjali Mishra','Mohan Das','Kavita Rao','Arjun Mehta','Pooja Joshi','Sanjay Tiwari','Meera Chopra','Rahul Saxena','Divya Pillai','Kiran Bhat','Lakshmi Iyer','Nitin Jain','Shreya Agarwal','Prakash Soni','Anita Desai','Manish Kapoor','Ritu Bhatt','Gaurav Malhotra','Shalini Pandey','Vivek Chauhan','Asha Kulkarni','Rohit Dubey','Swati Banerjee','Arun Nath','Geeta Srivastava','Manoj Yadav'];
+  const shifts = ['A','B','C','General'];
+  const departments = ['Operations','Admin','IT','Security','Maintenance','HR','Finance'];
+
+  const employees = names.map((name, i) => ({
+    EmployeeID: 'EMP' + String(100 + i),
+    Name: name,
+    Phone: '+91 ' + (9800000000 + Math.floor(Math.random() * 199999999)).toString(),
+    Location: locations[i % 10],
+    Shift: shifts[i % 4],
+    Department: departments[i % 7],
+    Status: 'Active'
+  }));
+
+  const today = new Date().toISOString().split('T')[0];
+  const records = [];
+  const presentCount = 28;
+
+  for (let i = 0; i < presentCount; i++) {
+    const emp = employees[i];
+    const shiftStarts = { A: 6, B: 14, C: 22, General: 9 };
+    const baseHour = shiftStarts[emp.Shift] || 9;
+    const lateMin = Math.random() > 0.75 ? Math.floor(Math.random() * 45) + 15 : Math.floor(Math.random() * 14);
+    const checkIn = `${String(baseHour).padStart(2,'0')}:${String(lateMin).padStart(2,'0')}:${String(Math.floor(Math.random()*60)).padStart(2,'0')}`;
+    const hasCheckout = Math.random() > 0.6;
+    const coHour = baseHour + 8 + Math.floor(Math.random() * 2);
+    const checkOut = hasCheckout ? `${String(coHour % 24).padStart(2,'0')}:${String(Math.floor(Math.random()*60)).padStart(2,'0')}:00` : '';
+    let status = lateMin <= 15 ? 'On Time' : lateMin <= 30 ? 'Late' : 'Very Late';
+    if (hasCheckout) status = 'Completed';
+
+    records.push({
+      EmployeeID: emp.EmployeeID, EmployeeName: emp.Name, Phone: emp.Phone, Location: emp.Location,
+      Shift: emp.Shift, Date: today, CheckInTime: checkIn, CheckOutTime: checkOut,
+      GPSLat: (17.38 + Math.random() * 0.1).toFixed(6), GPSLng: (78.48 + Math.random() * 0.1).toFixed(6),
+      FaceMatchScore: Math.floor(75 + Math.random() * 25), LivenessScore: Math.floor(3 + Math.random() * 2),
+      Status: status
+    });
+  }
+
+  const occ = {};
+  locations.forEach(loc => {
+    const locEmps = employees.filter(e => e.Location === loc);
+    const locRecs = records.filter(r => r.Location === loc && r.Status !== 'Completed');
+    occ[loc] = {
+      total: locEmps.length,
+      present: locRecs.length,
+      absent: locEmps.length - locRecs.length
+    };
+  });
+
+  const shiftBreakdown = { A: 0, B: 0, C: 0, General: 0 };
+  records.forEach(r => { if (shiftBreakdown.hasOwnProperty(r.Shift)) shiftBreakdown[r.Shift]++; });
+
+  const week = [];
+  for (let d = 6; d >= 0; d--) {
+    const dt = new Date(); dt.setDate(dt.getDate() - d);
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    week.push({
+      date: dt.toISOString().split('T')[0],
+      day: dayNames[dt.getDay()],
+      present: Math.floor(25 + Math.random() * 10),
+      late: Math.floor(2 + Math.random() * 5)
+    });
+  }
+
   return {
     success: true,
     _isDemo: true,
-    summary: { totalEmployees: 0, presentToday: 0, absentToday: 0, lateToday: 0, attendanceRate: 0 },
-    locationOccupancy: {},
-    shiftBreakdown: { A:0, B:0, C:0, General:0 },
-    weeklyTrend: [],
-    todayRecords: [],
-    locations: [],
-    employees: []
+    summary: { totalEmployees: 35, presentToday: presentCount, absentToday: 7, lateToday: records.filter(r => r.Status === 'Late' || r.Status === 'Very Late').length, attendanceRate: 80 },
+    locationOccupancy: occ,
+    shiftBreakdown,
+    weeklyTrend: week,
+    todayRecords: records,
+    locations: locations.map((l, i) => ({ LocationID: 'LOC' + (100 + i), LocationName: l, Address: l + ' Address', Latitude: '', Longitude: '', Status: 'Active' })),
+    employees
   };
 }
-
 
 // ============================================================
 // INIT
@@ -1982,29 +2036,16 @@ function exportNearMissCSV() {
 // ============================================================
 // NAVIGATION & FILTERS
 // ============================================================
-// ============================================================
-// SIDEBAR TOGGLE
-// ============================================================
-function toggleSidebar() {
-  const sidebar = document.querySelector('.sidebar');
-  const layout = document.querySelector('.layout');
-  sidebar.classList.toggle('collapsed');
-  layout.classList.toggle('sidebar-collapsed');
-}
-
 function showPage(page, el) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
-  else {
+  else { // Find matching nav item if el not passed (e.g. from stat card click)
     document.querySelectorAll('.nav-item').forEach(n => { if (n.getAttribute('onclick') && n.getAttribute('onclick').includes("'"+page+"'")) n.classList.add('active'); });
   }
 
-  // Close mobile sidebar
-  document.querySelector('.sidebar').classList.remove('open');
-
-  // Scroll to top
+  // Scroll to top of page
   window.scrollTo({top:0, behavior:'smooth'});
 
   const titles = {
@@ -2025,6 +2066,7 @@ function showPage(page, el) {
     trends: 'Trend Analytics'
   };
   document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
+  document.querySelector('.sidebar').classList.remove('open');
 
   if (page === 'records') filterRecords();
   if (page === 'visitors' && typeof filterVisitors === 'function') filterVisitors();
