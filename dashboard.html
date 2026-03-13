@@ -181,6 +181,8 @@
   .main {
     flex: 1; margin-left: 264px;
     padding: 0; min-height: 100vh;
+    overflow-x: hidden;
+    width: calc(100% - 264px);
   }
 
   /* ===== TOPBAR ===== */
@@ -189,9 +191,7 @@
     padding: 12px 32px;
     background: linear-gradient(135deg, #1B3C73 0%, #002B5C 50%, #0D4A8F 100%);
     color: #FFF;
-    position: sticky; top: 0; z-index: 10;
     border-bottom: 3px solid #F26722;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
   }
 
   .topbar h1 {
@@ -218,7 +218,7 @@
   .refresh-btn:hover { background: #e05a15; color: #FFF; border-color: #c04f10; box-shadow: 0 3px 10px rgba(242,103,34,0.45); transform: translateY(-1px); }
 
   /* Content padding after topbar */
-  .page { padding: 16px 28px 32px; }
+  .page { padding: 16px 28px 32px; box-sizing: border-box; max-width: 100%; overflow-x: hidden; }
 
   /* ===== STATS GRID ===== */
   .stats-grid {
@@ -337,6 +337,25 @@
     box-shadow: 0 0 0 3px rgba(242,103,34,0.12);
   }
 
+  /* Standalone filter inputs (used in trend page etc) */
+  .filter-input {
+    width: 100%; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); font-size: 13px;
+    font-family: 'Poppins', sans-serif;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+  }
+  .filter-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(242,103,34,0.12); }
+
+  .trend-filter-bar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+    padding: 12px 16px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px;
+    margin-bottom: 16px; box-sizing: border-box;
+    width: 100%;
+  }
+
   /* ===== DATA SOURCE BADGE ===== */
   .data-source-badge {
     padding: 3px 8px; border-radius: 4px;
@@ -372,13 +391,14 @@
     .mobile-toggle { display: block; }
     .sidebar { transform: translateX(-100%); }
     .sidebar.open { transform: translateX(0); }
-    .main { margin-left: 0; }
+    .main { margin-left: 0; width: 100%; }
     .topbar { padding: 14px 16px 14px 56px; }
     .topbar h1 { font-size: 16px; }
-    .page { padding: 16px; }
+    .page { padding: 12px; }
     .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
     .grid-2, .grid-3 { grid-template-columns: 1fr; }
     .filter-bar { flex-direction: column; }
+    .trend-filter-bar { flex-direction: column; align-items: stretch; }
   }
 
   /* ===== SCROLLBAR ===== */
@@ -983,28 +1003,37 @@
     </div>
 
     <!-- ===== TREND ANALYTICS PAGE ===== -->
-    <div class="page" id="page-trends">
-      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:14px">
-        <div style="flex:1.5;min-width:180px">
-          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">📍 Location <span style="color:var(--danger)">*</span></label>
-          <select id="trendLocation" class="filter-input" style="border:2px solid var(--accent);font-weight:600;font-size:13px;padding:8px 10px">
+    <div class="page" id="page-trends" style="box-sizing:border-box;max-width:100%">
+      <!-- FILTER BAR — always at the very top -->
+      <div class="trend-filter-bar">
+        <div style="min-width:180px;flex:1">
+          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">📍 Location <span style="color:#dc2626">*required</span></label>
+          <select id="trendLocation" class="filter-input" style="border:2px solid var(--accent);font-weight:600">
             <option value="">— Select Location —</option>
           </select>
         </div>
-        <div style="min-width:125px">
-          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">From</label>
-          <input type="date" id="trendDateFrom" class="filter-input" style="padding:8px 6px">
+        <div style="min-width:120px">
+          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Date From</label>
+          <input type="date" id="trendDateFrom" class="filter-input">
         </div>
-        <div style="min-width:125px">
-          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">To</label>
-          <input type="date" id="trendDateTo" class="filter-input" style="padding:8px 6px">
+        <div style="min-width:120px">
+          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Date To</label>
+          <input type="date" id="trendDateTo" class="filter-input">
         </div>
         <div>
-          <button class="refresh-btn" onclick="loadTrends()" style="padding:9px 22px;font-size:13px">📊 Load Trends</button>
+          <button class="refresh-btn" onclick="loadTrends()" style="padding:9px 22px;font-size:13px;white-space:nowrap">📊 Load Trends</button>
         </div>
-        <div style="margin-left:auto"><span class="panel-badge" style="background:rgba(242,103,34,.1);color:var(--accent)" id="trendBadge">Select a location</span></div>
+        <div style="margin-left:auto">
+          <span class="panel-badge" style="background:rgba(242,103,34,.1);color:var(--accent)" id="trendBadge">Select a location</span>
+        </div>
       </div>
-      <div id="trendLoading" class="hidden" style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Loading trend data...</div>
+
+      <!-- LOADING SPINNER -->
+      <div id="trendLoading" class="hidden" style="text-align:center;padding:40px">
+        <div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Loading trend data for selected location...
+      </div>
+
+      <!-- CHARTS & DATA (hidden until loaded) -->
       <div id="trendContent" class="hidden">
         <div class="grid-2">
           <div class="panel"><div class="panel-header"><div class="panel-title">✅ Attendance Trend</div></div><div class="chart-container"><canvas id="trendAttChart"></canvas></div></div>
@@ -1034,10 +1063,12 @@
           </div>
         </div>
       </div>
-      <div id="trendEmpty" style="text-align:center;padding:50px 20px;color:var(--text3)">
-        <div style="font-size:48px;margin-bottom:12px">📍</div>
-        <div style="font-size:16px;font-weight:600;color:var(--text)">Select a Location to View Trends</div>
-        <div style="font-size:13px;margin-top:6px">Choose a specific location and date range above, then click "📊 Load Trends"</div>
+
+      <!-- EMPTY STATE (visible by default) -->
+      <div id="trendEmpty" style="text-align:center;padding:60px 20px">
+        <div style="font-size:52px;margin-bottom:14px">📍</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text)">Select a Location to View Trends</div>
+        <div style="font-size:13px;margin-top:8px;color:var(--text3)">Choose a location and date range from the filter bar above, then click <b>"📊 Load Trends"</b></div>
       </div>
     </div>
 
@@ -1054,7 +1085,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbyIFZCWYs-TNAUOeUmqYxu0Xgr3nEqKicBN3i0l46taPs0Yh-6la4icUMcMCdUmarwLlQ/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbx4S5_PPRyjRqjw3Z5YRpK-77THXgV8ORAinOvOtwT1Jsy8K_Zh5nVL9tT2iorcb2SG3A/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
