@@ -1037,7 +1037,7 @@
         <div class="panel">
           <div class="panel-header"><div class="panel-title">📋 Daily Summary Table</div></div>
           <div class="table-scroll">
-            <table><thead><tr><th>Date</th><th>Present</th><th>Visitors</th><th>Equip OK</th><th>Equip Fault</th><th>Near Miss</th><th>Permits</th></tr></thead>
+            <table><thead><tr><th>Date</th><th>Attendance</th><th>Visitors</th><th>Equip OK</th><th>Equip Fault</th><th>Housekeeping</th><th>DG Fuel</th><th>Near Miss</th><th>Permits</th></tr></thead>
             <tbody id="trendSummaryTable"></tbody></table>
           </div>
         </div>
@@ -1061,7 +1061,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbyqxy6pszKzgxge57tIawoFwaKmdasbB2zEAFi5APo1uX1eRLqEH72WLL3So1mPXtB9_Q/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbx4S5_PPRyjRqjw3Z5YRpK-77THXgV8ORAinOvOtwT1Jsy8K_Zh5nVL9tT2iorcb2SG3A/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -2344,7 +2344,7 @@ async function refreshActiveVisitors() {
 
 // Render equipment stats from cached dashboardData (NO extra API call — FAST!)
 function renderEquipmentFromCache(eqData) {
-  // DG summary
+  // DG summary — INSTANT from cached data
   const dg = eqData.dgSummary || {};
   const dgWorking = dg.working || 0;
   const dgTotal = dg.total || 0;
@@ -2358,7 +2358,7 @@ function renderEquipmentFromCache(eqData) {
     dgEl.textContent = '--'; dgSub.textContent = 'No data today';
   }
 
-  // MOV summary
+  // MOV summary — INSTANT from cached data
   const mov = eqData.movSummary || {};
   const movWorking = mov.working || 0;
   const movTotal = mov.total || 0;
@@ -2372,11 +2372,50 @@ function renderEquipmentFromCache(eqData) {
     movEl.textContent = '--'; movSub.textContent = 'No data today';
   }
 
-  // Render DG/MOV charts
+  // DG/MOV doughnut charts — INSTANT
   renderDGChart(eqData.dgSummary || {});
   renderMOVChart(eqData.movSummary || {});
-  renderDGFuelChart(eqData.dgFuelData || []);
-  console.log('[Equipment] ✅ Stats rendered from cached dashboardData (no extra API call)');
+  console.log('[Equipment] ✅ DG/MOV stats rendered INSTANTLY from cached dashboardData');
+
+  // DG Fuel chart — load in background from equipment records (non-blocking)
+  if (eqData.dgFuelData && eqData.dgFuelData.length > 0) {
+    renderDGFuelChart(eqData.dgFuelData);
+  } else {
+    loadDGFuelChartAsync();
+  }
+}
+
+// Background load DG fuel data from equipment status records
+async function loadDGFuelChartAsync() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const url = API_URL + '?' + new URLSearchParams({ action:'getEquipmentStatus', date:today }).toString();
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 10000);
+    const r = await fetch(url, { redirect:'follow', signal:c.signal });
+    clearTimeout(t);
+    const data = JSON.parse(await r.text());
+    if (data.success && data.records) {
+      // Extract latest DG fuel per location
+      const latest = {};
+      data.records.forEach(rec => {
+        if (rec.Equipment === 'DG' && rec.ExtraData) {
+          try {
+            const extra = typeof rec.ExtraData === 'string' ? JSON.parse(rec.ExtraData) : rec.ExtraData;
+            if (extra.dg && extra.dg.currentFuel) {
+              const fuel = parseFloat(extra.dg.currentFuel);
+              if (!isNaN(fuel) && (!latest[rec.Location] || rec.Time > latest[rec.Location].time)) {
+                latest[rec.Location] = { time: rec.Time, fuel: fuel };
+              }
+            }
+          } catch(e) {}
+        }
+      });
+      const fuelData = Object.entries(latest).map(([loc, d]) => ({ location: loc, fuelLevel: d.fuel }));
+      renderDGFuelChart(fuelData);
+      console.log('[Equipment] ✅ DG Fuel chart loaded from records (' + fuelData.length + ' locations)');
+    }
+  } catch(e) { console.warn('[Equipment] DG fuel chart load failed:', e.message); }
 }
 
 // Fetch equipment summary for overview page (DG + MOV stats) — FALLBACK only
@@ -4079,12 +4118,15 @@ async function exportPermitPDF(id) {
 }
 
 // ============================================================
-// TREND ANALYTICS MODULE
+// TREND ANALYTICS MODULE — works with existing GAS endpoints
+// getAttendance(date), getEquipmentStatus(dateFrom/To),
+// getVisitorRecords(dateFrom/To), getNearMissReports(dateFrom/To),
+// getWorkPermits(dateFrom/To) — all with optional location filter
 // ============================================================
 let trendCharts = {};
+let trendDataCache = null;
 
 function initTrendsPage() {
-  // Populate location dropdown
   const sel = document.getElementById('trendLocation');
   if (sel.options.length <= 1 && dashboardData && dashboardData.locations) {
     dashboardData.locations.forEach(l => {
@@ -4093,13 +4135,14 @@ function initTrendsPage() {
         sel.innerHTML += `<option value="${n}">${n}</option>`;
     });
   }
-  // Set default dates (last 7 days)
   const today = new Date();
   const weekAgo = new Date(); weekAgo.setDate(today.getDate() - 7);
   if (!document.getElementById('trendDateFrom').value) document.getElementById('trendDateFrom').value = weekAgo.toISOString().split('T')[0];
   if (!document.getElementById('trendDateTo').value) document.getElementById('trendDateTo').value = today.toISOString().split('T')[0];
-  document.getElementById('trendEmpty').classList.remove('hidden');
-  document.getElementById('trendContent').classList.add('hidden');
+  if (!trendDataCache) {
+    document.getElementById('trendEmpty').classList.remove('hidden');
+    document.getElementById('trendContent').classList.add('hidden');
+  }
 }
 
 async function loadTrends() {
@@ -4114,118 +4157,214 @@ async function loadTrends() {
   document.getElementById('trendBadge').textContent = 'Loading...';
 
   try {
-    // Fetch all data in parallel for the date range
-    const params = { dateFrom, dateTo };
-    if (loc) params.location = loc;
-
-    const [attR, eqR, nmR, wpR, visR] = await Promise.all([
-      fetchTrend('getAttendanceTrend', params),
-      fetchTrend('getEquipmentStatus', params),
-      fetchTrend('getNearMissReports', params),
-      fetchTrend('getWorkPermits', params),
-      fetchTrend('getVisitorRecords', params)
-    ]);
-
-    // Generate date range labels
+    // Generate date range
     const dates = [];
     const d = new Date(dateFrom);
     const end = new Date(dateTo);
     while (d <= end) { dates.push(d.toISOString().split('T')[0]); d.setDate(d.getDate() + 1); }
+    if (dates.length > 31) { alert('Maximum 31 days range'); document.getElementById('trendLoading').classList.add('hidden'); document.getElementById('trendEmpty').classList.remove('hidden'); return; }
 
-    // Process attendance data
-    const attByDate = {};
-    dates.forEach(dt => attByDate[dt] = 0);
-    if (attR && attR.success && attR.records) {
-      attR.records.forEach(r => {
-        const dt = r.Date || '';
-        if (attByDate.hasOwnProperty(dt)) attByDate[dt]++;
-      });
-    }
-    // If getAttendanceTrend not available, use trend data
-    if ((!attR || !attR.success) && attR && attR.trend) {
-      attR.trend.forEach(t => { if (attByDate.hasOwnProperty(t.date)) attByDate[t.date] = t.present || 0; });
-    }
+    // Attendance: fetch per-day in parallel (API only supports single date)
+    const attPromises = dates.map(dt => {
+      const p = { action:'getAttendance', date: dt };
+      if (loc) p.location = loc;
+      return trendFetch(p).then(r => ({
+        date: dt,
+        count: (r && r.success && r.records) ? r.records.length : 0,
+        late: (r && r.success && r.records) ? r.records.filter(x => x.Status === 'Late' || x.Status === 'Very Late').length : 0,
+        shifts: (r && r.success && r.records) ? countShifts(r.records) : {A:0,B:0,C:0,General:0}
+      }));
+    });
 
-    // Process visitor data
-    const visByDate = {};
+    // Range data fetched in parallel
+    const rp = { dateFrom, dateTo };
+    if (loc) rp.location = loc;
+
+    const [attResults, eqR, visR, nmR, wpR] = await Promise.all([
+      Promise.all(attPromises),
+      trendFetch({ action:'getEquipmentStatus', ...rp }),
+      trendFetch({ action:'getVisitorRecords', ...rp }),
+      trendFetch({ action:'getNearMissReports', ...rp }),
+      trendFetch({ action:'getWorkPermits', ...rp }).catch(() => null)
+    ]);
+
+    // --- Process attendance ---
+    const attByDate = {}, lateByDate = {}, shiftByDate = {};
+    dates.forEach(dt => { attByDate[dt] = 0; lateByDate[dt] = 0; shiftByDate[dt] = {A:0,B:0,C:0,General:0}; });
+    attResults.forEach(r => { attByDate[r.date] = r.count; lateByDate[r.date] = r.late; shiftByDate[r.date] = r.shifts; });
+
+    // --- Process visitors ---
+    const visByDate = {}, visByPurpose = {};
     dates.forEach(dt => visByDate[dt] = 0);
     if (visR && visR.success && visR.records) {
       visR.records.forEach(r => {
-        const dt = r.Date || r.CheckInDate || '';
+        const dt = r.Date || '';
         if (visByDate.hasOwnProperty(dt)) visByDate[dt]++;
+        const pu = r.Purpose || 'Other';
+        visByPurpose[pu] = (visByPurpose[pu] || 0) + 1;
       });
     }
 
-    // Process equipment data
-    const eqOkByDate = {}, eqFaultByDate = {}, fuelByDate = {};
-    dates.forEach(dt => { eqOkByDate[dt] = 0; eqFaultByDate[dt] = 0; fuelByDate[dt] = null; });
+    // --- Process equipment ---
+    const eqOkByDate = {}, eqFaultByDate = {}, fuelByDate = {}, hkByDate = {};
+    const dgStatusByDate = {}, movStatusByDate = {};
+    dates.forEach(dt => { eqOkByDate[dt]=0; eqFaultByDate[dt]=0; fuelByDate[dt]=null; hkByDate[dt]=null; dgStatusByDate[dt]=null; movStatusByDate[dt]=null; });
     if (eqR && eqR.success && eqR.records) {
       eqR.records.forEach(r => {
         const dt = r.Date || '';
         if (!eqOkByDate.hasOwnProperty(dt)) return;
-        const eq = r.Equipment || '';
-        if (eq.startsWith('__')) return; // skip metadata
+        const eq = String(r.Equipment || '');
+        if (eq === '__HOUSEKEEPING__') { hkByDate[dt] = r.Status; return; }
+        if (eq.startsWith('__')) return;
         if (r.Status === 'Working') eqOkByDate[dt]++;
         else if (r.Status === 'Not Working') eqFaultByDate[dt]++;
-        // DG fuel from ExtraData
-        if (eq === 'DG' && r.ExtraData) {
-          try {
-            const extra = typeof r.ExtraData === 'string' ? JSON.parse(r.ExtraData) : r.ExtraData;
-            if (extra.dg && extra.dg.currentFuel) {
-              const f = parseFloat(extra.dg.currentFuel);
-              if (!isNaN(f)) fuelByDate[dt] = f;
-            }
-          } catch(e) {}
+        if (eq === 'DG') {
+          dgStatusByDate[dt] = r.Status;
+          if (r.ExtraData) {
+            try {
+              const extra = typeof r.ExtraData==='string' ? JSON.parse(r.ExtraData) : r.ExtraData;
+              if (extra.dg && extra.dg.currentFuel) { const f=parseFloat(extra.dg.currentFuel); if(!isNaN(f)) fuelByDate[dt]=f; }
+            } catch(e) {}
+          }
         }
+        if (eq === 'MOV') movStatusByDate[dt] = r.Status;
       });
     }
 
-    // Process near miss data
-    const nmByDate = {};
+    // --- Process near miss ---
+    const nmByDate = {}, nmByCat = {};
     dates.forEach(dt => nmByDate[dt] = 0);
     if (nmR && nmR.success && nmR.records) {
       nmR.records.forEach(r => {
-        const dt = r.IncidentDate || r.Date || r.SubmittedDate || '';
+        const dt = r.Date || r.IncidentDate || '';
         if (nmByDate.hasOwnProperty(dt)) nmByDate[dt]++;
+        const cat = r.Category || 'Other';
+        nmByCat[cat] = (nmByCat[cat] || 0) + 1;
       });
     }
 
-    // Process work permits
-    const wpByDate = {};
+    // --- Process work permits ---
+    const wpByDate = {}, wpByType = {};
     dates.forEach(dt => wpByDate[dt] = 0);
     if (wpR && wpR.success && wpR.permits) {
       wpR.permits.forEach(p => {
-        let dt = '';
-        try { dt = cleanDate(p.DateFrom); } catch(e) { dt = p.DateFrom || ''; }
+        let dt=''; try { dt=cleanDate(p.DateFrom); } catch(e) { dt=p.DateFrom||''; }
         if (wpByDate.hasOwnProperty(dt)) wpByDate[dt]++;
+        const tp = p.PermitType || 'Other';
+        wpByType[tp] = (wpByType[tp] || 0) + 1;
       });
     }
 
-    // Short date labels
-    const labels = dates.map(dt => { const d = new Date(dt); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); });
+    // Labels
+    const labels = dates.map(dt => { const dd=new Date(dt+'T00:00:00'); return dd.toLocaleDateString('en-US',{month:'short',day:'numeric'}); });
 
-    // Render charts
-    renderTrendChart('trendAttChart', 'Attendance', labels, dates.map(dt => attByDate[dt]), 'rgba(6,214,160,0.7)', 'rgba(6,214,160,0.15)');
-    renderTrendChart('trendVisChart', 'Visitors', labels, dates.map(dt => visByDate[dt]), 'rgba(139,92,246,0.7)', 'rgba(139,92,246,0.15)');
+    // =================== RENDER CHARTS ===================
 
-    // Equipment: stacked Working + Not Working
-    renderTrendStackedChart('trendEqChart', labels,
-      [{ label:'Working', data:dates.map(dt=>eqOkByDate[dt]), bg:'rgba(6,214,160,0.6)', border:'#16A34A' },
-       { label:'Not Working', data:dates.map(dt=>eqFaultByDate[dt]), bg:'rgba(220,38,38,0.6)', border:'#dc2626' }]);
+    // 1. Attendance with late overlay
+    trendReset('trendAttChart');
+    trendCharts['trendAttChart'] = new Chart(document.getElementById('trendAttChart').getContext('2d'), {
+      type:'line', data:{ labels, datasets:[
+        { label:'Present', data:dates.map(dt=>attByDate[dt]), borderColor:'#06d6a0', backgroundColor:'rgba(6,214,160,0.12)', fill:true, tension:.35, pointRadius:4, borderWidth:2 },
+        { label:'Late', data:dates.map(dt=>lateByDate[dt]), borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.06)', fill:true, tension:.35, pointRadius:3, borderWidth:1.5, borderDash:[4,3] }
+      ]}, options: trendLineOpts(true)
+    });
 
-    // DG Fuel line
-    renderTrendChart('trendFuelChart', 'DG Fuel (Ltrs)', labels, dates.map(dt => fuelByDate[dt]), 'rgba(242,103,34,0.8)', 'rgba(242,103,34,0.15)');
+    // 2. Visitor bar chart
+    trendReset('trendVisChart');
+    const visTotal = Object.values(visByDate).reduce((a,b)=>a+b,0);
+    if (visTotal > 0 && Object.keys(visByPurpose).length > 1) {
+      trendCharts['trendVisChart'] = new Chart(document.getElementById('trendVisChart').getContext('2d'), {
+        type:'doughnut', data:{ labels:Object.keys(visByPurpose), datasets:[{ data:Object.values(visByPurpose), backgroundColor:['#8b5cf6','#06d6a0','#3b82f6','#f59e0b','#dc2626','#ec4899','#14b8a6','#f97316'], borderWidth:2, borderColor:'#fff' }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{color:'#999',font:{size:11},padding:10} } }, cutout:'55%' }
+      });
+    } else {
+      trendCharts['trendVisChart'] = new Chart(document.getElementById('trendVisChart').getContext('2d'), {
+        type:'bar', data:{ labels, datasets:[{ label:'Visitors', data:dates.map(dt=>visByDate[dt]), backgroundColor:'rgba(139,92,246,0.6)', borderColor:'#8b5cf6', borderWidth:1, borderRadius:4 }] }, options:trendBarOpts()
+      });
+    }
 
-    renderTrendChart('trendNMChart', 'Near Miss', labels, dates.map(dt => nmByDate[dt]), 'rgba(249,115,22,0.7)', 'rgba(249,115,22,0.15)');
-    renderTrendChart('trendWPChart', 'Permits', labels, dates.map(dt => wpByDate[dt]), 'rgba(220,38,38,0.7)', 'rgba(220,38,38,0.15)');
+    // 3. Equipment stacked bar
+    trendReset('trendEqChart');
+    trendCharts['trendEqChart'] = new Chart(document.getElementById('trendEqChart').getContext('2d'), {
+      type:'bar', data:{ labels, datasets:[
+        { label:'Working', data:dates.map(dt=>eqOkByDate[dt]), backgroundColor:'rgba(6,214,160,0.65)', borderColor:'#16A34A', borderWidth:1, borderRadius:3 },
+        { label:'Not Working', data:dates.map(dt=>eqFaultByDate[dt]), backgroundColor:'rgba(220,38,38,0.65)', borderColor:'#dc2626', borderWidth:1, borderRadius:3 }
+      ]}, options:{ ...trendBarOpts(), plugins:{legend:{labels:{color:'#999',font:{size:11},boxWidth:12,padding:12}}}, scales:{x:{stacked:true,grid:{display:false},ticks:{color:'#999',font:{size:10}}},y:{stacked:true,beginAtZero:true,grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#999',font:{size:10}}}} }
+    });
 
-    // Summary table
+    // 4. DG Fuel line
+    trendReset('trendFuelChart');
+    const fuelVals = dates.map(dt=>fuelByDate[dt]);
+    if (fuelVals.some(v => v !== null)) {
+      trendCharts['trendFuelChart'] = new Chart(document.getElementById('trendFuelChart').getContext('2d'), {
+        type:'line', data:{ labels, datasets:[{ label:'DG Fuel (Ltrs)', data:fuelVals, borderColor:'#F26722', backgroundColor:'rgba(242,103,34,0.12)', fill:true, tension:.3, pointRadius:4, borderWidth:2, spanGaps:true }] }, options:trendLineOpts(false)
+      });
+    } else {
+      const el = document.getElementById('trendFuelChart');
+      if (el) el.parentElement.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">No DG fuel data in selected range</div>';
+    }
+
+    // 5. Near Miss — doughnut by category if multiple, else bar by date
+    trendReset('trendNMChart');
+    const nmTotal = Object.values(nmByDate).reduce((a,b)=>a+b,0);
+    if (nmTotal > 0 && Object.keys(nmByCat).length > 1) {
+      trendCharts['trendNMChart'] = new Chart(document.getElementById('trendNMChart').getContext('2d'), {
+        type:'doughnut', data:{ labels:Object.keys(nmByCat), datasets:[{ data:Object.values(nmByCat), backgroundColor:['#f97316','#dc2626','#f59e0b','#8b5cf6','#06d6a0'], borderWidth:2, borderColor:'#fff' }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#999',font:{size:11},padding:10}} }, cutout:'55%' }
+      });
+    } else {
+      trendCharts['trendNMChart'] = new Chart(document.getElementById('trendNMChart').getContext('2d'), {
+        type:'bar', data:{ labels, datasets:[{ label:'Near Miss', data:dates.map(dt=>nmByDate[dt]), backgroundColor:'rgba(249,115,22,0.6)', borderColor:'#f97316', borderWidth:1, borderRadius:4 }] }, options:trendBarOpts()
+      });
+    }
+
+    // 6. Work Permits — doughnut by type if multiple, else bar
+    trendReset('trendWPChart');
+    const wpTotal = Object.values(wpByDate).reduce((a,b)=>a+b,0);
+    if (wpTotal > 0 && Object.keys(wpByType).length > 1) {
+      trendCharts['trendWPChart'] = new Chart(document.getElementById('trendWPChart').getContext('2d'), {
+        type:'doughnut', data:{ labels:Object.keys(wpByType), datasets:[{ data:Object.values(wpByType), backgroundColor:['#dc2626','#f59e0b','#06d6a0','#3b82f6','#8b5cf6','#ec4899'], borderWidth:2, borderColor:'#fff' }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#999',font:{size:11},padding:10}} }, cutout:'55%' }
+      });
+    } else {
+      trendCharts['trendWPChart'] = new Chart(document.getElementById('trendWPChart').getContext('2d'), {
+        type:'bar', data:{ labels, datasets:[{ label:'Permits', data:dates.map(dt=>wpByDate[dt]), backgroundColor:'rgba(220,38,38,0.6)', borderColor:'#dc2626', borderWidth:1, borderRadius:4 }] }, options:trendBarOpts()
+      });
+    }
+
+    // =================== SUMMARY TABLE ===================
     const tbody = document.getElementById('trendSummaryTable');
     tbody.innerHTML = dates.map(dt => {
-      const d = new Date(dt); const dayName = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-      return `<tr><td style="font-family:monospace;font-size:12px">${dayName}</td><td>${attByDate[dt]}</td><td>${visByDate[dt]}</td><td style="color:var(--accent)">${eqOkByDate[dt]}</td><td style="color:var(--danger)">${eqFaultByDate[dt]}</td><td>${nmByDate[dt]}</td><td>${wpByDate[dt]}</td></tr>`;
+      const dd = new Date(dt+'T00:00:00');
+      const dayName = dd.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+      const hk = hkByDate[dt];
+      const hkBadge = hk ? `<span style="padding:1px 6px;border-radius:4px;font-size:10px;background:${hk==='Ok'?'rgba(6,214,160,.15)':'rgba(220,38,38,.15)'};color:${hk==='Ok'?'#16a34a':'#dc2626'}">${hk}</span>` : '<span style="color:var(--text3);font-size:10px">—</span>';
+      const fv = fuelByDate[dt];
+      const fuelBadge = fv !== null ? `<span style="color:${fv<=10?'#dc2626':fv<=25?'#f59e0b':'#16a34a'};font-weight:600">${fv}L</span>` : '—';
+      const dgBadge = dgStatusByDate[dt] ? `<span style="color:${dgStatusByDate[dt]==='Working'?'#16a34a':'#dc2626'};font-size:10px">${dgStatusByDate[dt]==='Working'?'✓':'✕'}</span>` : '';
+      return `<tr>
+        <td style="font-family:monospace;font-size:12px">${dayName}</td>
+        <td><b>${attByDate[dt]}</b> <span style="color:var(--text3);font-size:10px">(${lateByDate[dt]} late)</span></td>
+        <td>${visByDate[dt]}</td>
+        <td style="color:var(--accent);font-weight:500">${eqOkByDate[dt]}</td>
+        <td style="color:${eqFaultByDate[dt]>0?'var(--danger)':'var(--text3)'};font-weight:${eqFaultByDate[dt]>0?'600':'400'}">${eqFaultByDate[dt]}</td>
+        <td>${hkBadge}</td>
+        <td>${fuelBadge} ${dgBadge}</td>
+        <td>${nmByDate[dt]}</td>
+        <td>${wpByDate[dt]}</td>
+      </tr>`;
     }).join('');
 
+    // Totals row
+    const totP = dates.reduce((s,dt)=>s+attByDate[dt],0);
+    const totL = dates.reduce((s,dt)=>s+lateByDate[dt],0);
+    const totV = dates.reduce((s,dt)=>s+visByDate[dt],0);
+    const totOk = dates.reduce((s,dt)=>s+eqOkByDate[dt],0);
+    const totF = dates.reduce((s,dt)=>s+eqFaultByDate[dt],0);
+    tbody.innerHTML += `<tr style="font-weight:700;border-top:2px solid var(--border);background:rgba(242,103,34,.04)">
+      <td>TOTAL</td><td>${totP} <span style="font-size:10px;color:var(--text3)">(${totL} late)</span></td><td>${totV}</td><td style="color:var(--accent)">${totOk}</td><td style="color:var(--danger)">${totF}</td><td>—</td><td>—</td><td>${nmTotal}</td><td>${wpTotal}</td></tr>`;
+
+    trendDataCache = true;
     document.getElementById('trendLoading').classList.add('hidden');
     document.getElementById('trendContent').classList.remove('hidden');
     document.getElementById('trendBadge').textContent = (loc || 'All Locations') + ' • ' + dates.length + ' days';
@@ -4237,54 +4376,54 @@ async function loadTrends() {
   }
 }
 
-async function fetchTrend(action, params) {
+function countShifts(records) {
+  const s = {A:0,B:0,C:0,General:0};
+  records.forEach(r => { if (s.hasOwnProperty(r.Shift)) s[r.Shift]++; });
+  return s;
+}
+
+async function trendFetch(params) {
   try {
-    const p = { action, ...params };
-    const url = API_URL + '?' + new URLSearchParams(p).toString();
+    const url = API_URL + '?' + new URLSearchParams(params).toString();
     const c = new AbortController();
     const t = setTimeout(() => c.abort(), 15000);
     const r = await fetch(url, { redirect:'follow', signal:c.signal });
     clearTimeout(t);
     return JSON.parse(await r.text());
-  } catch(e) { console.warn('[Trend fetch] '+action+' failed:', e.message); return null; }
+  } catch(e) { console.warn('[Trend] '+params.action+' failed:', e.message); return null; }
 }
 
-function renderTrendChart(canvasId, label, labels, data, borderColor, bgColor) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx || typeof Chart === 'undefined') return;
-  if (trendCharts[canvasId]) trendCharts[canvasId].destroy();
-  trendCharts[canvasId] = new Chart(ctx.getContext('2d'), {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{ label: label, data: data, borderColor: borderColor, backgroundColor: bgColor, fill: true, tension: 0.35, pointRadius: 4, pointHoverRadius: 6, borderWidth: 2 }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#999', font: { size: 10 } } },
-               x: { grid: { display: false }, ticks: { color: '#999', font: { size: 10 }, maxRotation: 45 } } }
+function trendReset(id) {
+  if (trendCharts[id]) { trendCharts[id].destroy(); delete trendCharts[id]; }
+  // Restore canvas if it was replaced by text
+  const el = document.getElementById(id);
+  if (!el) {
+    const containers = document.querySelectorAll('#trendContent .chart-container');
+    for (const c of containers) {
+      if (!c.querySelector('canvas') && c.textContent.includes('No ')) {
+        // This might be our replaced canvas — check if another canvas with this id exists
+        // If not, recreate it
+        const exists = document.getElementById(id);
+        if (!exists) {
+          c.innerHTML = '<canvas id="'+id+'"></canvas>';
+          break;
+        }
+      }
     }
-  });
+  }
 }
 
-function renderTrendStackedChart(canvasId, labels, datasets) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx || typeof Chart === 'undefined') return;
-  if (trendCharts[canvasId]) trendCharts[canvasId].destroy();
-  trendCharts[canvasId] = new Chart(ctx.getContext('2d'), {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: datasets.map(ds => ({ label: ds.label, data: ds.data, backgroundColor: ds.bg, borderColor: ds.border, borderWidth: 1, borderRadius: 4 }))
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#999', font: { size: 10 } } } },
-      scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#999', font: { size: 10 } } },
-               y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#999', font: { size: 10 } } } }
-    }
-  });
+function trendLineOpts(showLegend) {
+  return { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+    plugins:{ legend:{ display:showLegend!==false, labels:{color:'#999',font:{size:11},boxWidth:12,padding:12} } },
+    scales:{ y:{ beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#999',font:{size:10}} },
+             x:{ grid:{display:false}, ticks:{color:'#999',font:{size:10},maxRotation:45} } } };
+}
+function trendBarOpts() {
+  return { responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false} },
+    scales:{ y:{ beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#999',font:{size:10}} },
+             x:{ grid:{display:false}, ticks:{color:'#999',font:{size:10},maxRotation:45} } } };
 }
 
 </script>
