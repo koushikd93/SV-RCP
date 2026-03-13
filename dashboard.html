@@ -256,6 +256,12 @@
 
   .stat-label { font-size: 12px; color: var(--text2); font-weight: 500; margin-bottom: 6px; }
   .stat-value { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+
+  /* Skeleton shimmer loading */
+  @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+  .skeleton { background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; color: transparent !important; }
+  .stat-card.loading .stat-value { background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; color: transparent !important; width: 60px; height: 28px; display: inline-block; }
+  .stat-card.loading .stat-sub { background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; color: transparent !important; width: 80px; height: 14px; display: inline-block; }
   .stat-sub { font-size: 11px; color: var(--text3); }
 
   .stat-card:nth-child(1) .stat-value { color: var(--blue); }
@@ -1053,6 +1059,10 @@
           <div class="panel"><div class="panel-header"><div class="panel-title">⚙️ Equipment Overall (Working vs Not Working)</div></div><div class="chart-container"><canvas id="trendEqChart"></canvas></div></div>
           <div class="panel"><div class="panel-header"><div class="panel-title">⛽ DG Fuel Level Trend</div></div><div class="chart-container"><canvas id="trendFuelChart"></canvas></div></div>
         </div>
+        <div class="grid-2">
+          <div class="panel"><div class="panel-header"><div class="panel-title">🔧 DG Trail Run — Last Date & Run Time</div></div><div class="chart-container"><canvas id="trendDGTrailChart"></canvas></div></div>
+          <div class="panel"><div class="panel-header"><div class="panel-title">🔌 MOV Remote Testing — Last Date</div></div><div class="chart-container"><canvas id="trendMOVTestChart"></canvas></div></div>
+        </div>
         <div class="panel">
           <div class="panel-header"><div class="panel-title">🔧 Individual Equipment Item Status</div><span class="panel-badge" id="trendEqItemBadge" style="background:rgba(6,214,160,.1);color:var(--accent)">per-item breakdown</span></div>
           <div class="chart-container" style="height:350px"><canvas id="trendEqItemChart"></canvas></div>
@@ -1095,7 +1105,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbx4S5_PPRyjRqjw3Z5YRpK-77THXgV8ORAinOvOtwT1Jsy8K_Zh5nVL9tT2iorcb2SG3A/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbxA3NuiFwBiBjn9Cx6DwxNR_4ZbTK79V7O2pCL2b64BOo3tk_3VQXjpmbRb11I-chhmfA/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -1115,33 +1125,39 @@ let currentNearMissRecords = [];
 // ============================================================
 // API FETCH WITH RETRY
 // ============================================================
-async function fetchAPIData(retries = 3, delayMs = 2000) {
+async function fetchAPIData(retries = 2, delayMs = 1000) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       console.log(`[API] Attempt ${attempt}/${retries} - Fetching dashboard data...`);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
-      const res = await fetch(API_URL + '?action=getDashboardData', {
+      // Try fast endpoint first, fallback to standard
+      const action = attempt === 1 ? 'getDashboardDataFast' : 'getDashboardData';
+      const res = await fetch(API_URL + '?action=' + action, {
         redirect: 'follow',
         signal: controller.signal
       });
       clearTimeout(timeoutId);
 
       const text = await res.text();
-      console.log(`[API] Response received (${text.length} chars)`);
+      console.log(`[API] Response received (${text.length} chars) via ${action}`);
 
       const data = JSON.parse(text);
+      // If fast endpoint not available, GAS returns {error:'Invalid action'} — retry with standard
+      if (data.error && data.error.includes('Invalid action') && attempt === 1) {
+        console.warn('[API] getDashboardDataFast not available, trying getDashboardData...');
+        continue;
+      }
       if (data && data.success) {
         console.log('[API] ✅ Successfully parsed live data');
         return data;
       } else {
-        console.warn('[API] Response parsed but success=false or missing:', data);
+        console.warn('[API] Response parsed but success=false:', data);
       }
     } catch (err) {
       console.warn(`[API] Attempt ${attempt} failed:`, err.message);
       if (attempt < retries) {
-        console.log(`[API] Waiting ${delayMs}ms before retry...`);
         await new Promise(r => setTimeout(r, delayMs));
         delayMs *= 1.5; // Increase delay for each retry
       }
@@ -1175,6 +1191,9 @@ function getDemoData() {
 window.addEventListener('load', () => {
   document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
   const today = new Date().toISOString().split('T')[0];
+
+  // Show skeleton loading on stat cards
+  document.querySelectorAll('.stat-card').forEach(c => c.classList.add('loading'));
   
  // Attendance filters
  document.getElementById('filterDateFrom').value = today;
@@ -1200,10 +1219,19 @@ window.addEventListener('load', () => {
   
   refreshData();
   // FIX: periodic refresh now updates ALL dashboard data, not just occupancy
-  setInterval(refreshAllData, 30000);
+  setInterval(refreshAllData, 300000); // Refresh every 5 minutes
 
   // Failsafe: hide loading overlay after 8 seconds max
-  setTimeout(() => { const ov = document.getElementById('loadingOverlay'); if(ov) ov.classList.add('hidden'); }, 8000);
+  setTimeout(() => { const ov = document.getElementById('loadingOverlay'); if(ov) ov.classList.add('hidden'); }, 90000);
+  // Update loading message with progress
+  let loadDots = 0;
+  const loadTimer = setInterval(() => {
+    const el = document.getElementById('loadingOverlay');
+    if (!el || el.classList.contains('hidden')) { clearInterval(loadTimer); return; }
+    loadDots = (loadDots + 1) % 4;
+    const msg = el.querySelector('.loading-text');
+    if (msg) msg.textContent = 'Fetching live data' + '.'.repeat(loadDots + 1);
+  }, 800);
 });
 
 // ============================================================
@@ -1286,6 +1314,9 @@ function updateDataSourceBadge(state) {
 function renderDashboard() {
   if (!dashboardData || !dashboardData.success) return;
   const d = dashboardData;
+
+  // Remove skeleton loading from stat cards
+  document.querySelectorAll('.stat-card.loading').forEach(c => c.classList.remove('loading'));
 
   // Stats
   document.getElementById('statTotal').textContent = d.summary.totalEmployees;
@@ -4194,9 +4225,10 @@ async function loadTrends() {
 
     // === Process Equipment — AGGREGATE + PER-ITEM ===
     const eqOkByDate={}, eqFaultByDate={}, fuelByDate={}, hkByDate={};
+    const dgTrailByDate={}, dgRunTimeByDate={}, movTestByDate={};
     // Per-item: { equipName: { date: 'Working'|'Not Working'|... } }
     const eqItemByDate = {};
-    dates.forEach(dt => { eqOkByDate[dt]=0; eqFaultByDate[dt]=0; fuelByDate[dt]=null; hkByDate[dt]=null; });
+    dates.forEach(dt => { eqOkByDate[dt]=0; eqFaultByDate[dt]=0; fuelByDate[dt]=null; hkByDate[dt]=null; dgTrailByDate[dt]=null; dgRunTimeByDate[dt]=null; movTestByDate[dt]=null; });
 
     if (eqR && eqR.success && eqR.records) {
       eqR.records.forEach(r => {
@@ -4216,11 +4248,23 @@ async function loadTrends() {
           eqItemByDate[eq][dt] = { status: r.Status, time: r.Time||'', remarks: r.Remarks||'' };
         }
 
-        // DG fuel
+        // DG extra data: fuel, trail run date, run time
         if (eq==='DG' && r.ExtraData) {
           try {
             const extra = typeof r.ExtraData==='string' ? JSON.parse(r.ExtraData) : r.ExtraData;
-            if (extra.dg && extra.dg.currentFuel) { const f=parseFloat(extra.dg.currentFuel); if(!isNaN(f)) fuelByDate[dt]=f; }
+            if (extra.dg) {
+              if (extra.dg.currentFuel) { const f=parseFloat(extra.dg.currentFuel); if(!isNaN(f)) fuelByDate[dt]=f; }
+              if (extra.dg.trailDate) dgTrailByDate[dt] = extra.dg.trailDate;
+              if (extra.dg.runTime) { const rt=parseFloat(extra.dg.runTime); if(!isNaN(rt)) dgRunTimeByDate[dt]=rt; }
+            }
+          } catch(e) {}
+        }
+
+        // MOV extra data: test date
+        if (eq==='MOV' && r.ExtraData) {
+          try {
+            const extra = typeof r.ExtraData==='string' ? JSON.parse(r.ExtraData) : r.ExtraData;
+            if (extra.mov && extra.mov.testDate) movTestByDate[dt] = extra.mov.testDate;
           } catch(e) {}
         }
       });
@@ -4286,6 +4330,79 @@ async function loadTrends() {
     } else {
       const el=document.getElementById('trendFuelChart');
       if(el) el.parentElement.innerHTML='<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">No DG fuel data in selected range</div>';
+    }
+
+    // 4b. DG Trail Run Date & Run Time
+    trendReset('trendDGTrailChart');
+    const trailDates = dates.map(dt => dgTrailByDate[dt]);
+    const trailRunTimes = dates.map(dt => dgRunTimeByDate[dt]);
+    const hasTrail = trailDates.some(v => v !== null) || trailRunTimes.some(v => v !== null);
+    if (hasTrail) {
+      // Calculate days since last trail run for each date
+      const daysSinceTrail = [];
+      let lastTrailDate = null;
+      dates.forEach((dt, i) => {
+        if (dgTrailByDate[dt]) lastTrailDate = dgTrailByDate[dt];
+        if (lastTrailDate) {
+          const diff = Math.round((new Date(dt) - new Date(lastTrailDate)) / 86400000);
+          daysSinceTrail.push(diff >= 0 ? diff : null);
+        } else {
+          daysSinceTrail.push(null);
+        }
+      });
+      const datasets = [];
+      if (trailRunTimes.some(v => v !== null)) {
+        datasets.push({ label:'Trail Run Time (mins)', data:trailRunTimes, borderColor:'#F26722', backgroundColor:'rgba(242,103,34,0.5)', type:'bar', borderWidth:1, borderRadius:4, yAxisID:'y', order:2 });
+      }
+      datasets.push({ label:'Days Since Last Trail', data:daysSinceTrail, borderColor:'#dc2626', backgroundColor:'rgba(220,38,38,0.08)', fill:true, tension:.3, pointRadius:4, borderWidth:2, spanGaps:true, type:'line', yAxisID:'y1', order:1 });
+      trendCharts['trendDGTrailChart'] = new Chart(document.getElementById('trendDGTrailChart').getContext('2d'), {
+        type:'bar', data:{ labels, datasets },
+        options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+          plugins:{ legend:{labels:{color:'#999',font:{size:11},boxWidth:12,padding:12}},
+            tooltip:{ callbacks:{ afterBody: function(ctx) { const idx=ctx[0].dataIndex; const td=trailDates[idx]; return td ? 'Trail Date: '+td : ''; } } }
+          },
+          scales:{ y:{beginAtZero:true, position:'left', title:{display:true,text:'Run Time (mins)',color:'#999',font:{size:10}}, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#999',font:{size:10}}},
+                   y1:{beginAtZero:true, position:'right', title:{display:true,text:'Days Since Trail',color:'#dc2626',font:{size:10}}, grid:{display:false}, ticks:{color:'#dc2626',font:{size:10}}},
+                   x:{grid:{display:false}, ticks:{color:'#999',font:{size:10},maxRotation:45}} } }
+      });
+    } else {
+      const el=document.getElementById('trendDGTrailChart');
+      if(el) el.parentElement.innerHTML='<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">No DG trail run data in selected range</div>';
+    }
+
+    // 4c. MOV Remote Testing Date
+    trendReset('trendMOVTestChart');
+    const movDates = dates.map(dt => movTestByDate[dt]);
+    const hasMOV = movDates.some(v => v !== null);
+    if (hasMOV) {
+      // Days since last MOV test for each date
+      const daysSinceMOV = [];
+      let lastMOVDate = null;
+      dates.forEach((dt, i) => {
+        if (movTestByDate[dt]) lastMOVDate = movTestByDate[dt];
+        if (lastMOVDate) {
+          const diff = Math.round((new Date(dt) - new Date(lastMOVDate)) / 86400000);
+          daysSinceMOV.push(diff >= 0 ? diff : null);
+        } else {
+          daysSinceMOV.push(null);
+        }
+      });
+      trendCharts['trendMOVTestChart'] = new Chart(document.getElementById('trendMOVTestChart').getContext('2d'), {
+        type:'line', data:{ labels, datasets:[
+          { label:'Days Since Last MOV Test', data:daysSinceMOV, borderColor:'#8b5cf6', backgroundColor:'rgba(139,92,246,0.1)', fill:true, tension:.3, pointRadius:5, borderWidth:2.5, spanGaps:true,
+            pointBackgroundColor: daysSinceMOV.map(v => v !== null && v > 30 ? '#dc2626' : v !== null && v > 15 ? '#f59e0b' : '#8b5cf6') }
+        ]},
+        options:{ responsive:true, maintainAspectRatio:false,
+          plugins:{ legend:{labels:{color:'#999',font:{size:11},boxWidth:12,padding:12}},
+            tooltip:{ callbacks:{ afterBody: function(ctx) { const idx=ctx[0].dataIndex; const td=movDates[idx]; return td ? 'Test Date: '+td : ''; } } },
+            annotation: { annotations: { line30: { type:'line', yMin:30, yMax:30, borderColor:'rgba(220,38,38,0.4)', borderWidth:1, borderDash:[5,5], label:{content:'30-day limit',display:true,font:{size:9},color:'#dc2626'} } } }
+          },
+          scales:{ y:{beginAtZero:true, title:{display:true,text:'Days Since Test',color:'#999',font:{size:10}}, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#999',font:{size:10}}},
+                   x:{grid:{display:false}, ticks:{color:'#999',font:{size:10},maxRotation:45}} } }
+      });
+    } else {
+      const el=document.getElementById('trendMOVTestChart');
+      if(el) el.parentElement.innerHTML='<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">No MOV testing data in selected range</div>';
     }
 
     // 5. PER-EQUIPMENT ITEM CHART — horizontal bar showing Working/NotWorking counts
