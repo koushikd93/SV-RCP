@@ -181,33 +181,24 @@
   .main {
     flex: 1; margin-left: 264px;
     padding: 0; min-height: 100vh;
-    overflow-y: auto; max-height: 100vh;
   }
 
-  /* ===== TOPBAR with IOCL blue wave ===== */
+  /* ===== TOPBAR ===== */
   .topbar {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 14px 32px;
+    padding: 12px 32px;
     background: linear-gradient(135deg, #1B3C73 0%, #002B5C 50%, #0D4A8F 100%);
     color: #FFF;
     position: sticky; top: 0; z-index: 10;
-    overflow: hidden;
-  }
-  .topbar::after {
-    content: ''; position: absolute; bottom: -10px; left: 0; right: 0; height: 20px;
-    background: var(--bg);
-    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-  }
-  .topbar::before {
-    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 4px;
-    background: linear-gradient(90deg, var(--accent), #F59E0B, var(--accent));
+    border-bottom: 3px solid #F26722;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
   }
 
   .topbar h1 {
-    font-size: 22px; font-weight: 700; letter-spacing: -0.3px;
-    color: #FFF; z-index: 1;
+    font-size: 20px; font-weight: 700; letter-spacing: -0.3px;
+    color: #FFF;
   }
-  .topbar-right { display: flex; align-items: center; gap: 12px; z-index: 1; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
 
   .date-badge {
     background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
@@ -227,7 +218,7 @@
   .refresh-btn:hover { background: #e05a15; color: #FFF; border-color: #c04f10; box-shadow: 0 3px 10px rgba(242,103,34,0.45); transform: translateY(-1px); }
 
   /* Content padding after topbar */
-  .page { padding: 14px 32px 32px; }
+  .page { padding: 16px 28px 32px; }
 
   /* ===== STATS GRID ===== */
   .stats-grid {
@@ -993,65 +984,48 @@
 
     <!-- ===== TREND ANALYTICS PAGE ===== -->
     <div class="page" id="page-trends">
-      <div class="panel" style="margin-bottom:16px">
-        <div class="panel-header">
-          <div class="panel-title">📊 Location-wise Trend Analytics</div>
-          <span class="panel-badge" style="background:rgba(242,103,34,.1);color:var(--accent)" id="trendBadge">Select a location</span>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:14px">
+        <div style="flex:1.5;min-width:180px">
+          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">📍 Location <span style="color:var(--danger)">*</span></label>
+          <select id="trendLocation" class="filter-input" style="border:2px solid var(--accent);font-weight:600;font-size:13px;padding:8px 10px">
+            <option value="">— Select Location —</option>
+          </select>
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:10px;padding:0 0 10px">
-          <div style="flex:1.5;min-width:180px">
-            <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Location <span style="color:var(--danger)">*</span></label>
-            <select id="trendLocation" class="filter-input" style="border:2px solid var(--accent);font-weight:600">
-              <option value="">— Select Location —</option>
-            </select>
-          </div>
-          <div style="min-width:130px">
-            <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">From</label>
-            <input type="date" id="trendDateFrom" class="filter-input">
-          </div>
-          <div style="min-width:130px">
-            <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">To</label>
-            <input type="date" id="trendDateTo" class="filter-input">
-          </div>
-          <div style="align-self:flex-end">
-            <button class="refresh-btn" onclick="loadTrends()" style="padding:8px 20px;font-size:13px">📊 Load Trends</button>
-          </div>
+        <div style="min-width:125px">
+          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">From</label>
+          <input type="date" id="trendDateFrom" class="filter-input" style="padding:8px 6px">
         </div>
+        <div style="min-width:125px">
+          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">To</label>
+          <input type="date" id="trendDateTo" class="filter-input" style="padding:8px 6px">
+        </div>
+        <div>
+          <button class="refresh-btn" onclick="loadTrends()" style="padding:9px 22px;font-size:13px">📊 Load Trends</button>
+        </div>
+        <div style="margin-left:auto"><span class="panel-badge" style="background:rgba(242,103,34,.1);color:var(--accent)" id="trendBadge">Select a location</span></div>
       </div>
       <div id="trendLoading" class="hidden" style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Loading trend data...</div>
       <div id="trendContent" class="hidden">
-        <!-- Row 1: Attendance + Visitors -->
         <div class="grid-2">
           <div class="panel"><div class="panel-header"><div class="panel-title">✅ Attendance Trend</div></div><div class="chart-container"><canvas id="trendAttChart"></canvas></div></div>
           <div class="panel"><div class="panel-header"><div class="panel-title">🚶 Visitor Trend</div></div><div class="chart-container"><canvas id="trendVisChart"></canvas></div></div>
         </div>
-        <!-- Row 2: Equipment Aggregate + DG Fuel -->
         <div class="grid-2">
           <div class="panel"><div class="panel-header"><div class="panel-title">⚙️ Equipment Overall (Working vs Not Working)</div></div><div class="chart-container"><canvas id="trendEqChart"></canvas></div></div>
           <div class="panel"><div class="panel-header"><div class="panel-title">⛽ DG Fuel Level Trend</div></div><div class="chart-container"><canvas id="trendFuelChart"></canvas></div></div>
         </div>
-        <!-- Row 3: Per-Equipment Item Trend (FULL WIDTH) -->
         <div class="panel">
-          <div class="panel-header">
-            <div class="panel-title">🔧 Individual Equipment Item Status</div>
-            <span class="panel-badge" id="trendEqItemBadge" style="background:rgba(6,214,160,.1);color:var(--accent)">per-item breakdown</span>
-          </div>
+          <div class="panel-header"><div class="panel-title">🔧 Individual Equipment Item Status</div><span class="panel-badge" id="trendEqItemBadge" style="background:rgba(6,214,160,.1);color:var(--accent)">per-item breakdown</span></div>
           <div class="chart-container" style="height:350px"><canvas id="trendEqItemChart"></canvas></div>
         </div>
-        <!-- Row 4: Equipment item heatmap table -->
         <div class="panel">
-          <div class="panel-header">
-            <div class="panel-title">📋 Equipment Item Daily Status</div>
-            <span class="panel-badge" id="trendEqHeatBadge" style="background:rgba(242,103,34,.1);color:var(--accent)">heatmap</span>
-          </div>
+          <div class="panel-header"><div class="panel-title">📋 Equipment Item Daily Heatmap</div><span class="panel-badge" id="trendEqHeatBadge" style="background:rgba(242,103,34,.1);color:var(--accent)">heatmap</span></div>
           <div class="table-scroll" id="trendEqHeatmap" style="overflow-x:auto"></div>
         </div>
-        <!-- Row 5: Near Miss + Work Permits -->
         <div class="grid-2">
           <div class="panel"><div class="panel-header"><div class="panel-title">⚠️ Near Miss Reports</div></div><div class="chart-container"><canvas id="trendNMChart"></canvas></div></div>
           <div class="panel"><div class="panel-header"><div class="panel-title">📋 Work Permits</div></div><div class="chart-container"><canvas id="trendWPChart"></canvas></div></div>
         </div>
-        <!-- Row 6: Summary Table -->
         <div class="panel">
           <div class="panel-header"><div class="panel-title">📋 Daily Summary Table</div></div>
           <div class="table-scroll">
@@ -1060,10 +1034,10 @@
           </div>
         </div>
       </div>
-      <div id="trendEmpty" style="text-align:center;padding:40px;color:var(--text3)">
+      <div id="trendEmpty" style="text-align:center;padding:50px 20px;color:var(--text3)">
         <div style="font-size:48px;margin-bottom:12px">📍</div>
         <div style="font-size:16px;font-weight:600;color:var(--text)">Select a Location to View Trends</div>
-        <div style="font-size:13px;margin-top:6px">Choose a specific location and date range, then click "Load Trends"</div>
+        <div style="font-size:13px;margin-top:6px">Choose a specific location and date range above, then click "📊 Load Trends"</div>
       </div>
     </div>
 
@@ -2040,8 +2014,8 @@ function showPage(page, el) {
     document.querySelectorAll('.nav-item').forEach(n => { if (n.getAttribute('onclick') && n.getAttribute('onclick').includes("'"+page+"'")) n.classList.add('active'); });
   }
 
-  // Scroll to top of main content
-  document.querySelector('.main').scrollTo({top:0, behavior:'smooth'});
+  // Scroll to top of page
+  window.scrollTo({top:0, behavior:'smooth'});
 
   const titles = {
     overview: 'Dashboard Overview',
