@@ -242,6 +242,8 @@
     transition: transform 0.2s, box-shadow 0.2s;
   }
   .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+  .stat-card[style*="cursor:pointer"]:hover::after { content: '→'; position: absolute; top: 10px; right: 12px; font-size: 16px; color: var(--accent); opacity: 0.7; font-weight: 700; }
+  .stat-card[style*="cursor:pointer"] { position: relative; }
   .stat-card::before {
     content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
     border-radius: 12px 12px 0 0;
@@ -502,6 +504,11 @@
     <span class="icon">📝</span> New Work Permit
     </div>
 
+    <div class="nav-section">Analytics</div>
+    <div class="nav-item" onclick="showPage('trends', this)">
+    <span class="icon">📊</span> Trend Analytics
+    </div>
+
     <div class="nav-section">Field Operations</div>
     <div class="nav-item" onclick="showPage('bikers', this)">
       <span class="icon">🏍️</span> Bikers
@@ -535,33 +542,33 @@
     <!-- ===== OVERVIEW PAGE ===== -->
     <div class="page active" id="page-overview">
       <div class="stats-grid" id="statsGrid">
-        <div class="stat-card"><div class="stat-label">Total Employees</div><div class="stat-value" id="statTotal">--</div><div class="stat-sub">across all locations</div></div>
-        <div class="stat-card"><div class="stat-label">Present Today</div><div class="stat-value" id="statPresent">--</div><div class="stat-sub" id="statRate">--% attendance</div></div>
+        <div class="stat-card" style="cursor:pointer" onclick="showPage('employees',document.querySelector('[onclick*=employees]'))"><div class="stat-label">👥 Total Employees</div><div class="stat-value" id="statTotal">--</div><div class="stat-sub">across all locations</div></div>
+        <div class="stat-card" style="cursor:pointer" onclick="showPage('records',document.querySelector('[onclick*=records]'))"><div class="stat-label">✅ Present Today</div><div class="stat-value" id="statPresent">--</div><div class="stat-sub" id="statRate">--% attendance</div></div>
 
-        <div class="stat-card">
-          <div class="stat-label">Visitors Today</div>
+        <div class="stat-card" style="cursor:pointer" onclick="showPage('visitors',document.querySelector('[onclick*=visitors]'))">
+          <div class="stat-label">🚶 Visitors Today</div>
           <div class="stat-value" id="statVisitors" style="color:var(--purple)">--</div>
           <div class="stat-sub" id="statVisitorActive">-- active now</div>
         </div>
 
-        <div class="stat-card">
+        <div class="stat-card" style="cursor:pointer" onclick="showPage('equipstatus',document.querySelector('[onclick*=equipstatus]'))">
           <div class="stat-label">⚡ DG Status</div>
           <div class="stat-value" id="statDG" style="color:var(--accent)">--</div>
           <div class="stat-sub" id="statDGSub">loading...</div>
         </div>
 
-        <div class="stat-card">
+        <div class="stat-card" style="cursor:pointer" onclick="showPage('equipstatus',document.querySelector('[onclick*=equipstatus]'))">
           <div class="stat-label">🔌 MOV Status</div>
           <div class="stat-value" id="statMOV" style="color:var(--accent)">--</div>
           <div class="stat-sub" id="statMOVSub">loading...</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card" style="cursor:pointer" onclick="showPage('nearmiss',document.querySelector('[onclick*=nearmiss]'))">
           <div class="stat-label">⚠️ Near Miss Reports</div>
           <div class="stat-value" id="statNearMiss" style="color:#f97316">--</div>
           <div class="stat-sub" id="statNearMissSub">loading...</div>
         </div>
 
-        <div class="stat-card" style="cursor:pointer" onclick="showPage('permits')">
+        <div class="stat-card" style="cursor:pointer" onclick="showPage('permits',document.querySelector('[onclick*=permits]'))">
           <div class="stat-label">📋 Running Permits</div>
           <div class="stat-value" id="statRunPermits" style="color:#dc2626">--</div>
           <div class="stat-sub" id="statRunPermitsSub">loading...</div>
@@ -613,7 +620,7 @@
 
       <div class="panel">
         <div class="panel-header">
-          <div class="panel-title">⛽ DG Fuel Level — By Location</div>
+          <div class="panel-title">⛽ DG Fuel Level — By Location (Latched)</div>
           <span class="panel-badge" style="background:rgba(242,103,34,.1);color:var(--accent)">Last reported level</span>
         </div>
         <div class="chart-container"><canvas id="dgFuelChart"></canvas></div>
@@ -982,6 +989,65 @@
 
     </div>
 
+    <!-- ===== TREND ANALYTICS PAGE ===== -->
+    <div class="page" id="page-trends">
+      <div class="panel" style="margin-bottom:16px">
+        <div class="panel-header">
+          <div class="panel-title">📊 Trend Analytics</div>
+          <span class="panel-badge" style="background:rgba(242,103,34,.1);color:var(--accent)" id="trendBadge">Select filters</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;padding:0 0 10px">
+          <div style="flex:1;min-width:160px">
+            <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Location</label>
+            <select id="trendLocation" class="filter-input" onchange="loadTrends()">
+              <option value="">-- All Locations --</option>
+            </select>
+          </div>
+          <div style="min-width:130px">
+            <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">From</label>
+            <input type="date" id="trendDateFrom" class="filter-input" onchange="loadTrends()">
+          </div>
+          <div style="min-width:130px">
+            <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">To</label>
+            <input type="date" id="trendDateTo" class="filter-input" onchange="loadTrends()">
+          </div>
+          <div style="align-self:flex-end">
+            <button class="refresh-btn" onclick="loadTrends()" style="padding:8px 16px">🔄 Load</button>
+          </div>
+        </div>
+      </div>
+      <div id="trendLoading" class="hidden" style="text-align:center;padding:30px"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Loading trend data...</div>
+      <div id="trendContent" class="hidden">
+        <!-- Row 1: Attendance + Visitors -->
+        <div class="grid-2">
+          <div class="panel"><div class="panel-header"><div class="panel-title">✅ Attendance Trend</div></div><div class="chart-container"><canvas id="trendAttChart"></canvas></div></div>
+          <div class="panel"><div class="panel-header"><div class="panel-title">🚶 Visitor Trend</div></div><div class="chart-container"><canvas id="trendVisChart"></canvas></div></div>
+        </div>
+        <!-- Row 2: Equipment Status + DG Fuel -->
+        <div class="grid-2">
+          <div class="panel"><div class="panel-header"><div class="panel-title">⚙️ Equipment Status (Working vs Not Working)</div></div><div class="chart-container"><canvas id="trendEqChart"></canvas></div></div>
+          <div class="panel"><div class="panel-header"><div class="panel-title">⛽ DG Fuel Level Trend</div></div><div class="chart-container"><canvas id="trendFuelChart"></canvas></div></div>
+        </div>
+        <!-- Row 3: Near Miss + Work Permits -->
+        <div class="grid-2">
+          <div class="panel"><div class="panel-header"><div class="panel-title">⚠️ Near Miss Reports</div></div><div class="chart-container"><canvas id="trendNMChart"></canvas></div></div>
+          <div class="panel"><div class="panel-header"><div class="panel-title">📋 Work Permits Issued</div></div><div class="chart-container"><canvas id="trendWPChart"></canvas></div></div>
+        </div>
+        <!-- Row 4: Summary Table -->
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">📋 Daily Summary Table</div></div>
+          <div class="table-scroll">
+            <table><thead><tr><th>Date</th><th>Present</th><th>Visitors</th><th>Equip OK</th><th>Equip Fault</th><th>Near Miss</th><th>Permits</th></tr></thead>
+            <tbody id="trendSummaryTable"></tbody></table>
+          </div>
+        </div>
+      </div>
+      <div id="trendEmpty" class="hidden" style="text-align:center;padding:40px;color:var(--text3)">
+        <div style="font-size:40px;margin-bottom:10px">📊</div>
+        <div style="font-size:14px">Select a location and date range to view trends</div>
+      </div>
+    </div>
+
 
 </main>
 </div>
@@ -995,7 +1061,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbzTQksAVIIJfJitqsZM88KiVNlpOWeHAgE_psNzxlt0ezwyN40N3PdC_vHJkcMz_3YI2g/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbyqxy6pszKzgxge57tIawoFwaKmdasbB2zEAFi5APo1uX1eRLqEH72WLL3So1mPXtB9_Q/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -1310,9 +1376,11 @@ function renderDashboard() {
     renderVisitorDashboard(d);
   }
 
-  // EQUIPMENT DASHBOARD RENDER
-  if (typeof renderEquipmentSummary === 'function') {
-    renderEquipmentSummary();
+  // EQUIPMENT DASHBOARD RENDER — use data already in dashboardData (no second API call!)
+  if (d.equipmentSummary && d.equipmentSummary.success !== false) {
+    renderEquipmentFromCache(d.equipmentSummary);
+  } else if (typeof renderEquipmentSummary === 'function') {
+    renderEquipmentSummary(); // fallback to separate API call only if not in dashboardData
   }
  
   // =========================
@@ -1964,7 +2032,8 @@ function showPage(page, el) {
     nearmiss: 'Near Miss Reports',
     permits: 'Work Permits',
     newpermit: 'New Work Permit',
-    bikers: 'Biker Attendance & KM Log'
+    bikers: 'Biker Attendance & KM Log',
+    trends: 'Trend Analytics'
   };
   document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
   document.querySelector('.sidebar').classList.remove('open');
@@ -1978,6 +2047,7 @@ function showPage(page, el) {
   if (page === 'nearmiss') filterNearMiss();
   if (page === 'bikers') filterBikerRecords();
   if (page === 'permits') filterPermits();
+  if (page === 'trends') initTrendsPage();
   if (page === 'newpermit') {
     const iframe = document.getElementById('wpIframe');
     const wpUrl = (window.location.href.split('?')[0].replace(/[^/]*$/, '') + 'workpermit.html') + '?api=' + encodeURIComponent(API_URL);
@@ -2272,7 +2342,44 @@ async function refreshActiveVisitors() {
 // EQUIPMENT MODULE
 // ============================================================
 
-// Fetch equipment summary for overview page (DG + MOV stats)
+// Render equipment stats from cached dashboardData (NO extra API call — FAST!)
+function renderEquipmentFromCache(eqData) {
+  // DG summary
+  const dg = eqData.dgSummary || {};
+  const dgWorking = dg.working || 0;
+  const dgTotal = dg.total || 0;
+  const dgEl = document.getElementById('statDG');
+  const dgSub = document.getElementById('statDGSub');
+  if (dgTotal > 0) {
+    dgEl.textContent = dgWorking + '/' + dgTotal;
+    dgEl.style.color = dgWorking === dgTotal ? 'var(--accent)' : 'var(--danger)';
+    dgSub.textContent = dgWorking === dgTotal ? 'All locations OK' : (dgTotal - dgWorking) + ' location(s) down';
+  } else {
+    dgEl.textContent = '--'; dgSub.textContent = 'No data today';
+  }
+
+  // MOV summary
+  const mov = eqData.movSummary || {};
+  const movWorking = mov.working || 0;
+  const movTotal = mov.total || 0;
+  const movEl = document.getElementById('statMOV');
+  const movSub = document.getElementById('statMOVSub');
+  if (movTotal > 0) {
+    movEl.textContent = movWorking + '/' + movTotal;
+    movEl.style.color = movWorking === movTotal ? 'var(--accent)' : 'var(--danger)';
+    movSub.textContent = movWorking === movTotal ? 'All locations OK' : (movTotal - movWorking) + ' location(s) down';
+  } else {
+    movEl.textContent = '--'; movSub.textContent = 'No data today';
+  }
+
+  // Render DG/MOV charts
+  renderDGChart(eqData.dgSummary || {});
+  renderMOVChart(eqData.movSummary || {});
+  renderDGFuelChart(eqData.dgFuelData || []);
+  console.log('[Equipment] ✅ Stats rendered from cached dashboardData (no extra API call)');
+}
+
+// Fetch equipment summary for overview page (DG + MOV stats) — FALLBACK only
 async function renderEquipmentSummary() {
   if (!API_URL) return;
   try {
@@ -3969,6 +4076,215 @@ async function exportPermitPDF(id) {
     doc.setTextColor(0);
   }
   doc.save('WorkPermit_'+p.PermitID+'.pdf');
+}
+
+// ============================================================
+// TREND ANALYTICS MODULE
+// ============================================================
+let trendCharts = {};
+
+function initTrendsPage() {
+  // Populate location dropdown
+  const sel = document.getElementById('trendLocation');
+  if (sel.options.length <= 1 && dashboardData && dashboardData.locations) {
+    dashboardData.locations.forEach(l => {
+      const n = l.LocationName || l;
+      if (![...sel.options].some(o => o.value === n))
+        sel.innerHTML += `<option value="${n}">${n}</option>`;
+    });
+  }
+  // Set default dates (last 7 days)
+  const today = new Date();
+  const weekAgo = new Date(); weekAgo.setDate(today.getDate() - 7);
+  if (!document.getElementById('trendDateFrom').value) document.getElementById('trendDateFrom').value = weekAgo.toISOString().split('T')[0];
+  if (!document.getElementById('trendDateTo').value) document.getElementById('trendDateTo').value = today.toISOString().split('T')[0];
+  document.getElementById('trendEmpty').classList.remove('hidden');
+  document.getElementById('trendContent').classList.add('hidden');
+}
+
+async function loadTrends() {
+  const loc = document.getElementById('trendLocation').value;
+  const dateFrom = document.getElementById('trendDateFrom').value;
+  const dateTo = document.getElementById('trendDateTo').value;
+  if (!dateFrom || !dateTo) { alert('Please select both dates'); return; }
+
+  document.getElementById('trendLoading').classList.remove('hidden');
+  document.getElementById('trendContent').classList.add('hidden');
+  document.getElementById('trendEmpty').classList.add('hidden');
+  document.getElementById('trendBadge').textContent = 'Loading...';
+
+  try {
+    // Fetch all data in parallel for the date range
+    const params = { dateFrom, dateTo };
+    if (loc) params.location = loc;
+
+    const [attR, eqR, nmR, wpR, visR] = await Promise.all([
+      fetchTrend('getAttendanceTrend', params),
+      fetchTrend('getEquipmentStatus', params),
+      fetchTrend('getNearMissReports', params),
+      fetchTrend('getWorkPermits', params),
+      fetchTrend('getVisitorRecords', params)
+    ]);
+
+    // Generate date range labels
+    const dates = [];
+    const d = new Date(dateFrom);
+    const end = new Date(dateTo);
+    while (d <= end) { dates.push(d.toISOString().split('T')[0]); d.setDate(d.getDate() + 1); }
+
+    // Process attendance data
+    const attByDate = {};
+    dates.forEach(dt => attByDate[dt] = 0);
+    if (attR && attR.success && attR.records) {
+      attR.records.forEach(r => {
+        const dt = r.Date || '';
+        if (attByDate.hasOwnProperty(dt)) attByDate[dt]++;
+      });
+    }
+    // If getAttendanceTrend not available, use trend data
+    if ((!attR || !attR.success) && attR && attR.trend) {
+      attR.trend.forEach(t => { if (attByDate.hasOwnProperty(t.date)) attByDate[t.date] = t.present || 0; });
+    }
+
+    // Process visitor data
+    const visByDate = {};
+    dates.forEach(dt => visByDate[dt] = 0);
+    if (visR && visR.success && visR.records) {
+      visR.records.forEach(r => {
+        const dt = r.Date || r.CheckInDate || '';
+        if (visByDate.hasOwnProperty(dt)) visByDate[dt]++;
+      });
+    }
+
+    // Process equipment data
+    const eqOkByDate = {}, eqFaultByDate = {}, fuelByDate = {};
+    dates.forEach(dt => { eqOkByDate[dt] = 0; eqFaultByDate[dt] = 0; fuelByDate[dt] = null; });
+    if (eqR && eqR.success && eqR.records) {
+      eqR.records.forEach(r => {
+        const dt = r.Date || '';
+        if (!eqOkByDate.hasOwnProperty(dt)) return;
+        const eq = r.Equipment || '';
+        if (eq.startsWith('__')) return; // skip metadata
+        if (r.Status === 'Working') eqOkByDate[dt]++;
+        else if (r.Status === 'Not Working') eqFaultByDate[dt]++;
+        // DG fuel from ExtraData
+        if (eq === 'DG' && r.ExtraData) {
+          try {
+            const extra = typeof r.ExtraData === 'string' ? JSON.parse(r.ExtraData) : r.ExtraData;
+            if (extra.dg && extra.dg.currentFuel) {
+              const f = parseFloat(extra.dg.currentFuel);
+              if (!isNaN(f)) fuelByDate[dt] = f;
+            }
+          } catch(e) {}
+        }
+      });
+    }
+
+    // Process near miss data
+    const nmByDate = {};
+    dates.forEach(dt => nmByDate[dt] = 0);
+    if (nmR && nmR.success && nmR.records) {
+      nmR.records.forEach(r => {
+        const dt = r.IncidentDate || r.Date || r.SubmittedDate || '';
+        if (nmByDate.hasOwnProperty(dt)) nmByDate[dt]++;
+      });
+    }
+
+    // Process work permits
+    const wpByDate = {};
+    dates.forEach(dt => wpByDate[dt] = 0);
+    if (wpR && wpR.success && wpR.permits) {
+      wpR.permits.forEach(p => {
+        let dt = '';
+        try { dt = cleanDate(p.DateFrom); } catch(e) { dt = p.DateFrom || ''; }
+        if (wpByDate.hasOwnProperty(dt)) wpByDate[dt]++;
+      });
+    }
+
+    // Short date labels
+    const labels = dates.map(dt => { const d = new Date(dt); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); });
+
+    // Render charts
+    renderTrendChart('trendAttChart', 'Attendance', labels, dates.map(dt => attByDate[dt]), 'rgba(6,214,160,0.7)', 'rgba(6,214,160,0.15)');
+    renderTrendChart('trendVisChart', 'Visitors', labels, dates.map(dt => visByDate[dt]), 'rgba(139,92,246,0.7)', 'rgba(139,92,246,0.15)');
+
+    // Equipment: stacked Working + Not Working
+    renderTrendStackedChart('trendEqChart', labels,
+      [{ label:'Working', data:dates.map(dt=>eqOkByDate[dt]), bg:'rgba(6,214,160,0.6)', border:'#16A34A' },
+       { label:'Not Working', data:dates.map(dt=>eqFaultByDate[dt]), bg:'rgba(220,38,38,0.6)', border:'#dc2626' }]);
+
+    // DG Fuel line
+    renderTrendChart('trendFuelChart', 'DG Fuel (Ltrs)', labels, dates.map(dt => fuelByDate[dt]), 'rgba(242,103,34,0.8)', 'rgba(242,103,34,0.15)');
+
+    renderTrendChart('trendNMChart', 'Near Miss', labels, dates.map(dt => nmByDate[dt]), 'rgba(249,115,22,0.7)', 'rgba(249,115,22,0.15)');
+    renderTrendChart('trendWPChart', 'Permits', labels, dates.map(dt => wpByDate[dt]), 'rgba(220,38,38,0.7)', 'rgba(220,38,38,0.15)');
+
+    // Summary table
+    const tbody = document.getElementById('trendSummaryTable');
+    tbody.innerHTML = dates.map(dt => {
+      const d = new Date(dt); const dayName = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+      return `<tr><td style="font-family:monospace;font-size:12px">${dayName}</td><td>${attByDate[dt]}</td><td>${visByDate[dt]}</td><td style="color:var(--accent)">${eqOkByDate[dt]}</td><td style="color:var(--danger)">${eqFaultByDate[dt]}</td><td>${nmByDate[dt]}</td><td>${wpByDate[dt]}</td></tr>`;
+    }).join('');
+
+    document.getElementById('trendLoading').classList.add('hidden');
+    document.getElementById('trendContent').classList.remove('hidden');
+    document.getElementById('trendBadge').textContent = (loc || 'All Locations') + ' • ' + dates.length + ' days';
+  } catch(e) {
+    document.getElementById('trendLoading').classList.add('hidden');
+    document.getElementById('trendEmpty').classList.remove('hidden');
+    document.getElementById('trendBadge').textContent = 'Error: ' + e.message;
+    console.error('[Trends]', e);
+  }
+}
+
+async function fetchTrend(action, params) {
+  try {
+    const p = { action, ...params };
+    const url = API_URL + '?' + new URLSearchParams(p).toString();
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 15000);
+    const r = await fetch(url, { redirect:'follow', signal:c.signal });
+    clearTimeout(t);
+    return JSON.parse(await r.text());
+  } catch(e) { console.warn('[Trend fetch] '+action+' failed:', e.message); return null; }
+}
+
+function renderTrendChart(canvasId, label, labels, data, borderColor, bgColor) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || typeof Chart === 'undefined') return;
+  if (trendCharts[canvasId]) trendCharts[canvasId].destroy();
+  trendCharts[canvasId] = new Chart(ctx.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{ label: label, data: data, borderColor: borderColor, backgroundColor: bgColor, fill: true, tension: 0.35, pointRadius: 4, pointHoverRadius: 6, borderWidth: 2 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#999', font: { size: 10 } } },
+               x: { grid: { display: false }, ticks: { color: '#999', font: { size: 10 }, maxRotation: 45 } } }
+    }
+  });
+}
+
+function renderTrendStackedChart(canvasId, labels, datasets) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || typeof Chart === 'undefined') return;
+  if (trendCharts[canvasId]) trendCharts[canvasId].destroy();
+  trendCharts[canvasId] = new Chart(ctx.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: datasets.map(ds => ({ label: ds.label, data: ds.data, backgroundColor: ds.bg, borderColor: ds.border, borderWidth: 1, borderRadius: 4 }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#999', font: { size: 10 } } } },
+      scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#999', font: { size: 10 } } },
+               y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#999', font: { size: 10 } } } }
+    }
+  });
 }
 
 </script>
