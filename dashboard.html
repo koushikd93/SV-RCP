@@ -1016,7 +1016,7 @@
       </div>
     </div>
 
-    
+  
 
     <!-- ===== TREND ANALYTICS PAGE ===== -->
     <div class="page" id="page-trends" style="box-sizing:border-box;max-width:100%">
@@ -1105,7 +1105,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbxA3NuiFwBiBjn9Cx6DwxNR_4ZbTK79V7O2pCL2b64BOo3tk_3VQXjpmbRb11I-chhmfA/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbyJZ8nZIzXX4AZeZ55nevb-CbBd_MVOtol0_28PNzsmm2kJ7oXaNrpkg1kF8BdxYzng/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -1115,6 +1115,27 @@ let dgChartInstance = null;
 let movChartInstance = null;
 let dgFuelChartInstance = null;
 let isUsingLiveData = false; // Track whether we have real data
+
+// ============================================================
+// UNIVERSAL FETCH WITH RETRY — for exact data pages
+// 90s timeout, 3 retries, clear error messages
+// ============================================================
+async function fetchExact(url, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 90000);
+      const res = await fetch(url, { redirect:'follow', signal:controller.signal });
+      clearTimeout(tid);
+      const text = await res.text();
+      return JSON.parse(text);
+    } catch(err) {
+      console.warn('[fetchExact] Attempt '+attempt+'/'+retries+' failed:', err.message, url.substring(0,80));
+      if (attempt < retries) await new Promise(r => setTimeout(r, 2000 * attempt));
+    }
+  }
+  throw new Error('Server did not respond after '+retries+' attempts. Please try again.');
+}
 
 // VISITOR MODULE VARIABLES
 let allVisitorRecords = [];
@@ -2099,11 +2120,7 @@ async function filterRecords() {
       if (dateFrom === dateTo && dateFrom) params.date = dateFrom;
 
       const url = API_URL + '?' + new URLSearchParams(params).toString();
-      const controller = new AbortController();
-      const tid = setTimeout(() => controller.abort(), 15000);
-      const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
-      clearTimeout(tid);
-      const data = JSON.parse(await res.text());
+      const data = await fetchExact(url);
 
       if (data.success && data.records) {
         let filtered = data.records;
@@ -2190,14 +2207,8 @@ async function renderVisitorDashboard(d) {
   try {
     console.log('[Visitors] Fetching visitor dashboard data separately...');
     const url = API_URL + '?' + new URLSearchParams({ action: 'getVisitorDashboardData' }).toString();
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
-    clearTimeout(tid);
-    const text = await res.text();
-    console.log('[Visitors] Raw response:', text.substring(0, 200));
-
-    const data = JSON.parse(text);
+    const data = await fetchExact(url);
+    console.log('[Visitors] Data received');
 
     if (data.error) {
       // Route doesn't exist in this deployment
@@ -2269,11 +2280,7 @@ async function filterVisitors() {
     if (loc) params.location = loc;
 
     const url = API_URL + '?' + new URLSearchParams(params).toString();
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
-    clearTimeout(tid);
-    const data = JSON.parse(await res.text());
+    const data = await fetchExact(url);
 
     if (data.success) {
       let records = data.records || [];
@@ -2326,11 +2333,7 @@ async function refreshActiveVisitors() {
 
   try {
     const url = API_URL + '?' + new URLSearchParams({ action: 'getActiveVisitors' }).toString();
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 12000);
-    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
-    clearTimeout(tid);
-    const data = JSON.parse(await res.text());
+    const data = await fetchExact(url);
 
     if (data.success) {
       const visitors = data.visitors || [];
@@ -2409,11 +2412,7 @@ async function loadDGFuelChartAsync() {
   try {
     const today = new Date().toISOString().split('T')[0];
     const url = API_URL + '?' + new URLSearchParams({ action:'getEquipmentStatus', date:today }).toString();
-    const c = new AbortController();
-    const t = setTimeout(() => c.abort(), 10000);
-    const r = await fetch(url, { redirect:'follow', signal:c.signal });
-    clearTimeout(t);
-    const data = JSON.parse(await r.text());
+    const data = await fetchExact(url);
     if (data.success && data.records) {
       // Extract latest DG fuel per location
       const latest = {};
@@ -2442,12 +2441,7 @@ async function renderEquipmentSummary() {
   if (!API_URL) return;
   try {
     const url = API_URL + '?' + new URLSearchParams({ action: 'getEquipmentSummary' }).toString();
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 12000);
-    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
-    clearTimeout(tid);
-    const text = await res.text();
-    const data = JSON.parse(text);
+    const data = await fetchExact(url);
 
     if (data.error && data.error.includes('Invalid action')) {
       console.warn('[Equipment] ❌ API does not have equipment routes yet. Add GAS code and redeploy.');
@@ -2538,11 +2532,7 @@ async function filterEquipmentStatus() {
 
 
     const url = API_URL + '?' + new URLSearchParams(params).toString();
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
-    clearTimeout(tid);
-    const data = JSON.parse(await res.text());
+    const data = await fetchExact(url);
 
     if (data.success) {
       let records = data.records || [];
@@ -2623,11 +2613,7 @@ async function filterFaultEquipment() {
     if (loc) params.location = loc;
 
     const url = API_URL + '?' + new URLSearchParams(params).toString();
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
-    clearTimeout(tid);
-    const data = JSON.parse(await res.text());
+    const data = await fetchExact(url);
 
     if (data.success) {
       let records = data.records || [];
@@ -2890,11 +2876,7 @@ async function filterPermits() {
     if (status) params.status = status;
 
     const url = API_URL + '?' + new URLSearchParams(params).toString();
-    const c = new AbortController();
-    const t = setTimeout(() => c.abort(), 15000);
-    const r = await fetch(url, { redirect:'follow', signal:c.signal });
-    clearTimeout(t);
-    const data = JSON.parse(await r.text());
+    const data = await fetchExact(url);
 
     if (data.error && data.error.includes('Invalid action')) {
       tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--danger)">API needs update. Add work permit GAS code and redeploy.</td></tr>';
@@ -3637,11 +3619,7 @@ async function filterBikerRecords() {
     }
 
     const url = API_URL + '?' + new URLSearchParams(params).toString();
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
-    clearTimeout(tid);
-    const data = JSON.parse(await res.text());
+    const data = await fetchExact(url);
 
     if (data.success) {
       const records = data.records || [];
@@ -4541,14 +4519,23 @@ function renderEquipmentHeatmap(dates, labels, eqItemByDate) {
 }
 
 async function trendFetch(params) {
-  try {
-    const url = API_URL + '?' + new URLSearchParams(params).toString();
-    const c = new AbortController();
-    const t = setTimeout(() => c.abort(), 15000);
-    const r = await fetch(url, { redirect:'follow', signal:c.signal });
-    clearTimeout(t);
-    return JSON.parse(await r.text());
-  } catch(e) { console.warn('[Trend] '+params.action+' failed:', e.message); return null; }
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const url = API_URL + '?' + new URLSearchParams(params).toString();
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), 90000);
+      const r = await fetch(url, { redirect:'follow', signal:c.signal });
+      clearTimeout(t);
+      const data = JSON.parse(await r.text());
+      if (data && (data.success || data.permits || data.records)) return data;
+      if (data && data.error && data.error.includes('Invalid action')) return data;
+      console.warn('[Trend] '+params.action+' attempt '+attempt+' — unexpected response');
+    } catch(e) {
+      console.warn('[Trend] '+params.action+' attempt '+attempt+' failed:', e.message);
+      if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  return null;
 }
 
 function trendReset(id) {
