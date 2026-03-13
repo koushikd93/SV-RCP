@@ -181,18 +181,20 @@
   .main {
     flex: 1; margin-left: 264px;
     padding: 0; min-height: 100vh;
+    overflow-y: auto; max-height: 100vh;
   }
 
   /* ===== TOPBAR with IOCL blue wave ===== */
   .topbar {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 18px 32px;
+    padding: 14px 32px;
     background: linear-gradient(135deg, #1B3C73 0%, #002B5C 50%, #0D4A8F 100%);
     color: #FFF;
-    position: relative; overflow: hidden;
+    position: sticky; top: 0; z-index: 10;
+    overflow: hidden;
   }
   .topbar::after {
-    content: ''; position: absolute; bottom: -20px; left: 0; right: 0; height: 40px;
+    content: ''; position: absolute; bottom: -10px; left: 0; right: 0; height: 20px;
     background: var(--bg);
     border-radius: 50% 50% 0 0 / 100% 100% 0 0;
   }
@@ -225,7 +227,7 @@
   .refresh-btn:hover { background: #e05a15; color: #FFF; border-color: #c04f10; box-shadow: 0 3px 10px rgba(242,103,34,0.45); transform: translateY(-1px); }
 
   /* Content padding after topbar */
-  .page { padding: 28px 32px 32px; }
+  .page { padding: 14px 32px 32px; }
 
   /* ===== STATS GRID ===== */
   .stats-grid {
@@ -993,26 +995,26 @@
     <div class="page" id="page-trends">
       <div class="panel" style="margin-bottom:16px">
         <div class="panel-header">
-          <div class="panel-title">📊 Trend Analytics</div>
-          <span class="panel-badge" style="background:rgba(242,103,34,.1);color:var(--accent)" id="trendBadge">Select filters</span>
+          <div class="panel-title">📊 Location-wise Trend Analytics</div>
+          <span class="panel-badge" style="background:rgba(242,103,34,.1);color:var(--accent)" id="trendBadge">Select a location</span>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:10px;padding:0 0 10px">
-          <div style="flex:1;min-width:160px">
-            <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Location</label>
-            <select id="trendLocation" class="filter-input" onchange="loadTrends()">
-              <option value="">-- All Locations --</option>
+          <div style="flex:1.5;min-width:180px">
+            <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Location <span style="color:var(--danger)">*</span></label>
+            <select id="trendLocation" class="filter-input" style="border:2px solid var(--accent);font-weight:600">
+              <option value="">— Select Location —</option>
             </select>
           </div>
           <div style="min-width:130px">
             <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">From</label>
-            <input type="date" id="trendDateFrom" class="filter-input" onchange="loadTrends()">
+            <input type="date" id="trendDateFrom" class="filter-input">
           </div>
           <div style="min-width:130px">
             <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">To</label>
-            <input type="date" id="trendDateTo" class="filter-input" onchange="loadTrends()">
+            <input type="date" id="trendDateTo" class="filter-input">
           </div>
           <div style="align-self:flex-end">
-            <button class="refresh-btn" onclick="loadTrends()" style="padding:8px 16px">🔄 Load</button>
+            <button class="refresh-btn" onclick="loadTrends()" style="padding:8px 20px;font-size:13px">📊 Load Trends</button>
           </div>
         </div>
       </div>
@@ -1023,17 +1025,33 @@
           <div class="panel"><div class="panel-header"><div class="panel-title">✅ Attendance Trend</div></div><div class="chart-container"><canvas id="trendAttChart"></canvas></div></div>
           <div class="panel"><div class="panel-header"><div class="panel-title">🚶 Visitor Trend</div></div><div class="chart-container"><canvas id="trendVisChart"></canvas></div></div>
         </div>
-        <!-- Row 2: Equipment Status + DG Fuel -->
+        <!-- Row 2: Equipment Aggregate + DG Fuel -->
         <div class="grid-2">
-          <div class="panel"><div class="panel-header"><div class="panel-title">⚙️ Equipment Status (Working vs Not Working)</div></div><div class="chart-container"><canvas id="trendEqChart"></canvas></div></div>
+          <div class="panel"><div class="panel-header"><div class="panel-title">⚙️ Equipment Overall (Working vs Not Working)</div></div><div class="chart-container"><canvas id="trendEqChart"></canvas></div></div>
           <div class="panel"><div class="panel-header"><div class="panel-title">⛽ DG Fuel Level Trend</div></div><div class="chart-container"><canvas id="trendFuelChart"></canvas></div></div>
         </div>
-        <!-- Row 3: Near Miss + Work Permits -->
+        <!-- Row 3: Per-Equipment Item Trend (FULL WIDTH) -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">🔧 Individual Equipment Item Status</div>
+            <span class="panel-badge" id="trendEqItemBadge" style="background:rgba(6,214,160,.1);color:var(--accent)">per-item breakdown</span>
+          </div>
+          <div class="chart-container" style="height:350px"><canvas id="trendEqItemChart"></canvas></div>
+        </div>
+        <!-- Row 4: Equipment item heatmap table -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">📋 Equipment Item Daily Status</div>
+            <span class="panel-badge" id="trendEqHeatBadge" style="background:rgba(242,103,34,.1);color:var(--accent)">heatmap</span>
+          </div>
+          <div class="table-scroll" id="trendEqHeatmap" style="overflow-x:auto"></div>
+        </div>
+        <!-- Row 5: Near Miss + Work Permits -->
         <div class="grid-2">
           <div class="panel"><div class="panel-header"><div class="panel-title">⚠️ Near Miss Reports</div></div><div class="chart-container"><canvas id="trendNMChart"></canvas></div></div>
-          <div class="panel"><div class="panel-header"><div class="panel-title">📋 Work Permits Issued</div></div><div class="chart-container"><canvas id="trendWPChart"></canvas></div></div>
+          <div class="panel"><div class="panel-header"><div class="panel-title">📋 Work Permits</div></div><div class="chart-container"><canvas id="trendWPChart"></canvas></div></div>
         </div>
-        <!-- Row 4: Summary Table -->
+        <!-- Row 6: Summary Table -->
         <div class="panel">
           <div class="panel-header"><div class="panel-title">📋 Daily Summary Table</div></div>
           <div class="table-scroll">
@@ -1042,9 +1060,10 @@
           </div>
         </div>
       </div>
-      <div id="trendEmpty" class="hidden" style="text-align:center;padding:40px;color:var(--text3)">
-        <div style="font-size:40px;margin-bottom:10px">📊</div>
-        <div style="font-size:14px">Select a location and date range to view trends</div>
+      <div id="trendEmpty" style="text-align:center;padding:40px;color:var(--text3)">
+        <div style="font-size:48px;margin-bottom:12px">📍</div>
+        <div style="font-size:16px;font-weight:600;color:var(--text)">Select a Location to View Trends</div>
+        <div style="font-size:13px;margin-top:6px">Choose a specific location and date range, then click "Load Trends"</div>
       </div>
     </div>
 
@@ -2017,6 +2036,12 @@ function showPage(page, el) {
   document.getElementById('page-' + page).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
+  else { // Find matching nav item if el not passed (e.g. from stat card click)
+    document.querySelectorAll('.nav-item').forEach(n => { if (n.getAttribute('onclick') && n.getAttribute('onclick').includes("'"+page+"'")) n.classList.add('active'); });
+  }
+
+  // Scroll to top of main content
+  document.querySelector('.main').scrollTo({top:0, behavior:'smooth'});
 
   const titles = {
     overview: 'Dashboard Overview',
@@ -4118,13 +4143,21 @@ async function exportPermitPDF(id) {
 }
 
 // ============================================================
-// TREND ANALYTICS MODULE — works with existing GAS endpoints
-// getAttendance(date), getEquipmentStatus(dateFrom/To),
-// getVisitorRecords(dateFrom/To), getNearMissReports(dateFrom/To),
-// getWorkPermits(dateFrom/To) — all with optional location filter
+// TREND ANALYTICS MODULE — per-location, per-equipment-item
+// Uses ONLY existing GAS: getAttendance(date,location),
+// getEquipmentStatus(dateFrom/To,location), getVisitorRecords,
+// getNearMissReports, getWorkPermits
 // ============================================================
 let trendCharts = {};
 let trendDataCache = null;
+
+// All equipment items from portal
+const TREND_EQUIPMENT = [
+  'DG','MOV','Battery','Solar Panel','RTU','Telecom Panel','Telephone','Charger',
+  'ACDB','AMF','Transformer','EEE','PT','TT','HCD','MSD','Earth Pit','TRU',
+  'CCTV','Fire Extinguishers','FLP Lights','Power Fencing','Concertina',
+  'Jockey Pump','Fire Fighting Engine','Deluge Valve','5 KVA UPS','Scrapper Barrel','PCV','MFM'
+];
 
 function initTrendsPage() {
   const sel = document.getElementById('trendLocation');
@@ -4140,7 +4173,7 @@ function initTrendsPage() {
   if (!document.getElementById('trendDateFrom').value) document.getElementById('trendDateFrom').value = weekAgo.toISOString().split('T')[0];
   if (!document.getElementById('trendDateTo').value) document.getElementById('trendDateTo').value = today.toISOString().split('T')[0];
   if (!trendDataCache) {
-    document.getElementById('trendEmpty').classList.remove('hidden');
+    document.getElementById('trendEmpty').style.display = '';
     document.getElementById('trendContent').classList.add('hidden');
   }
 }
@@ -4149,37 +4182,33 @@ async function loadTrends() {
   const loc = document.getElementById('trendLocation').value;
   const dateFrom = document.getElementById('trendDateFrom').value;
   const dateTo = document.getElementById('trendDateTo').value;
-  if (!dateFrom || !dateTo) { alert('Please select both dates'); return; }
+
+  if (!loc) { alert('⚠ Please select a specific location first.'); document.getElementById('trendLocation').focus(); return; }
+  if (!dateFrom || !dateTo) { alert('Please select both From and To dates'); return; }
 
   document.getElementById('trendLoading').classList.remove('hidden');
   document.getElementById('trendContent').classList.add('hidden');
-  document.getElementById('trendEmpty').classList.add('hidden');
-  document.getElementById('trendBadge').textContent = 'Loading...';
+  document.getElementById('trendEmpty').style.display = 'none';
+  document.getElementById('trendBadge').textContent = 'Loading ' + loc + '...';
 
   try {
-    // Generate date range
     const dates = [];
     const d = new Date(dateFrom);
     const end = new Date(dateTo);
     while (d <= end) { dates.push(d.toISOString().split('T')[0]); d.setDate(d.getDate() + 1); }
-    if (dates.length > 31) { alert('Maximum 31 days range'); document.getElementById('trendLoading').classList.add('hidden'); document.getElementById('trendEmpty').classList.remove('hidden'); return; }
+    if (dates.length > 31) { alert('Maximum 31 days range'); document.getElementById('trendLoading').classList.add('hidden'); document.getElementById('trendEmpty').style.display=''; return; }
 
-    // Attendance: fetch per-day in parallel (API only supports single date)
-    const attPromises = dates.map(dt => {
-      const p = { action:'getAttendance', date: dt };
-      if (loc) p.location = loc;
-      return trendFetch(p).then(r => ({
+    // Attendance per-day in parallel (API only supports single date+location)
+    const attPromises = dates.map(dt =>
+      trendFetch({ action:'getAttendance', date:dt, location:loc }).then(r => ({
         date: dt,
         count: (r && r.success && r.records) ? r.records.length : 0,
-        late: (r && r.success && r.records) ? r.records.filter(x => x.Status === 'Late' || x.Status === 'Very Late').length : 0,
-        shifts: (r && r.success && r.records) ? countShifts(r.records) : {A:0,B:0,C:0,General:0}
-      }));
-    });
+        late: (r && r.success && r.records) ? r.records.filter(x => x.Status==='Late'||x.Status==='Very Late').length : 0
+      }))
+    );
 
-    // Range data fetched in parallel
-    const rp = { dateFrom, dateTo };
-    if (loc) rp.location = loc;
-
+    // Range data in parallel
+    const rp = { dateFrom, dateTo, location: loc };
     const [attResults, eqR, visR, nmR, wpR] = await Promise.all([
       Promise.all(attPromises),
       trendFetch({ action:'getEquipmentStatus', ...rp }),
@@ -4188,79 +4217,71 @@ async function loadTrends() {
       trendFetch({ action:'getWorkPermits', ...rp }).catch(() => null)
     ]);
 
-    // --- Process attendance ---
-    const attByDate = {}, lateByDate = {}, shiftByDate = {};
-    dates.forEach(dt => { attByDate[dt] = 0; lateByDate[dt] = 0; shiftByDate[dt] = {A:0,B:0,C:0,General:0}; });
-    attResults.forEach(r => { attByDate[r.date] = r.count; lateByDate[r.date] = r.late; shiftByDate[r.date] = r.shifts; });
+    // === Process Attendance ===
+    const attByDate = {}, lateByDate = {};
+    dates.forEach(dt => { attByDate[dt]=0; lateByDate[dt]=0; });
+    attResults.forEach(r => { attByDate[r.date]=r.count; lateByDate[r.date]=r.late; });
 
-    // --- Process visitors ---
+    // === Process Visitors ===
     const visByDate = {}, visByPurpose = {};
-    dates.forEach(dt => visByDate[dt] = 0);
+    dates.forEach(dt => visByDate[dt]=0);
     if (visR && visR.success && visR.records) {
-      visR.records.forEach(r => {
-        const dt = r.Date || '';
-        if (visByDate.hasOwnProperty(dt)) visByDate[dt]++;
-        const pu = r.Purpose || 'Other';
-        visByPurpose[pu] = (visByPurpose[pu] || 0) + 1;
-      });
+      visR.records.forEach(r => { const dt=r.Date||''; if(visByDate.hasOwnProperty(dt)) visByDate[dt]++; const pu=r.Purpose||'Other'; visByPurpose[pu]=(visByPurpose[pu]||0)+1; });
     }
 
-    // --- Process equipment ---
-    const eqOkByDate = {}, eqFaultByDate = {}, fuelByDate = {}, hkByDate = {};
-    const dgStatusByDate = {}, movStatusByDate = {};
-    dates.forEach(dt => { eqOkByDate[dt]=0; eqFaultByDate[dt]=0; fuelByDate[dt]=null; hkByDate[dt]=null; dgStatusByDate[dt]=null; movStatusByDate[dt]=null; });
+    // === Process Equipment — AGGREGATE + PER-ITEM ===
+    const eqOkByDate={}, eqFaultByDate={}, fuelByDate={}, hkByDate={};
+    // Per-item: { equipName: { date: 'Working'|'Not Working'|... } }
+    const eqItemByDate = {};
+    dates.forEach(dt => { eqOkByDate[dt]=0; eqFaultByDate[dt]=0; fuelByDate[dt]=null; hkByDate[dt]=null; });
+
     if (eqR && eqR.success && eqR.records) {
       eqR.records.forEach(r => {
-        const dt = r.Date || '';
+        const dt = r.Date||'';
         if (!eqOkByDate.hasOwnProperty(dt)) return;
-        const eq = String(r.Equipment || '');
-        if (eq === '__HOUSEKEEPING__') { hkByDate[dt] = r.Status; return; }
+        const eq = String(r.Equipment||'');
+        if (eq==='__HOUSEKEEPING__') { hkByDate[dt]=r.Status; return; }
         if (eq.startsWith('__')) return;
-        if (r.Status === 'Working') eqOkByDate[dt]++;
-        else if (r.Status === 'Not Working') eqFaultByDate[dt]++;
-        if (eq === 'DG') {
-          dgStatusByDate[dt] = r.Status;
-          if (r.ExtraData) {
-            try {
-              const extra = typeof r.ExtraData==='string' ? JSON.parse(r.ExtraData) : r.ExtraData;
-              if (extra.dg && extra.dg.currentFuel) { const f=parseFloat(extra.dg.currentFuel); if(!isNaN(f)) fuelByDate[dt]=f; }
-            } catch(e) {}
-          }
+
+        // Aggregate
+        if (r.Status==='Working') eqOkByDate[dt]++;
+        else if (r.Status==='Not Working') eqFaultByDate[dt]++;
+
+        // Per-item tracking (keep latest entry per item per date)
+        if (!eqItemByDate[eq]) eqItemByDate[eq] = {};
+        if (!eqItemByDate[eq][dt] || (r.Time && r.Time > (eqItemByDate[eq][dt].time||''))) {
+          eqItemByDate[eq][dt] = { status: r.Status, time: r.Time||'', remarks: r.Remarks||'' };
         }
-        if (eq === 'MOV') movStatusByDate[dt] = r.Status;
+
+        // DG fuel
+        if (eq==='DG' && r.ExtraData) {
+          try {
+            const extra = typeof r.ExtraData==='string' ? JSON.parse(r.ExtraData) : r.ExtraData;
+            if (extra.dg && extra.dg.currentFuel) { const f=parseFloat(extra.dg.currentFuel); if(!isNaN(f)) fuelByDate[dt]=f; }
+          } catch(e) {}
+        }
       });
     }
 
-    // --- Process near miss ---
-    const nmByDate = {}, nmByCat = {};
-    dates.forEach(dt => nmByDate[dt] = 0);
+    // === Process Near Miss ===
+    const nmByDate={}, nmByCat={};
+    dates.forEach(dt => nmByDate[dt]=0);
     if (nmR && nmR.success && nmR.records) {
-      nmR.records.forEach(r => {
-        const dt = r.Date || r.IncidentDate || '';
-        if (nmByDate.hasOwnProperty(dt)) nmByDate[dt]++;
-        const cat = r.Category || 'Other';
-        nmByCat[cat] = (nmByCat[cat] || 0) + 1;
-      });
+      nmR.records.forEach(r => { const dt=r.Date||r.IncidentDate||''; if(nmByDate.hasOwnProperty(dt)) nmByDate[dt]++; const cat=r.Category||'Other'; nmByCat[cat]=(nmByCat[cat]||0)+1; });
     }
 
-    // --- Process work permits ---
-    const wpByDate = {}, wpByType = {};
-    dates.forEach(dt => wpByDate[dt] = 0);
+    // === Process Work Permits ===
+    const wpByDate={}, wpByType={};
+    dates.forEach(dt => wpByDate[dt]=0);
     if (wpR && wpR.success && wpR.permits) {
-      wpR.permits.forEach(p => {
-        let dt=''; try { dt=cleanDate(p.DateFrom); } catch(e) { dt=p.DateFrom||''; }
-        if (wpByDate.hasOwnProperty(dt)) wpByDate[dt]++;
-        const tp = p.PermitType || 'Other';
-        wpByType[tp] = (wpByType[tp] || 0) + 1;
-      });
+      wpR.permits.forEach(p => { let dt=''; try{dt=cleanDate(p.DateFrom);}catch(e){dt=p.DateFrom||'';} if(wpByDate.hasOwnProperty(dt)) wpByDate[dt]++; const tp=p.PermitType||'Other'; wpByType[tp]=(wpByType[tp]||0)+1; });
     }
 
-    // Labels
     const labels = dates.map(dt => { const dd=new Date(dt+'T00:00:00'); return dd.toLocaleDateString('en-US',{month:'short',day:'numeric'}); });
 
     // =================== RENDER CHARTS ===================
 
-    // 1. Attendance with late overlay
+    // 1. Attendance
     trendReset('trendAttChart');
     trendCharts['trendAttChart'] = new Chart(document.getElementById('trendAttChart').getContext('2d'), {
       type:'line', data:{ labels, datasets:[
@@ -4269,13 +4290,13 @@ async function loadTrends() {
       ]}, options: trendLineOpts(true)
     });
 
-    // 2. Visitor bar chart
+    // 2. Visitors
     trendReset('trendVisChart');
     const visTotal = Object.values(visByDate).reduce((a,b)=>a+b,0);
-    if (visTotal > 0 && Object.keys(visByPurpose).length > 1) {
+    if (visTotal>0 && Object.keys(visByPurpose).length>1) {
       trendCharts['trendVisChart'] = new Chart(document.getElementById('trendVisChart').getContext('2d'), {
         type:'doughnut', data:{ labels:Object.keys(visByPurpose), datasets:[{ data:Object.values(visByPurpose), backgroundColor:['#8b5cf6','#06d6a0','#3b82f6','#f59e0b','#dc2626','#ec4899','#14b8a6','#f97316'], borderWidth:2, borderColor:'#fff' }] },
-        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{color:'#999',font:{size:11},padding:10} } }, cutout:'55%' }
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#999',font:{size:11},padding:10}} }, cutout:'55%' }
       });
     } else {
       trendCharts['trendVisChart'] = new Chart(document.getElementById('trendVisChart').getContext('2d'), {
@@ -4283,7 +4304,7 @@ async function loadTrends() {
       });
     }
 
-    // 3. Equipment stacked bar
+    // 3. Equipment stacked
     trendReset('trendEqChart');
     trendCharts['trendEqChart'] = new Chart(document.getElementById('trendEqChart').getContext('2d'), {
       type:'bar', data:{ labels, datasets:[
@@ -4292,22 +4313,57 @@ async function loadTrends() {
       ]}, options:{ ...trendBarOpts(), plugins:{legend:{labels:{color:'#999',font:{size:11},boxWidth:12,padding:12}}}, scales:{x:{stacked:true,grid:{display:false},ticks:{color:'#999',font:{size:10}}},y:{stacked:true,beginAtZero:true,grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#999',font:{size:10}}}} }
     });
 
-    // 4. DG Fuel line
+    // 4. DG Fuel
     trendReset('trendFuelChart');
     const fuelVals = dates.map(dt=>fuelByDate[dt]);
-    if (fuelVals.some(v => v !== null)) {
+    if (fuelVals.some(v=>v!==null)) {
       trendCharts['trendFuelChart'] = new Chart(document.getElementById('trendFuelChart').getContext('2d'), {
         type:'line', data:{ labels, datasets:[{ label:'DG Fuel (Ltrs)', data:fuelVals, borderColor:'#F26722', backgroundColor:'rgba(242,103,34,0.12)', fill:true, tension:.3, pointRadius:4, borderWidth:2, spanGaps:true }] }, options:trendLineOpts(false)
       });
     } else {
-      const el = document.getElementById('trendFuelChart');
-      if (el) el.parentElement.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">No DG fuel data in selected range</div>';
+      const el=document.getElementById('trendFuelChart');
+      if(el) el.parentElement.innerHTML='<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">No DG fuel data in selected range</div>';
     }
 
-    // 5. Near Miss — doughnut by category if multiple, else bar by date
+    // 5. PER-EQUIPMENT ITEM CHART — horizontal bar showing Working/NotWorking counts
+    trendReset('trendEqItemChart');
+    const itemNames = Object.keys(eqItemByDate).sort();
+    if (itemNames.length > 0) {
+      const itemW = [], itemNW = [], itemOther = [];
+      itemNames.forEach(eq => {
+        let w=0, nw=0, o=0;
+        dates.forEach(dt => {
+          const d = eqItemByDate[eq][dt];
+          if (!d) return;
+          if (d.status==='Working') w++;
+          else if (d.status==='Not Working') nw++;
+          else o++;
+        });
+        itemW.push(w); itemNW.push(nw); itemOther.push(o);
+      });
+      document.getElementById('trendEqItemBadge').textContent = itemNames.length + ' items tracked';
+      trendCharts['trendEqItemChart'] = new Chart(document.getElementById('trendEqItemChart').getContext('2d'), {
+        type:'bar', data:{ labels:itemNames, datasets:[
+          { label:'Working', data:itemW, backgroundColor:'rgba(6,214,160,0.7)', borderColor:'#16A34A', borderWidth:1, borderRadius:3 },
+          { label:'Not Working', data:itemNW, backgroundColor:'rgba(220,38,38,0.7)', borderColor:'#dc2626', borderWidth:1, borderRadius:3 },
+          { label:'Other/N/A', data:itemOther, backgroundColor:'rgba(245,158,11,0.5)', borderColor:'#f59e0b', borderWidth:1, borderRadius:3 }
+        ]}, options:{
+          indexAxis:'y', responsive:true, maintainAspectRatio:false,
+          plugins:{ legend:{labels:{color:'#999',font:{size:11},boxWidth:12,padding:12}} },
+          scales:{ x:{stacked:true,beginAtZero:true,grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#999',font:{size:10}}}, y:{stacked:true,grid:{display:false},ticks:{color:'#999',font:{size:10}}} }
+        }
+      });
+    } else {
+      document.getElementById('trendEqItemBadge').textContent = 'No data';
+    }
+
+    // 6. EQUIPMENT ITEM HEATMAP TABLE
+    renderEquipmentHeatmap(dates, labels, eqItemByDate);
+
+    // 7. Near Miss
     trendReset('trendNMChart');
     const nmTotal = Object.values(nmByDate).reduce((a,b)=>a+b,0);
-    if (nmTotal > 0 && Object.keys(nmByCat).length > 1) {
+    if (nmTotal>0 && Object.keys(nmByCat).length>1) {
       trendCharts['trendNMChart'] = new Chart(document.getElementById('trendNMChart').getContext('2d'), {
         type:'doughnut', data:{ labels:Object.keys(nmByCat), datasets:[{ data:Object.values(nmByCat), backgroundColor:['#f97316','#dc2626','#f59e0b','#8b5cf6','#06d6a0'], borderWidth:2, borderColor:'#fff' }] },
         options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#999',font:{size:11},padding:10}} }, cutout:'55%' }
@@ -4318,10 +4374,10 @@ async function loadTrends() {
       });
     }
 
-    // 6. Work Permits — doughnut by type if multiple, else bar
+    // 8. Work Permits
     trendReset('trendWPChart');
     const wpTotal = Object.values(wpByDate).reduce((a,b)=>a+b,0);
-    if (wpTotal > 0 && Object.keys(wpByType).length > 1) {
+    if (wpTotal>0 && Object.keys(wpByType).length>1) {
       trendCharts['trendWPChart'] = new Chart(document.getElementById('trendWPChart').getContext('2d'), {
         type:'doughnut', data:{ labels:Object.keys(wpByType), datasets:[{ data:Object.values(wpByType), backgroundColor:['#dc2626','#f59e0b','#06d6a0','#3b82f6','#8b5cf6','#ec4899'], borderWidth:2, borderColor:'#fff' }] },
         options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#999',font:{size:11},padding:10}} }, cutout:'55%' }
@@ -4335,13 +4391,12 @@ async function loadTrends() {
     // =================== SUMMARY TABLE ===================
     const tbody = document.getElementById('trendSummaryTable');
     tbody.innerHTML = dates.map(dt => {
-      const dd = new Date(dt+'T00:00:00');
+      const dd=new Date(dt+'T00:00:00');
       const dayName = dd.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-      const hk = hkByDate[dt];
-      const hkBadge = hk ? `<span style="padding:1px 6px;border-radius:4px;font-size:10px;background:${hk==='Ok'?'rgba(6,214,160,.15)':'rgba(220,38,38,.15)'};color:${hk==='Ok'?'#16a34a':'#dc2626'}">${hk}</span>` : '<span style="color:var(--text3);font-size:10px">—</span>';
-      const fv = fuelByDate[dt];
-      const fuelBadge = fv !== null ? `<span style="color:${fv<=10?'#dc2626':fv<=25?'#f59e0b':'#16a34a'};font-weight:600">${fv}L</span>` : '—';
-      const dgBadge = dgStatusByDate[dt] ? `<span style="color:${dgStatusByDate[dt]==='Working'?'#16a34a':'#dc2626'};font-size:10px">${dgStatusByDate[dt]==='Working'?'✓':'✕'}</span>` : '';
+      const hk=hkByDate[dt];
+      const hkBadge = hk ? `<span style="padding:1px 6px;border-radius:4px;font-size:10px;background:${hk==='Ok'?'rgba(6,214,160,.15)':'rgba(220,38,38,.15)'};color:${hk==='Ok'?'#16a34a':'#dc2626'}">${hk}</span>` : '—';
+      const fv=fuelByDate[dt];
+      const fuelBadge = fv!==null ? `<span style="color:${fv<=10?'#dc2626':fv<=25?'#f59e0b':'#16a34a'};font-weight:600">${fv}L</span>` : '—';
       return `<tr>
         <td style="font-family:monospace;font-size:12px">${dayName}</td>
         <td><b>${attByDate[dt]}</b> <span style="color:var(--text3);font-size:10px">(${lateByDate[dt]} late)</span></td>
@@ -4349,37 +4404,60 @@ async function loadTrends() {
         <td style="color:var(--accent);font-weight:500">${eqOkByDate[dt]}</td>
         <td style="color:${eqFaultByDate[dt]>0?'var(--danger)':'var(--text3)'};font-weight:${eqFaultByDate[dt]>0?'600':'400'}">${eqFaultByDate[dt]}</td>
         <td>${hkBadge}</td>
-        <td>${fuelBadge} ${dgBadge}</td>
+        <td>${fuelBadge}</td>
         <td>${nmByDate[dt]}</td>
         <td>${wpByDate[dt]}</td>
       </tr>`;
     }).join('');
-
-    // Totals row
-    const totP = dates.reduce((s,dt)=>s+attByDate[dt],0);
-    const totL = dates.reduce((s,dt)=>s+lateByDate[dt],0);
-    const totV = dates.reduce((s,dt)=>s+visByDate[dt],0);
-    const totOk = dates.reduce((s,dt)=>s+eqOkByDate[dt],0);
-    const totF = dates.reduce((s,dt)=>s+eqFaultByDate[dt],0);
-    tbody.innerHTML += `<tr style="font-weight:700;border-top:2px solid var(--border);background:rgba(242,103,34,.04)">
-      <td>TOTAL</td><td>${totP} <span style="font-size:10px;color:var(--text3)">(${totL} late)</span></td><td>${totV}</td><td style="color:var(--accent)">${totOk}</td><td style="color:var(--danger)">${totF}</td><td>—</td><td>—</td><td>${nmTotal}</td><td>${wpTotal}</td></tr>`;
+    const totP=dates.reduce((s,dt)=>s+attByDate[dt],0), totL=dates.reduce((s,dt)=>s+lateByDate[dt],0);
+    const totV=dates.reduce((s,dt)=>s+visByDate[dt],0), totOk=dates.reduce((s,dt)=>s+eqOkByDate[dt],0);
+    const totF=dates.reduce((s,dt)=>s+eqFaultByDate[dt],0);
+    tbody.innerHTML += `<tr style="font-weight:700;border-top:2px solid var(--border);background:rgba(242,103,34,.04)"><td>TOTAL</td><td>${totP} (${totL} late)</td><td>${totV}</td><td style="color:var(--accent)">${totOk}</td><td style="color:var(--danger)">${totF}</td><td>—</td><td>—</td><td>${nmTotal}</td><td>${wpTotal}</td></tr>`;
 
     trendDataCache = true;
     document.getElementById('trendLoading').classList.add('hidden');
     document.getElementById('trendContent').classList.remove('hidden');
-    document.getElementById('trendBadge').textContent = (loc || 'All Locations') + ' • ' + dates.length + ' days';
+    document.getElementById('trendBadge').textContent = loc + ' • ' + dates.length + ' days';
   } catch(e) {
     document.getElementById('trendLoading').classList.add('hidden');
-    document.getElementById('trendEmpty').classList.remove('hidden');
+    document.getElementById('trendEmpty').style.display='';
     document.getElementById('trendBadge').textContent = 'Error: ' + e.message;
     console.error('[Trends]', e);
   }
 }
 
-function countShifts(records) {
-  const s = {A:0,B:0,C:0,General:0};
-  records.forEach(r => { if (s.hasOwnProperty(r.Shift)) s[r.Shift]++; });
-  return s;
+// Equipment Heatmap — color-coded table per item per day
+function renderEquipmentHeatmap(dates, labels, eqItemByDate) {
+  const items = Object.keys(eqItemByDate).sort();
+  if (items.length === 0) {
+    document.getElementById('trendEqHeatmap').innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3)">No equipment data</div>';
+    document.getElementById('trendEqHeatBadge').textContent = 'No data';
+    return;
+  }
+  document.getElementById('trendEqHeatBadge').textContent = items.length + ' items × ' + dates.length + ' days';
+
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="position:sticky;left:0;background:var(--surface);z-index:2;text-align:left;padding:6px 8px;border:1px solid var(--border);min-width:120px">Equipment</th>';
+  labels.forEach(l => { html += `<th style="padding:4px 6px;border:1px solid var(--border);text-align:center;font-size:10px;min-width:55px">${l}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  items.forEach(eq => {
+    html += `<tr><td style="position:sticky;left:0;background:var(--surface);z-index:1;padding:5px 8px;border:1px solid var(--border);font-weight:600;white-space:nowrap">${eq}</td>`;
+    dates.forEach(dt => {
+      const d = eqItemByDate[eq][dt];
+      let bg = 'var(--surface)', color = 'var(--text3)', text = '—', title = '';
+      if (d) {
+        if (d.status === 'Working') { bg = 'rgba(6,214,160,0.2)'; color = '#16a34a'; text = '✓'; }
+        else if (d.status === 'Not Working') { bg = 'rgba(220,38,38,0.2)'; color = '#dc2626'; text = '✕'; }
+        else if (d.status === 'N/A') { bg = 'rgba(156,163,175,0.15)'; color = '#9ca3af'; text = 'N/A'; }
+        else { bg = 'rgba(245,158,11,0.15)'; color = '#f59e0b'; text = '?'; }
+        title = d.status + (d.remarks ? ' — ' + d.remarks : '');
+      }
+      html += `<td style="padding:4px;border:1px solid var(--border);text-align:center;background:${bg};color:${color};font-weight:700;cursor:default" title="${title}">${text}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('trendEqHeatmap').innerHTML = html;
 }
 
 async function trendFetch(params) {
@@ -4395,19 +4473,14 @@ async function trendFetch(params) {
 
 function trendReset(id) {
   if (trendCharts[id]) { trendCharts[id].destroy(); delete trendCharts[id]; }
-  // Restore canvas if it was replaced by text
   const el = document.getElementById(id);
   if (!el) {
+    // Canvas was replaced by text — restore it
     const containers = document.querySelectorAll('#trendContent .chart-container');
     for (const c of containers) {
-      if (!c.querySelector('canvas') && c.textContent.includes('No ')) {
-        // This might be our replaced canvas — check if another canvas with this id exists
-        // If not, recreate it
-        const exists = document.getElementById(id);
-        if (!exists) {
-          c.innerHTML = '<canvas id="'+id+'"></canvas>';
-          break;
-        }
+      if (!c.querySelector('canvas#'+id) && c.textContent.includes('No ')) {
+        c.innerHTML = '<canvas id="'+id+'"></canvas>';
+        break;
       }
     }
   }
