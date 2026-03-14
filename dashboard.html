@@ -1016,7 +1016,7 @@
       </div>
     </div>
 
-  
+    </div>
 
     <!-- ===== TREND ANALYTICS PAGE ===== -->
     <div class="page" id="page-trends" style="box-sizing:border-box;max-width:100%">
@@ -3851,32 +3851,59 @@ async function exportPermitPDF(id) {
 
   const doc = new JsPDF('p','mm','a4');
   const W=210, H=297, LM=12, RM=W-12, CW=RM-LM;
-  const isHot = p.PermitTypeKey==='hot'||p.PermitTypeKey==='comp';
+
+  // Color logic: Cold & Vehicle = Yellow, others = Hot Pink
+  const isColdOrVeh = p.PermitTypeKey==='cold'||p.PermitTypeKey==='veh';
+  const BG = isColdOrVeh ? [255,255,0] : [255,105,180];
+  const BANNER_BG = [27,40,86]; // Navy for banner
   let y = 0;
 
-  // Format date-time as "20-Feb-2026 14:30 IST"
-  function fmtIST(v) {
+  // Format date-time as "DD-MM-YYYY HH:MM:SS"
+  function fmtDT(v) {
     if (!v || v==='-' || v==='undefined' || v==='null') return '-';
-    var ist = toIST(String(v));
-    if (!ist) { return cleanDate(v) + ' ' + cleanTime(v); }
-    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return String(ist.getDate()).padStart(2,'0') + '-' + months[ist.getMonth()] + '-' + ist.getFullYear() +
-      ' ' + String(ist.getHours()).padStart(2,'0') + ':' + String(ist.getMinutes()).padStart(2,'0') + ' IST';
+    try {
+      var d = new Date(String(v));
+      if (isNaN(d.getTime())) {
+        // Try parsing "YYYY-MM-DD" + time
+        var s = String(v);
+        var cd = cleanDate(s); var ct = cleanTime(s);
+        if (cd && cd !== '-') {
+          var parts = cd.split('-');
+          return parts[2]+'-'+parts[1]+'-'+parts[0]+' '+(ct||'00:00')+':00';
+        }
+        return s;
+      }
+      // Adjust to IST (+5:30)
+      var ist = new Date(d.getTime() + (5*60+30)*60*1000);
+      return String(ist.getUTCDate()).padStart(2,'0')+'-'+
+             String(ist.getUTCMonth()+1).padStart(2,'0')+'-'+
+             ist.getUTCFullYear()+' '+
+             String(ist.getUTCHours()).padStart(2,'0')+':'+
+             String(ist.getUTCMinutes()).padStart(2,'0')+':'+
+             String(ist.getUTCSeconds()).padStart(2,'0');
+    } catch(e) { return cleanDate(v)+' '+cleanTime(v); }
   }
 
-  // ===== IOCL LOGO (actual image, base64) =====
-  const IOCL_LOGO_B64 = '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';
+  // Format date only as "DD-MM-YYYY"
+  function fmtDate(v) {
+    var cd = cleanDate(v);
+    if (!cd || cd === '-') return '-';
+    var parts = cd.split('-');
+    if (parts.length === 3 && parts[0].length === 4) return parts[2]+'-'+parts[1]+'-'+parts[0];
+    return cd;
+  }
 
-  // ===== PAGE HEADER with IOCL logo (every page) =====
+  // ===== IOCL LOGO =====
+  const IOCL_LOGO_B64 = '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';
+
+  // ===== PAGE HEADER =====
   function pageHeader() {
-    // IOCL Logo top-left (actual image)
-    try { doc.addImage(IOCL_LOGO_B64, 'JPEG', LM+1, y+1, 18, 18); } catch(e) { console.warn('Logo failed:', e); }
+    try { doc.addImage(IOCL_LOGO_B64, 'JPEG', LM+1, y+1, 18, 18); } catch(e) {}
     doc.setTextColor(0); doc.setFontSize(13); doc.setFont('helvetica','bold');
     doc.text('INDIAN OIL CORPORATION LIMITED', W/2+8, y+6, {align:'center'});
     doc.setFontSize(11); doc.text('EASTERN REGION PIPELINES', W/2+8, y+12, {align:'center'});
     doc.text('HSE DEPT.', W/2+8, y+17, {align:'center'});
     y+=22;
-    // Title block
     doc.setDrawColor(0); doc.setLineWidth(0.3); doc.rect(LM, y, CW, 16);
     doc.setFontSize(7.5); doc.setFont('helvetica','bold');
     doc.text('TITLE: COMPOSITE WORK / COLD WORK / HOT WORK / ENTRY TO CONFINED', LM+2, y+4);
@@ -3889,23 +3916,21 @@ async function exportPermitPDF(id) {
     doc.text('Revision date: --', LM+CW*0.73, y+14);
     y += 19;
   }
-  function newPage() { doc.addPage(); y=10; doc.setDrawColor(0); doc.setLineWidth(0.5); doc.rect(5,5,W-10,H-10); pageHeader(); }
-  function bg() { doc.setDrawColor(0); doc.setLineWidth(0.5); doc.rect(5,5,W-10,H-10); }
+  function newPage() { doc.addPage(); y=10; doc.setFillColor(...BG); doc.rect(0,0,W,H,'F'); doc.setDrawColor(0); doc.setLineWidth(0.5); doc.rect(5,5,W-10,H-10); pageHeader(); }
+  function bgFill() { doc.setFillColor(...BG); doc.rect(0,0,W,H,'F'); doc.setDrawColor(0); doc.setLineWidth(0.5); doc.rect(5,5,W-10,H-10); }
   function chk(need) { if (y+(need||8)>278) newPage(); }
 
-  // PAGE 1: Work Details
-  bg(); y=10; pageHeader();
-  // Permit Type Banner
-  doc.setFillColor(27,40,86); doc.rect(LM, y, CW, 8, 'F');
+  // ===== PAGE 1 =====
+  bgFill(); y=10; pageHeader();
+  doc.setFillColor(...BANNER_BG); doc.rect(LM, y, CW, 8, 'F');
   doc.setTextColor(255); doc.setFontSize(13); doc.setFont('helvetica','bold');
   doc.text(p.PermitType.toUpperCase()+' PERMIT', W/2, y+6, {align:'center'});
-  doc.setTextColor(0); y+=12;
+  doc.setTextColor(0); y+=11;
 
   doc.setFontSize(10); doc.setFont('helvetica','bold');
-  doc.text('Permit ID: '+p.PermitID, LM, y); doc.text('Sl. No: '+p.PermitID.split('-').pop(), RM, y, {align:'right'}); y+=5;
-  doc.text('Status: '+p.Status, LM, y); y+=6;
+  doc.text('Sl. No: '+p.PermitID, RM, y, {align:'right'}); y+=6;
 
-  const df=cleanDate(p.DateFrom),tf=cleanTime(p.TimeFrom),dt=cleanDate(p.DateTo),tt=cleanTime(p.TimeTo);
+  const df=fmtDate(p.DateFrom),tf=cleanTime(p.TimeFrom),dt=fmtDate(p.DateTo),tt=cleanTime(p.TimeTo);
   const addRow = (lbl,val) => {
     chk(10); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text(lbl, LM, y);
     doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
@@ -3913,37 +3938,35 @@ async function exportPermitPDF(id) {
   };
 
   addRow('Work clearance from:', df+' '+tf+' hrs  To  '+dt+' '+tt+' hrs');
+  addRow('(Valid for the shift unless renewed)','');
   addRow('Issued to (Dept/Section/Contractor):', p.IssuedTo);
-  addRow('Exact Location of Work:', p.ExactLocation+' — '+p.Location);
-  addRow('Description of Work:', p.Description);
-  addRow('Person from Contractor/Dept at Site:', p.SitePerson);
-  addRow('Patrolling/Security Guard at Site:', p.SecurityGuard||'-');
-  addRow('JSA Ref. No.:', p.JSARef||'-');
-  addRow('Cross-Reference of other permits:', p.CrossRef||'-');
+  addRow('Exact Location of work:', p.ExactLocation+' — '+p.Location);
+  addRow('Description of work:', p.Description);
+  addRow('Person from Contractor/Dept at site:', p.SitePerson);
+  addRow('Patrolling/Security Guard at site:', p.SecurityGuard||'-');
+  addRow('JSA Ref. No.:', (p.JSARef||'-')+'    Cross-Reference: '+(p.CrossRef||'-'));
   addRow('Emergency Contact:', p.EmergencyContact);
   addRow('Nearest Fire Station and Hospital:', p.FireStation||'-');
   y+=2;
-  doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
   doc.text('THE FOLLOWING ITEMS SHALL BE CHECKED BEFORE ISSUING THE PERMIT:', LM, y); y+=6;
 
-  // CHECKLIST PAGES (bilingual)
+  // CHECKLIST
   let checklist = {};
   try { checklist = typeof p.Checklist==='string'?JSON.parse(p.Checklist):(p.Checklist||{}); } catch(e){}
 
   function drawChecklistSection(section) {
     chk(14);
-    doc.setFillColor(27,40,86); doc.setTextColor(255);
+    doc.setFillColor(...BANNER_BG); doc.setTextColor(255);
     doc.rect(LM, y, CW, 6, 'F');
     doc.setFontSize(8); doc.setFont('helvetica','bold');
     doc.text(section.title, LM+2, y+4.5);
     doc.setTextColor(0); y+=8;
-    // Table header
     doc.setDrawColor(0); doc.setLineWidth(0.2); doc.setFillColor(230,230,235);
     doc.rect(LM, y, 10, 6, 'FD'); doc.rect(LM+10, y, CW-50, 6, 'FD'); doc.rect(RM-40, y, 20, 6, 'FD'); doc.rect(RM-20, y, 20, 6, 'FD');
     doc.setFontSize(7); doc.setFont('helvetica','bold');
     doc.text('Sl.No.', LM+2, y+4); doc.text('Item', LM+12, y+4); doc.text('Done', RM-35, y+4); doc.text('Not Reqd.', RM-18, y+4);
     y+=7;
-
     section.items.forEach(([code, text]) => {
       const val = checklist[code] || '';
       const lines = doc.splitTextToSize(text, CW-52);
@@ -3955,145 +3978,147 @@ async function exportPermitPDF(id) {
       doc.text(code.replace('R',''), LM+2, y+2.5);
       doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
       doc.text(lines, LM+12, y+2.5);
-      if (val === 'Done') { drawTick(doc, RM-34, y+1, 3.5); }
-      if (val === 'N/A') { drawTick(doc, RM-14, y+1, 3.5); }
+      if (val === 'Done') drawTick(doc, RM-34, y+1, 3.5);
+      if (val === 'N/A') drawTick(doc, RM-14, y+1, 3.5);
       y += rh+2;
     });
-    y+=3;
+    y+=2;
   }
-
-  newPage();
   drawChecklistSection(CHECKLIST_ITEMS_PDF.A);
   drawChecklistSection(CHECKLIST_ITEMS_PDF.AR);
   drawChecklistSection(CHECKLIST_ITEMS_PDF.B);
   drawChecklistSection(CHECKLIST_ITEMS_PDF.C);
   drawChecklistSection(CHECKLIST_ITEMS_PDF.D);
 
-  // REMARKS (bilingual)
+  // REMARKS
   chk(45); y+=3;
-  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('Remarks:', LM, y); y+=5;
-  doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('Remarks:', LM, y); y+=5;
   let hazards = []; try { hazards = JSON.parse(p.Hazards||'[]'); } catch(e){}
-  doc.setFont('helvetica','bold'); doc.text('1. Residual Hazards:', LM, y); doc.setFont('helvetica','normal');
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('1. Residual Hazards:', LM, y); doc.setFont('helvetica','normal');
   doc.text(hazards.length?hazards.join(' / '):'NIL', LM+55, y); y+=5;
-
   let ppeList = []; try { ppeList = JSON.parse(p.PPE||'[]'); } catch(e){}
-  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('2. Additional PPE (beyond Helmet, Safety Shoes, Gloves, Boiler Suit):', LM, y); y+=4;
-  doc.setFont('helvetica','normal'); doc.text(ppeList.length?ppeList.join(' / '):'Standard PPE only', LM+3, y); y+=5;
-  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('3. Additional Precautions:', LM, y); doc.setFont('helvetica','normal');
+  doc.setFont('helvetica','bold'); doc.text('2. Additional PPE:', LM, y); doc.setFont('helvetica','normal');
+  doc.text(ppeList.length?ppeList.join(' / '):'Standard PPE only', LM+40, y); y+=5;
+  doc.setFont('helvetica','bold'); doc.text('3. Additional Precautions:', LM, y); doc.setFont('helvetica','normal');
   doc.text(p.Precautions||'NIL', LM+50, y); y+=5;
   doc.setFont('helvetica','bold'); doc.text('Gas Test Values:', LM, y); doc.setFont('helvetica','normal');
   doc.text('HCs = '+(p.GasHC||'___')+'% LEL    Toxic Gas = '+(p.GasToxic||'___')+' PPM    O2 = '+(p.GasO2||'___')+'%', LM+38, y); y+=7;
 
-  // SIGNATURES with timestamps
-  chk(40); doc.setDrawColor(0); doc.setLineWidth(0.5); doc.line(LM,y,RM,y); y+=5;
+  // ISSUER/RECEIVER SIGNATURES
+  chk(40); doc.setDrawColor(0); doc.setLineWidth(0.4); doc.line(LM,y,RM,y); y+=5;
   const hw=CW/2;
   doc.setDrawColor(0); doc.setLineWidth(0.2);
-  // Issuer box
-  doc.rect(LM,y,hw-2,28);
+  // Issuer
+  doc.rect(LM,y,hw-2,25);
   doc.setFont('helvetica','bold'); doc.setFontSize(9);
   doc.text('Issuer Name & Designation',LM+2,y+5);
   doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-  doc.text(p.IssuerName||'________________',LM+2,y+13);
-  doc.text(p.IssuerDesignation||'________________',LM+2,y+17);
+  doc.text(p.IssuerName||'________________',LM+2,y+11);
+  doc.text(p.IssuerDesignation||'________________',LM+2,y+16);
   if(p.IssuedAt&&p.IssuedAt!=='-'&&p.IssuedAt!=='undefined'){
-    doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(0,100,0);
-    doc.text('Approved: '+fmtIST(p.IssuedAt),LM+2,y+21);
+    doc.setFontSize(7); doc.setFont('helvetica','bold'); doc.setTextColor(0,100,0);
+    doc.text('Approved: '+fmtDT(p.IssuedAt),LM+2,y+21);
     doc.setTextColor(0);
   }
-  doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
-  doc.text('Signature: ________________',LM+2,y+27);
-
-  // Receiver box
-  doc.rect(LM+hw,y,hw,28);
+  // Receiver
+  doc.rect(LM+hw,y,hw,25);
   doc.setFont('helvetica','bold'); doc.setFontSize(9);
   doc.text('Receiver Name & Designation',LM+hw+2,y+5);
   doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-  doc.text(p.ReceiverName||'________________',LM+hw+2,y+13);
-  doc.text(p.ReceiverDesignation||'________________',LM+hw+2,y+17);
+  doc.text(p.ReceiverName||'________________',LM+hw+2,y+11);
+  doc.text(p.ReceiverDesignation||'________________',LM+hw+2,y+16);
   if(p.CreatedAt&&p.CreatedAt!=='-'){
-    doc.setFontSize(6); doc.setFont('helvetica','bold'); doc.setTextColor(0,100,0);
-    doc.text('Initiated: '+fmtIST(p.CreatedAt),LM+hw+2,y+21);
+    doc.setFontSize(7); doc.setFont('helvetica','bold'); doc.setTextColor(0,100,0);
+    doc.text('Initiated: '+fmtDT(p.CreatedAt),LM+hw+2,y+21);
     doc.setTextColor(0);
   }
-  doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
-  doc.text('Signature: ________________',LM+hw+2,y+27);
-  y+=32;
+  y+=29;
 
-  // CLEARANCE RENEWAL TABLE
+  // CLEARANCE RENEWAL TABLE — wider columns for names
   chk(35);
   doc.setFont('helvetica','bold'); doc.setFontSize(10);
   doc.text('Clearance Renewal',LM,y); y+=5;
-  const cols=[22,14,14,28,30,35,35];
-  const hdrs=['Date','Time\nFrom','Time\nTo','Gas Test\nHCs, Toxic, O2','Addl.\nPrecautions','Issuer Name,\nDesign. & Sign.','Receiver Name,\nDesign. & Sign.'];
-  let cx=LM; doc.setFontSize(6); doc.setFont('helvetica','bold'); doc.setDrawColor(0); doc.setLineWidth(0.2);
-  hdrs.forEach((h,i)=>{doc.rect(cx,y,cols[i],12);h.split('\n').forEach((ln,li)=>doc.text(ln,cx+1,y+3+li*2.5));cx+=cols[i];});
-  y+=12;
-  // Only show actual renewal records - no blank rows when empty
+  const cols=[20,12,12,30,26,44,42];
+  const hdrs=['Date','From','To','Gas Test Values','Addl. Precautions','Issuer Name, Desig. & Sign.','Receiver Name, Desig. & Sign.'];
+  let cx=LM; doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setDrawColor(0); doc.setLineWidth(0.2);
+  hdrs.forEach((h,i)=>{doc.rect(cx,y,cols[i],8); var lines=doc.splitTextToSize(h,cols[i]-2); doc.text(lines,cx+1,y+3); cx+=cols[i];});
+  y+=8;
   let renewals = [];
   try { if(p.Renewals) renewals = Array.isArray(p.Renewals)?p.Renewals:(typeof p.Renewals==='string'?JSON.parse(p.Renewals):[]); } catch(e){}
   if(renewals.length > 0) {
     renewals.forEach(function(rnw) {
-      cx=LM;
+      cx=LM; var rh=10;
       cols.forEach(function(c,ci) {
-        doc.rect(cx,y,c,8);
-        doc.setFont('helvetica','normal'); doc.setFontSize(6);
-        if(ci===0) doc.text(rnw.DateFrom||'',cx+1,y+5);
-        if(ci===1) doc.text(rnw.TimeFrom||'',cx+1,y+5);
-        if(ci===2) doc.text(rnw.TimeTo||'',cx+1,y+5);
-        if(ci===3) doc.text('HC:'+(rnw.GasHC||'0')+'% Tx:'+(rnw.GasToxic||'0')+' O2:'+(rnw.GasO2||'20.8')+'%',cx+1,y+5);
+        doc.rect(cx,y,c,rh);
+        doc.setFont('helvetica','normal'); doc.setFontSize(5.5);
+        if(ci===0) doc.text(fmtDate(rnw.DateFrom)||'',cx+1,y+4);
+        if(ci===1) doc.text(rnw.TimeFrom||'',cx+1,y+4);
+        if(ci===2) doc.text(rnw.TimeTo||'',cx+1,y+4);
+        if(ci===3) doc.text(doc.splitTextToSize('HC:'+(rnw.GasHC||'0')+'% Tx:'+(rnw.GasToxic||'0')+' O2:'+(rnw.GasO2||'20.8')+'%',c-2),cx+1,y+4);
         if(ci===4) doc.text(doc.splitTextToSize(rnw.Precautions||'NIL',c-2),cx+1,y+4);
-        if(ci===5) doc.text((rnw.IssuerName||'').substring(0,22),cx+1,y+5);
-        if(ci===6) doc.text((rnw.ReceiverName||'').substring(0,22),cx+1,y+5);
+        if(ci===5) doc.text(doc.splitTextToSize(rnw.IssuerName||'',c-2),cx+1,y+4);
+        if(ci===6) doc.text(doc.splitTextToSize(rnw.ReceiverName||'',c-2),cx+1,y+4);
         cx+=c;
       });
-      y+=8;
+      y+=rh;
     });
   }
-  y+=5;
+  // 3 blank rows always
+  for(var br=0;br<3;br++){cx=LM;cols.forEach(c=>{doc.rect(cx,y,c,7);cx+=c;});y+=7;}
+  y+=4;
 
-  // CLOSING SECTION
-  chk(45);
-  doc.setDrawColor(0); doc.setLineWidth(0.5); doc.line(LM,y,RM,y); y+=5;
+  // CLOSING OF THE WORK PERMIT
+  chk(55);
+  doc.setDrawColor(0); doc.setLineWidth(0.4); doc.line(LM,y,RM,y); y+=5;
   doc.setFont('helvetica','bold'); doc.setFontSize(10);
   doc.text('Closing of the Work Permit',LM,y); y+=6;
   doc.setDrawColor(0); doc.setLineWidth(0.2);
-  // Receiver closing
-  doc.rect(LM,y,hw-2,20);
+  // Receiver text
+  doc.rect(LM,y,hw-2,18);
   doc.setFont('helvetica','bold'); doc.setFontSize(8);
   doc.text('Receiver:',LM+2,y+4);
-  doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7);
   doc.text(doc.splitTextToSize('Certified that the subject work has been completed/stopped and area cleared.',hw-8),LM+2,y+8);
-  // Issuer closing
-  doc.rect(LM+hw,y,hw,20);
+  // Issuer text
+  doc.rect(LM+hw,y,hw,18);
   doc.setFont('helvetica','bold'); doc.setFontSize(8);
   doc.text('Issuer:',LM+hw+2,y+4);
-  doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7);
   doc.text(doc.splitTextToSize('Verified that the job has been completed and area cleared and is safe from any hazard.',hw-6),LM+hw+2,y+8);
-  y+=23;
+  y+=20;
 
-  chk(20);
+  // Closing table — FILL with actual permit data
+  chk(22);
   const chw=CW/2;
-  ['Receiver','Issuer'].forEach((role,ri)=>{
-    const bx=LM+ri*chw;
-    doc.rect(bx,y,30,10);doc.rect(bx+30,y,chw-50,10);doc.rect(bx+chw-20,y,20,10);
-    doc.setFontSize(7);doc.setFont('helvetica','bold');
-    doc.text('Date & Time',bx+1,y+4);
-    doc.text('Name & Designation',bx+32,y+4);
-    doc.text('Signature',bx+chw-18,y+4);
-  });
-  y+=10;
+  // Header row
   ['Receiver','Issuer'].forEach((role,ri)=>{
     const bx=LM+ri*chw;
     doc.rect(bx,y,30,8);doc.rect(bx+30,y,chw-50,8);doc.rect(bx+chw-20,y,20,8);
+    doc.setFontSize(6.5);doc.setFont('helvetica','bold');
+    doc.text('Date & Time',bx+1,y+5);
+    doc.text('Name & Designation',bx+32,y+5);
+    doc.text('Signature',bx+chw-18,y+5);
+  });
+  y+=8;
+  // Data row — fill from permit
+  ['Receiver','Issuer'].forEach((role,ri)=>{
+    const bx=LM+ri*chw;
+    doc.rect(bx,y,30,10);doc.rect(bx+30,y,chw-50,10);doc.rect(bx+chw-20,y,20,10);
+    doc.setFont('helvetica','normal'); doc.setFontSize(6);
+    // Date & Time
     if(p.ClosedAt&&p.ClosedAt!=='-'&&p.ClosedAt!=='undefined'){
-      doc.setFontSize(7);doc.setFont('helvetica','normal');
-      doc.text(fmtIST(p.ClosedAt),bx+2,y+5);
+      doc.text(fmtDT(p.ClosedAt),bx+1,y+5);
+    }
+    // Name & Designation
+    if(role==='Receiver'){
+      doc.text(doc.splitTextToSize((p.ReceiverName||'')+(p.ReceiverDesignation?', '+p.ReceiverDesignation:''),chw-52),bx+31,y+4);
+    } else {
+      doc.text(doc.splitTextToSize((p.IssuerName||'')+(p.IssuerDesignation?', '+p.IssuerDesignation:''),chw-52),bx+31,y+4);
     }
   });
-  y+=12;
+  y+=14;
 
-  // GENERAL INSTRUCTIONS PAGE (bilingual)
+  // GENERAL INSTRUCTIONS
   newPage();
   doc.setFont('helvetica','bold'); doc.setFontSize(11);
   doc.text('General Instructions:',LM,y); y+=7;
@@ -4104,15 +4129,17 @@ async function exportPermitPDF(id) {
     doc.text(lines,LM+2,y); y+=lines.length*3.5+2;
   });
 
-  // Page numbers on all pages
+  // Page numbers + background color on all pages
   const pages=doc.internal.getNumberOfPages();
   for(let pg=1;pg<=pages;pg++){
-    doc.setPage(pg);doc.setFontSize(7);doc.setTextColor(128);
+    doc.setPage(pg);
+    doc.setFontSize(7);doc.setTextColor(128);
     doc.text('Page '+pg+' of '+pages,W/2,H-7,{align:'center'});
     doc.setTextColor(0);
   }
   doc.save('WorkPermit_'+p.PermitID+'.pdf');
 }
+
 
 // ============================================================
 // TREND ANALYTICS MODULE — per-location, per-equipment-item
