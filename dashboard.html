@@ -1092,7 +1092,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbw2zZphWo4OA8c65CWtUq4-hd3eQthjkndUEOVofTjDr4XAaYj9HiKyXOw_4jEIcYagGw/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbyJZ8nZIzXX4AZeZ55nevb-CbBd_MVOtol0_28PNzsmm2kJ7oXaNrpkg1kF8BdxYzng/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -1764,6 +1764,7 @@ function renderQuickOccupancy(todayRecords) {
 function renderOccupancyGrid(todayRecords) {
   const grid = document.getElementById('occGrid');
   const summaryEl = document.getElementById('occSummaryCards');
+  const todayStr = new Date().toISOString().split('T')[0];
   if (!todayRecords || !todayRecords.length) {
     grid.innerHTML = '<div class="empty-state"><div class="icon">🏢</div><p>No check-ins today</p><div style="font-size:13px;color:var(--text3);margin-top:6px">Employees will appear here as they check in</div></div>';
     if (summaryEl) summaryEl.innerHTML = '';
@@ -1778,7 +1779,7 @@ function renderOccupancyGrid(todayRecords) {
     if (!r.CheckOutTime) {
       locMap[loc].present++;
       totalPresent++;
-      locMap[loc].employees.push({ name: r.EmployeeName, shift: r.Shift || '?', checkIn: r.CheckInTime || '' });
+      locMap[loc].employees.push({ name: r.EmployeeName, shift: r.Shift || '?', checkIn: r.CheckInTime || '', phone: r.Phone || '', date: r.Date || '' });
     } else {
       locMap[loc].checkedOut++;
       totalOut++;
@@ -1807,7 +1808,9 @@ function renderOccupancyGrid(todayRecords) {
 
     let empChips = '';
     data.employees.forEach(e => {
-      empChips += '<span class="emp-chip">' + e.name + ' \u2022 ' + e.shift + ' \u2022 ' + e.checkIn + '</span>';
+      const callBtn = e.phone ? ' <a href="tel:' + e.phone + '" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(16,185,129,0.15);color:#059669;text-decoration:none;font-size:12px;margin-left:4px;border:1px solid rgba(16,185,129,0.25);transition:all 0.15s" title="Call" onmouseover="this.style.background=\'#059669\';this.style.color=\'#fff\'" onmouseout="this.style.background=\'rgba(16,185,129,0.15)\';this.style.color=\'#059669\'">📞</a>' : '';
+      const dateTag = e.date && e.date !== todayStr ? ' <span style="font-size:9px;color:var(--warning);font-weight:600" title="Checked in '+e.date+'">⏳</span>' : '';
+      empChips += '<span class="emp-chip" style="display:inline-flex;align-items:center;gap:2px">' + e.name + ' \u2022 ' + e.shift + ' \u2022 ' + e.checkIn + dateTag + callBtn + '</span>';
     });
 
     html += '<div class="occ-card">' +
