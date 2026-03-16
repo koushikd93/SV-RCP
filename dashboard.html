@@ -881,8 +881,9 @@
                 <th>Employee</th>
                 <th>Category</th>
                 <th>Cause</th>
+                <th>Incident Area</th>
                 <th>Action Taken</th>
-                <th>Weather</th>
+                <th>Remarks</th>
               </tr>
             </thead>
           <tbody id="nearMissTable"></tbody>
@@ -1092,7 +1093,7 @@
 // CONFIG
 // ============================================================
 const _dashParams = new URLSearchParams(window.location.search);
-const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbxJmvdoKLv-2JlCsQlEg-FwpK9GVtC3Vj8pU92rMiOz1GbToE5xxagS2cX9H032BjMgaQ/exec';
+const API_URL = _dashParams.get('api') || 'https://script.google.com/macros/s/AKfycbx7dWUzAmx4oRBFHPTOJJrg9rFoIqqNBMG1LTeppF9xwabqQT3KgY5daEh21Z1LihHA8A/exec';
 if (_dashParams.get('api')) console.log('[CONFIG] Using custom API URL:', API_URL);
 let dashboardData = null;
 let allRecords = [];
@@ -1926,50 +1927,75 @@ function renderNearMissTable(data) {
 
   if (!data || data.length === 0) {
     table.innerHTML = `<tr>
-      <td colspan="8" style="text-align:center;color:var(--text3)">
+      <td colspan="9" style="text-align:center;color:var(--text3)">
         No records found
       </td>
     </tr>`;
     document.getElementById("nearMissCount").innerText = "0 reports";
     return;
   }
+  const catColors = { 'Near Miss':'rgba(245,158,11,0.12);color:#d97706', 'Unsafe Act':'rgba(239,68,68,0.12);color:#dc2626', 'Unsafe Condition':'rgba(139,92,246,0.12);color:#7c3aed' };
   data.forEach(row => {
+    const catStyle = catColors[row.Category] || 'rgba(100,116,139,0.12);color:#64748b';
   table.innerHTML += `
      <tr>
-      <td>${row.Date || ""}</td>
-      <td>${row.Time || ""}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:12px">${row.Date || ""}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:12px">${row.Time || ""}</td>
       <td>${row.Location || ""}</td>
-      <td>${row.EmployeeName || ""}</td>
-      <td>${row.Category || ""}</td>
+      <td style="font-weight:500">${row.EmployeeName || ""}</td>
+      <td><span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${catStyle}">${row.Category || ""}</span></td>
       <td>${row.Cause || ""}</td>
-      <td>${row.ActionTaken || row['ActionTaken'] || row.Action || ""}</td>
-      <td>${row.Remarks || row['Remarks'] || row.Remark || ""}</td>
+      <td>${row.IncidentLocation || "-"}</td>
+      <td>${row.ActionTaken || "-"}</td>
+      <td>${row.Remarks || "-"}</td>
      </tr>
     `;
    });
 
-  
   document.getElementById("nearMissCount").innerText =
     data.length + " reports";
 }
 
-function filterNearMiss() {
+async function filterNearMiss() {
   const from = document.getElementById("nearMissDateFrom").value;
   const to = document.getElementById("nearMissDateTo").value;
   const location = document.getElementById("nearMissFilterLocation").value;
   const category = document.getElementById("nearMissCategory").value;
+  const tbody = document.getElementById("nearMissTable");
 
+  // Always fetch from API to get full fields (ActionTaken, Remarks, etc.)
+  if (API_URL) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text3)"><div class="loading-spinner" style="display:inline-block;margin-right:8px"></div> Fetching near miss reports...</td></tr>';
+    try {
+      const params = { action: 'getNearMissReports' };
+      if (from) params.dateFrom = from;
+      if (to) params.dateTo = to;
+      if (location) params.location = location;
+      if (category) params.category = category;
+      const url = API_URL + '?' + new URLSearchParams(params).toString();
+      const data = await fetchExact(url);
+      if (data.success && data.records) {
+        nearMissData = data.records;
+        currentNearMissRecords = data.records;
+        renderNearMissTable(data.records);
+        return;
+      }
+    } catch(err) {
+      console.warn('[NearMiss] API fetch failed:', err.message);
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--danger)">Failed to load: ' + err.message + '</td></tr>';
+      return;
+    }
+  }
+
+  // Fallback to cached data
   let filtered = (nearMissData || []).filter(row => {
     const rowDate = row.Date;
-
     if (from && rowDate < from) return false;
     if (to && rowDate > to) return false;
     if (location && row.Location !== location) return false;
     if (category && row.Category !== category) return false;
-
     return true;
   });
-
   currentNearMissRecords = filtered;
   renderNearMissTable(filtered);
 }
