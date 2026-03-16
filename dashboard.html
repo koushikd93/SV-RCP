@@ -2183,7 +2183,7 @@ async function renderVisitorDashboard(d) {
   // If getDashboardData already includes visitor data, use it
   if (d && d.visitorSummary) {
     document.getElementById('statVisitors').textContent = d.visitorSummary.totalToday || 0;
-    document.getElementById('statVisitorActive').textContent = (d.visitorSummary.activeNow || 0) + ' active now';
+    document.getElementById('statVisitorActive').textContent = (activeVisitorData.length || 0) + ' active now';
     console.log('[Visitors] ✅ Using bundled visitor summary:', d.visitorSummary);
     return;
   }
