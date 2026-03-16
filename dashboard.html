@@ -1933,22 +1933,22 @@ function renderNearMissTable(data) {
     document.getElementById("nearMissCount").innerText = "0 reports";
     return;
   }
-
   data.forEach(row => {
-    table.innerHTML += `
-      <tr>
-        <td>${row.Date || ""}</td>
-        <td>${row.Time || ""}</td>
-        <td>${row.Location || ""}</td>
-        <td>${row.EmployeeName || ""}</td>
-        <td>${row.Category || ""}</td>
-        <td>${row.Cause || ""}</td>
-        <td>${row.ActionTaken || ""}</td>
-        <td>${row.Remarks || ""}</td>
-      </tr>
+  table.innerHTML += `
+     <tr>
+      <td>${row.Date || ""}</td>
+      <td>${row.Time || ""}</td>
+      <td>${row.Location || ""}</td>
+      <td>${row.EmployeeName || ""}</td>
+      <td>${row.Category || ""}</td>
+      <td>${row.Cause || ""}</td>
+      <td>${row.ActionTaken || row['ActionTaken'] || row.Action || ""}</td>
+      <td>${row.Remarks || row['Remarks'] || row.Remark || ""}</td>
+     </tr>
     `;
-  });
+   });
 
+  
   document.getElementById("nearMissCount").innerText =
     data.length + " reports";
 }
