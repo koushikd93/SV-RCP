@@ -260,8 +260,15 @@ input[type="date"],input[type="time"]{color-scheme:light}
   <!-- ║  SECTION 1: ATTENDANCE CHECK-IN      ║ -->
   <!-- ╚══════════════════════════════════════╝ -->
   <div class="section-panel active" id="sec-attendance">
-    <div class="section-badge" style="background:rgba(242,103,34,.1);color:var(--accent)">👤 Section 1 — Attendance Check-In</div>
+    <div class="section-badge" style="background:rgba(242,103,34,.1);color:var(--accent)">👤 Section 1 — Attendance Check-In / Check-Out</div>
 
+    <div class="mode-toggle" id="att-modeToggle">
+      <button class="mode-btn active" onclick="attSetMode('checkin')">👤 Check-In</button>
+      <button class="mode-btn" onclick="attSetMode('checkout')">🚪 Check-Out</button>
+    </div>
+
+    <!-- Check-In Flow (existing) -->
+    <div id="att-checkinFlow">
     <div class="step-indicator" id="att-dots">
       <div class="step-dot active" style="background:var(--accent)"></div>
       <div class="step-dot"></div>
@@ -344,6 +351,25 @@ input[type="date"],input[type="time"]{color-scheme:light}
 
     <!-- ATT Step 4: Result -->
     <div class="card hidden" id="att-step4"><div class="result-card" id="att-resultContent"></div></div>
+    </div><!-- end att-checkinFlow -->
+
+    <!-- Attendance Check-Out Flow -->
+    <div id="att-checkoutFlow" class="hidden">
+      <div class="card">
+        <div class="card-title"><div class="icon" style="background:rgba(220,38,38,.12)">🚪</div> Attendance Check-Out</div>
+        <div class="form-group" style="margin-bottom:12px"><label>Location</label>
+          <select id="att-coLocationSelect" style="border-color:var(--danger)" onchange="attLoadUncheckedOut()"><option value="">-- Select Location --</option></select></div>
+        <p style="font-size:12px;color:var(--text2);text-align:center;margin-bottom:10px">Select the employee checking out:</p>
+        <div id="att-activeList" style="max-height:400px;overflow-y:auto">
+          <div style="text-align:center;padding:30px;color:var(--text2)"><div style="font-size:36px;opacity:.5">👋</div><p>Select a location to see checked-in employees</p></div>
+        </div>
+        <div id="att-coGpsInfo" class="hidden" style="padding:10px;background:var(--surface2);border-radius:10px;font-size:12px;margin-top:12px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text2)">📍 GPS Distance</span><span id="att-coDist" style="font-weight:600">--</span></div>
+        </div>
+        <button class="btn btn-danger" id="att-btnCO" disabled onclick="attSubmitCheckOut()" style="margin-top:14px">🚪 Confirm Check-Out</button>
+      </div>
+      <div class="card hidden" id="att-coResult"><div class="result-card" id="att-coResultContent"></div></div>
+    </div>
   </div>
 
   <!-- ╔══════════════════════════════════════╗ -->
@@ -900,7 +926,7 @@ window.addEventListener('load', async () => {
     }
 
     // Populate all location dropdowns
-    ['att-locationSelect','eq-locationSelect','vis-locationSelect','vis-coLocationSelect','nm-locationSelect','wp-location'].forEach(id => {
+    ['att-locationSelect','att-coLocationSelect','eq-locationSelect','vis-locationSelect','vis-coLocationSelect','nm-locationSelect','wp-location'].forEach(id => {
       const sel = document.getElementById(id);
       if (!sel) return;
       _locations.forEach(n => {
@@ -1048,6 +1074,172 @@ async function attQuickCheckout() {
     if (r.success) attShowResult(true,'Checked Out!',r.message,{Employee:att.employee.Name,Time:new Date().toLocaleTimeString(),Location:gv('att-locationSelect'),Distance:dist?dist+'m':'N/A'});
     else { btn.disabled=false; btn.innerHTML='🚪 Check Out Now'; alert(r.error||r.message||'Failed'); }
   } catch(e) { btn.disabled=false; btn.innerHTML='🚪 Check Out Now'; alert('Error: '+e.message); }
+}
+
+// ============================================================
+// ATTENDANCE CHECK-OUT TAB (similar to visitor checkout)
+// ============================================================
+let attCOList = []; // unchecked-out employees
+let attCOSelected = null; // selected employee for checkout
+
+function attSetMode(mode) {
+  document.querySelectorAll('#att-modeToggle .mode-btn').forEach((b,i) => {
+    b.classList.remove('active','checkout-mode');
+    if((mode==='checkin'&&i===0)||(mode==='checkout'&&i===1)){b.classList.add('active');if(mode==='checkout')b.classList.add('checkout-mode');}
+  });
+  attStopCamera();
+  if(mode==='checkin'){
+    document.getElementById('att-checkinFlow').classList.remove('hidden');
+    document.getElementById('att-checkoutFlow').classList.add('hidden');
+    attGoStep(1);
+  } else {
+    document.getElementById('att-checkinFlow').classList.add('hidden');
+    document.getElementById('att-checkoutFlow').classList.remove('hidden');
+    document.getElementById('att-coResult').classList.add('hidden');
+  }
+}
+
+async function attLoadUncheckedOut() {
+  const loc = gv('att-coLocationSelect');
+  const list = document.getElementById('att-activeList');
+  attCOSelected = null;
+  document.getElementById('att-btnCO').disabled = true;
+  document.getElementById('att-coGpsInfo').classList.add('hidden');
+
+  if(!loc) {
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text2)"><div style="font-size:36px;opacity:.5">👋</div><p>Select a location to see checked-in employees</p></div>';
+    return;
+  }
+  list.innerHTML = '<div style="text-align:center;padding:20px"><div class="loading-spinner"></div> Loading...</div>';
+
+  try {
+    // Fetch today AND yesterday to cover C-shift carry-over
+    const today = new Date().toISOString().split('T')[0];
+    const yd = new Date(Date.now()-86400000).toISOString().split('T')[0];
+    const [rToday, rYesterday] = await Promise.all([
+      apiGet({action:'getAttendance', date:today, location:loc}),
+      apiGet({action:'getAttendance', date:yd, location:loc})
+    ]);
+    const todayRecs = (rToday.records||[]).filter(r => !r.CheckOutTime || r.CheckOutTime==='-' || r.CheckOutTime==='');
+    const yesterdayRecs = (rYesterday.records||[]).filter(r => !r.CheckOutTime || r.CheckOutTime==='-' || r.CheckOutTime==='');
+
+    // Combine: today's unchecked + yesterday's unchecked (C-shift carry-over)
+    const hour = new Date().getHours();
+    let combined;
+    if(hour >= 6) {
+      // After 6AM: today + yesterday C-shift only
+      combined = todayRecs.concat(yesterdayRecs.filter(r => r.Shift==='C'));
+    } else {
+      // Before 6AM: both days (operational day not reset)
+      combined = todayRecs.concat(yesterdayRecs);
+    }
+
+    // Deduplicate by EmployeeID (keep latest)
+    const byEmp = {};
+    combined.forEach(r => {
+      const key = r.EmployeeID;
+      if(!byEmp[key] || r.Date > byEmp[key].Date || (r.Date===byEmp[key].Date && (r.CheckInTime||'') > (byEmp[key].CheckInTime||''))) {
+        byEmp[key] = r;
+      }
+    });
+    attCOList = Object.values(byEmp);
+
+    if(!attCOList.length) {
+      list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text2)"><div style="font-size:36px;opacity:.5">✅</div><p>No employees currently checked in at this location</p></div>';
+      return;
+    }
+
+    list.innerHTML = attCOList.map((r,i) => {
+      const shiftColors = {A:'#f97316',B:'#2563eb',C:'#8b5cf6',General:'#10b981'};
+      const sc = shiftColors[r.Shift]||'#64748b';
+      const dateTag = r.Date !== today ? ' <span style="font-size:9px;color:var(--warning);font-weight:600">⏳ '+r.Date+'</span>' : '';
+      return '<div class="visitor-item" onclick="attSelectCO('+i+')" id="att-coItem'+i+'" style="margin-bottom:8px">' +
+        '<div class="visitor-avatar" style="background:rgba(242,103,34,.1);color:var(--accent)">'+r.EmployeeName.charAt(0)+'</div>' +
+        '<div class="visitor-detail"><div class="visitor-name">'+r.EmployeeName+dateTag+'</div>' +
+        '<div class="visitor-meta"><span style="color:'+sc+';font-weight:600">'+r.Shift+' Shift</span> • ID: '+r.EmployeeID+'</div></div>' +
+        '<div style="text-align:right"><div class="visitor-time">IN: '+r.CheckInTime+'</div>' +
+        '<div class="badge-visitor" style="margin-top:4px;background:rgba(242,103,34,.1);color:var(--accent)">On-Site</div></div></div>';
+    }).join('');
+  } catch(e) {
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--danger)">Error: '+e.message+'</div>';
+  }
+}
+
+function attSelectCO(i) {
+  attCOSelected = attCOList[i];
+  document.querySelectorAll('#att-activeList .visitor-item').forEach(el => el.classList.remove('selected'));
+  document.getElementById('att-coItem'+i).classList.add('selected');
+  document.getElementById('att-btnCO').disabled = false;
+}
+
+async function attSubmitCheckOut() {
+  if(!attCOSelected) return;
+  const btn = document.getElementById('att-btnCO');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="loading-spinner" style="width:16px;height:16px;display:inline-block;margin-right:6px"></div> Getting GPS...';
+
+  try {
+    // GPS validation (mandatory for checkout)
+    let lat=null, lng=null, dist=null;
+    try {
+      const p = await new Promise((res,rej) => navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:true,timeout:15000}));
+      lat = p.coords.latitude; lng = p.coords.longitude;
+      const locName = gv('att-coLocationSelect');
+      const locC = getLocCoords(locName);
+      if(locC && locC.lat && locC.lng) {
+        dist = Math.round(haversineDistance(lat,lng,locC.lat,locC.lng));
+        document.getElementById('att-coGpsInfo').classList.remove('hidden');
+        document.getElementById('att-coDist').textContent = dist + 'm';
+        document.getElementById('att-coDist').style.color = dist > ATT_MAX_DISTANCE_M ? 'var(--danger)' : 'var(--success)';
+        if(dist > ATT_MAX_DISTANCE_M) {
+          btn.disabled = false; btn.innerHTML = '🚪 Confirm Check-Out';
+          alert('❌ Too far from location.\n\nDistance: '+dist+'m\nMaximum: '+ATT_MAX_DISTANCE_M+'m');
+          return;
+        }
+      }
+    } catch(e) {
+      btn.disabled = false; btn.innerHTML = '🚪 Confirm Check-Out';
+      alert('❌ GPS is mandatory for checkout.\n\nPlease enable location access.');
+      return;
+    }
+
+    btn.innerHTML = '<div class="loading-spinner" style="width:16px;height:16px;display:inline-block;margin-right:6px"></div> Checking out...';
+    const r = await apiPost({
+      action: 'markAttendance',
+      type: 'checkout',
+      employeeId: attCOSelected.EmployeeID,
+      employeeName: attCOSelected.EmployeeName,
+      location: gv('att-coLocationSelect'),
+      shift: attCOSelected.Shift,
+      gpsLat: lat, gpsLng: lng, gpsDistance: dist||0,
+      faceMatchScore: 0, livenessScore: 0,
+      deviceInfo: navigator.userAgent.substring(0,80)
+    });
+
+    if(r.success) {
+      document.getElementById('att-coResult').classList.remove('hidden');
+      document.getElementById('att-coResultContent').innerHTML =
+        '<div class="result-icon success">✓</div>' +
+        '<h2 style="color:var(--accent)">Checked Out!</h2>' +
+        '<p>'+(r.message||'')+'</p>' +
+        '<div class="result-details">' +
+          '<div class="row"><span>Employee</span><span>'+attCOSelected.EmployeeName+'</span></div>' +
+          '<div class="row"><span>Shift</span><span>'+attCOSelected.Shift+'</span></div>' +
+          '<div class="row"><span>Check-In</span><span>'+attCOSelected.CheckInTime+'</span></div>' +
+          '<div class="row"><span>Check-Out</span><span>'+new Date().toLocaleTimeString()+'</span></div>' +
+          '<div class="row"><span>Location</span><span>'+gv('att-coLocationSelect')+'</span></div>' +
+          (dist ? '<div class="row"><span>GPS Distance</span><span>'+dist+'m</span></div>' : '') +
+        '</div>' +
+        '<button class="btn btn-secondary" style="margin-top:16px" onclick="attLoadUncheckedOut();document.getElementById(\'att-coResult\').classList.add(\'hidden\')">Check Out Another</button>' +
+        ' <button class="btn btn-secondary" style="margin-top:16px" onclick="location.reload()">Done</button>';
+    } else {
+      btn.disabled = false; btn.innerHTML = '🚪 Confirm Check-Out';
+      alert(r.error || r.message || 'Checkout failed');
+    }
+  } catch(e) {
+    btn.disabled = false; btn.innerHTML = '🚪 Confirm Check-Out';
+    alert('Error: '+e.message);
+  }
 }
 
 function attGoStep(step) {
