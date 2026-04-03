@@ -799,7 +799,7 @@ input[type="date"],input[type="time"]{color-scheme:light}
 // GLOBAL CONFIG & STATE
 // ================================================================
 const _urlParams = new URLSearchParams(window.location.search);
-const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbx7dWUzAmx4oRBFHPTOJJrg9rFoIqqNBMG1LTeppF9xwabqQT3KgY5daEh21Z1LihHA8A/exec';
+const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbyaJgNsiChR2Nhq_QJj9HSV_bCSnpog5QphgS6zuY7KB5CXGM0tsHAlG4DdXQJLfsa3ww/exec';
 const MODEL_URLS = ['https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model','https://unpkg.com/@vladmandic/face-api@1.7.14/model'];
 let MODEL_URL = MODEL_URLS[0];
 const FACE_MATCH_THRESHOLD = 0.5;
@@ -1217,6 +1217,31 @@ async function attSubmitCheckOut() {
     });
 
     if(r.success) {
+      // Remove checked-out employee from local list immediately
+      attCOList = attCOList.filter(e => e.EmployeeID !== attCOSelected.EmployeeID);
+      const coItem = document.getElementById('att-coItem' + attCOList.length); // old index element
+      // Re-render the list without the checked-out employee
+      const listEl = document.getElementById('att-activeList');
+      if(attCOList.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text2)"><div style="font-size:36px;opacity:.5">✅</div><p>All employees checked out at this location</p></div>';
+      } else {
+        listEl.innerHTML = attCOList.map((emp,i) => {
+          const shiftColors = {A:'#f97316',B:'#2563eb',C:'#8b5cf6',General:'#10b981'};
+          const sc = shiftColors[emp.Shift]||'#64748b';
+          const today2 = new Date().toISOString().split('T')[0];
+          const dateTag2 = emp.Date !== today2 ? ' <span style="font-size:9px;color:var(--warning);font-weight:600">⏳ '+emp.Date+'</span>' : '';
+          return '<div class="visitor-item" onclick="attSelectCO('+i+')" id="att-coItem'+i+'" style="margin-bottom:8px">' +
+            '<div class="visitor-avatar" style="background:rgba(242,103,34,.1);color:var(--accent)">'+emp.EmployeeName.charAt(0)+'</div>' +
+            '<div class="visitor-detail"><div class="visitor-name">'+emp.EmployeeName+dateTag2+'</div>' +
+            '<div class="visitor-meta"><span style="color:'+sc+';font-weight:600">'+emp.Shift+' Shift</span> • ID: '+emp.EmployeeID+'</div></div>' +
+            '<div style="text-align:right"><div class="visitor-time">IN: '+emp.CheckInTime+'</div>' +
+            '<div class="badge-visitor" style="margin-top:4px;background:rgba(242,103,34,.1);color:var(--accent)">On-Site</div></div></div>';
+        }).join('');
+      }
+      attCOSelected = null;
+      btn.disabled = true; btn.innerHTML = '🚪 Confirm Check-Out';
+
+      // Show success result
       document.getElementById('att-coResult').classList.remove('hidden');
       document.getElementById('att-coResultContent').innerHTML =
         '<div class="result-icon success">✓</div>' +
@@ -1230,8 +1255,9 @@ async function attSubmitCheckOut() {
           '<div class="row"><span>Location</span><span>'+gv('att-coLocationSelect')+'</span></div>' +
           (dist ? '<div class="row"><span>GPS Distance</span><span>'+dist+'m</span></div>' : '') +
         '</div>' +
-        '<button class="btn btn-secondary" style="margin-top:16px" onclick="attLoadUncheckedOut();document.getElementById(\'att-coResult\').classList.add(\'hidden\')">Check Out Another</button>' +
-        ' <button class="btn btn-secondary" style="margin-top:16px" onclick="location.reload()">Done</button>';
+        '<button class="btn btn-secondary" style="margin-top:16px" onclick="document.getElementById(\'att-coResult\').classList.add(\'hidden\')">OK</button>';
+      // Auto-hide result after 3 seconds
+      setTimeout(function(){ try{document.getElementById('att-coResult').classList.add('hidden');}catch(e){} }, 3000);
     } else {
       btn.disabled = false; btn.innerHTML = '🚪 Confirm Check-Out';
       alert(r.error || r.message || 'Checkout failed');
