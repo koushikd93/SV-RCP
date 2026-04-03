@@ -799,7 +799,7 @@ input[type="date"],input[type="time"]{color-scheme:light}
 // GLOBAL CONFIG & STATE
 // ================================================================
 const _urlParams = new URLSearchParams(window.location.search);
-const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbyaJgNsiChR2Nhq_QJj9HSV_bCSnpog5QphgS6zuY7KB5CXGM0tsHAlG4DdXQJLfsa3ww/exec';
+const API_URL = _urlParams.get('api') || 'https://script.google.com/macros/s/AKfycbzA5fHCgzPGUC1yYR0tu5MIco1iFTg5ZDHpfmkLe0qMCiyIRQjEUJLDjq795Z_Lz0j8/exec';
 const MODEL_URLS = ['https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model','https://unpkg.com/@vladmandic/face-api@1.7.14/model'];
 let MODEL_URL = MODEL_URLS[0];
 const FACE_MATCH_THRESHOLD = 0.5;
@@ -1174,6 +1174,14 @@ function attSelectCO(i) {
 
 async function attSubmitCheckOut() {
   if(!attCOSelected) return;
+  // Save employee data locally BEFORE any async calls (prevents null reference if state changes)
+  const coEmp = {
+    EmployeeID: attCOSelected.EmployeeID,
+    EmployeeName: attCOSelected.EmployeeName,
+    Shift: attCOSelected.Shift,
+    CheckInTime: attCOSelected.CheckInTime || '',
+    Date: attCOSelected.Date || ''
+  };
   const btn = document.getElementById('att-btnCO');
   btn.disabled = true;
   btn.innerHTML = '<div class="loading-spinner" style="width:16px;height:16px;display:inline-block;margin-right:6px"></div> Getting GPS...';
@@ -1207,10 +1215,10 @@ async function attSubmitCheckOut() {
     const r = await apiPost({
       action: 'markAttendance',
       type: 'checkout',
-      employeeId: attCOSelected.EmployeeID,
-      employeeName: attCOSelected.EmployeeName,
+      employeeId: coEmp.EmployeeID,
+      employeeName: coEmp.EmployeeName,
       location: gv('att-coLocationSelect'),
-      shift: attCOSelected.Shift,
+      shift: coEmp.Shift,
       gpsLat: lat, gpsLng: lng, gpsDistance: dist||0,
       faceMatchScore: 0, livenessScore: 0,
       deviceInfo: navigator.userAgent.substring(0,80)
@@ -1218,7 +1226,7 @@ async function attSubmitCheckOut() {
 
     if(r.success) {
       // Remove checked-out employee from local list immediately
-      attCOList = attCOList.filter(e => e.EmployeeID !== attCOSelected.EmployeeID);
+      attCOList = attCOList.filter(e => e.EmployeeID !== coEmp.EmployeeID);
       const coItem = document.getElementById('att-coItem' + attCOList.length); // old index element
       // Re-render the list without the checked-out employee
       const listEl = document.getElementById('att-activeList');
@@ -1248,9 +1256,9 @@ async function attSubmitCheckOut() {
         '<h2 style="color:var(--accent)">Checked Out!</h2>' +
         '<p>'+(r.message||'')+'</p>' +
         '<div class="result-details">' +
-          '<div class="row"><span>Employee</span><span>'+attCOSelected.EmployeeName+'</span></div>' +
-          '<div class="row"><span>Shift</span><span>'+attCOSelected.Shift+'</span></div>' +
-          '<div class="row"><span>Check-In</span><span>'+attCOSelected.CheckInTime+'</span></div>' +
+          '<div class="row"><span>Employee</span><span>'+coEmp.EmployeeName+'</span></div>' +
+          '<div class="row"><span>Shift</span><span>'+coEmp.Shift+'</span></div>' +
+          '<div class="row"><span>Check-In</span><span>'+coEmp.CheckInTime+'</span></div>' +
           '<div class="row"><span>Check-Out</span><span>'+new Date().toLocaleTimeString()+'</span></div>' +
           '<div class="row"><span>Location</span><span>'+gv('att-coLocationSelect')+'</span></div>' +
           (dist ? '<div class="row"><span>GPS Distance</span><span>'+dist+'m</span></div>' : '') +
